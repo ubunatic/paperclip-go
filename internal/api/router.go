@@ -13,7 +13,6 @@ import (
 )
 
 // NewRouter creates and returns a chi router with all API routes and middleware.
-// s is the open Store; pass nil only in tests that do not exercise DB routes.
 func NewRouter(s *store.Store) *chi.Mux {
 	r := chi.NewRouter()
 

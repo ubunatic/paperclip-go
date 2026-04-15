@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ubunatic/paperclip-go/internal/api"
 	"github.com/ubunatic/paperclip-go/internal/config"
-	"github.com/ubunatic/paperclip-go/internal/store"
 )
 
 var serveCmd = &cobra.Command{
@@ -30,11 +30,7 @@ func serveRun() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Ensure data directory exists and open the database.
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
-		return fmt.Errorf("creating data dir: %w", err)
-	}
-	s, err := store.Open(cfg.DBPath())
+	s, err := openStore()
 	if err != nil {
 		return fmt.Errorf("opening store: %w", err)
 	}
@@ -64,6 +60,9 @@ func serveRun() error {
 		}
 		return nil
 	case err := <-done:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
 		return err
 	}
 }

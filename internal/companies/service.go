@@ -73,7 +73,7 @@ func (s *Service) List(ctx context.Context) ([]*domain.Company, error) {
 	}
 	defer rows.Close()
 
-	var out []*domain.Company
+	out := make([]*domain.Company, 0)
 	for rows.Next() {
 		c, err := scanCompany(rows)
 		if err != nil {
@@ -95,7 +95,14 @@ func scanCompany(s scanner) (*domain.Company, error) {
 	if err := s.Scan(&c.ID, &c.Name, &c.Shortname, &c.Description, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
-	c.CreatedAt, _ = time.Parse(time.RFC3339, createdAt)
-	c.UpdatedAt, _ = time.Parse(time.RFC3339, updatedAt)
+	var err error
+	c.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("parsing created_at %q: %w", createdAt, err)
+	}
+	c.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("parsing updated_at %q: %w", updatedAt, err)
+	}
 	return &c, nil
 }

@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS heartbeat_runs (
 
 CREATE TABLE IF NOT EXISTS activity_log (
     id          TEXT PRIMARY KEY,
-    company_id  TEXT NOT NULL,
+    company_id  TEXT NOT NULL REFERENCES companies(id),
     actor_kind  TEXT NOT NULL,
     actor_id    TEXT NOT NULL,
     action      TEXT NOT NULL,

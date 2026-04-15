@@ -5,6 +5,7 @@ package respond
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 )
 
@@ -19,8 +20,11 @@ type errBody struct {
 
 // JSON serializes v as JSON and writes it to w with the given status code.
 func JSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("respond: encode error: %v", err)
+	}
 }
 
 // Error writes a JSON error envelope with the given HTTP status, code, and message.

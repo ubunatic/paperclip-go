@@ -4,6 +4,7 @@ package companies
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -24,11 +25,8 @@ func list(s *svc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		items, err := s.List(r.Context())
 		if err != nil {
-			respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
-			return
-		}
-		if items == nil {
-			respond.JSON(w, http.StatusOK, map[string]any{"items": []any{}})
+			log.Printf("companies: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
 		respond.JSON(w, http.StatusOK, map[string]any{"items": items})
@@ -37,6 +35,7 @@ func list(s *svc.Service) http.HandlerFunc {
 
 func create(s *svc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			Name        string `json:"name"`
 			Shortname   string `json:"shortname"`
@@ -52,7 +51,8 @@ func create(s *svc.Service) http.HandlerFunc {
 		}
 		company, err := s.Create(r.Context(), body.Name, body.Shortname, body.Description)
 		if err != nil {
-			respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
+			log.Printf("companies: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
 		respond.JSON(w, http.StatusCreated, company)
@@ -68,7 +68,8 @@ func get(s *svc.Service) http.HandlerFunc {
 				respond.Error(w, http.StatusNotFound, "not_found", "company not found")
 				return
 			}
-			respond.Error(w, http.StatusInternalServerError, "internal_error", err.Error())
+			log.Printf("companies: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
 		respond.JSON(w, http.StatusOK, company)

@@ -31,18 +31,17 @@ func (s *Store) migrate() error {
 	if err != nil {
 		return fmt.Errorf("querying schema_migrations: %w", err)
 	}
+	defer rows.Close()
 	applied := make(map[string]bool)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			rows.Close()
 			return err
 		}
 		applied[name] = true
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
-		return err
+		return fmt.Errorf("iterating schema_migrations: %w", err)
 	}
 
 	// Collect and sort SQL files.
@@ -88,5 +87,8 @@ func applyMigration(db *sql.DB, name, sqlText string) error {
 		_ = tx.Rollback()
 		return fmt.Errorf("recording migration %s: %w", name, err)
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing migration %s: %w", name, err)
+	}
+	return nil
 }

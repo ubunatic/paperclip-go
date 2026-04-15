@@ -10,7 +10,7 @@ import (
 )
 
 func TestCompaniesE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, _ := testutil.SpawnTestServer(t) // store managed by t.Cleanup
 
 	// POST /api/companies → 201 + id
 	body, _ := json.Marshal(map[string]string{
