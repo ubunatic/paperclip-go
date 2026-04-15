@@ -123,9 +123,7 @@ func TestLoadEnvironmentOverride(t *testing.T) {
 	}
 
 	// Set environment variable
-	oldEnv := os.Getenv("PAPERCLIP_GO_CONFIG")
-	defer os.Setenv("PAPERCLIP_GO_CONFIG", oldEnv)
-	os.Setenv("PAPERCLIP_GO_CONFIG", overridePath)
+	t.Setenv("PAPERCLIP_GO_CONFIG", overridePath)
 
 	// Load should use override path from env var
 	cfg, err := Load(defaultPath)
