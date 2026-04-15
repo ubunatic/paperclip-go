@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - master
+      - main
 
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
@@ -11,6 +12,7 @@ concurrency:
 
 jobs:
   policy:
+    if: github.repository == 'paperclip/paperclip'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -89,6 +91,7 @@ jobs:
           fi
 
   go-build:
+    if: github.repository == 'ubunatic/paperclip-go'
     needs: [policy]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -112,6 +115,7 @@ jobs:
         run: make test
 
   verify:
+    if: github.repository == 'paperclip/paperclip'
     needs: [policy]
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -150,6 +154,7 @@ jobs:
           ./scripts/release.sh canary --skip-verify --dry-run
 
   e2e:
+    if: github.repository == 'paperclip/paperclip'
     needs: [policy]
     runs-on: ubuntu-latest
     timeout-minutes: 30

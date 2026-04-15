@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   refresh:
+    if: github.repository == 'paperclip/paperclip'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
