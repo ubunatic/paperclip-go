@@ -2,7 +2,10 @@ module github.com/ubunatic/paperclip-go
 
 go 1.24
 
-require github.com/spf13/cobra v1.9.1
+require (
+	github.com/go-chi/chi/v5 v5.2.5
+	github.com/spf13/cobra v1.9.1
+)
 
 require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

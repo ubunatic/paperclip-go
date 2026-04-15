@@ -13,6 +13,9 @@ all: ⚙️ build test lint  ## Build, test, and lint the project
 build: ⚙️  ## Build the paperclip-go binary
 	go build -o "$(OUT)" "$(CMD)"
 
+run: ⚙️  ## Run the paperclip-go server
+	go run "$(CMD)" serve
+
 test: ⚙️  ## Run tests
 	go test ./...
 
