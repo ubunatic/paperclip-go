@@ -46,7 +46,7 @@ func TestDefaultPath(t *testing.T) {
 }
 
 func TestLoadMissingFile(t *testing.T) {
-	cfg, err := Load("/nonexistent/path/config.yaml")
+	cfg, err := Load(filepath.Join(t.TempDir(), "does-not-exist.yaml"))
 	if err != nil {
 		t.Errorf("expected no error for missing file, got %v", err)
 	}
