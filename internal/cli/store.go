@@ -14,6 +14,12 @@ func openStore() (*store.Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
+	return openStoreFromConfig(cfg)
+}
+
+// openStoreFromConfig opens the SQLite store using an existing config,
+// creating the data dir if needed.
+func openStoreFromConfig(cfg *config.Config) (*store.Store, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating data dir: %w", err)
 	}

@@ -30,7 +30,7 @@ func serveRun() error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	s, err := openStore()
+	s, err := openStoreFromConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("opening store: %w", err)
 	}

@@ -36,7 +36,7 @@ func (s *Store) migrate() error {
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return err
+			return fmt.Errorf("scanning schema_migrations.name: %w", err)
 		}
 		applied[name] = true
 	}

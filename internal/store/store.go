@@ -20,6 +20,7 @@ func Open(dsn string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening db: %w", err)
 	}
+	db.SetMaxOpenConns(1)
 
 	// WAL mode gives better read/write concurrency for a single-user server.
 	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {

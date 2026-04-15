@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS agents (
     shortname    TEXT NOT NULL,
     display_name TEXT NOT NULL,
     role         TEXT NOT NULL DEFAULT '',
-    reports_to   TEXT,
+    reports_to   TEXT REFERENCES agents(id) ON DELETE SET NULL,
     adapter      TEXT NOT NULL DEFAULT 'stub',
     created_at   TEXT NOT NULL,
     updated_at   TEXT NOT NULL,
