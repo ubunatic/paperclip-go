@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/ubunatic/paperclip-go/internal/api"
+	"github.com/ubunatic/paperclip-go/internal/config"
 )
 
 var serveCmd = &cobra.Command{
@@ -23,7 +24,13 @@ var serveCmd = &cobra.Command{
 }
 
 func serveRun() error {
-	listenAddr := "127.0.0.1:3200"
+	// Load config
+	cfg, err := config.Load(config.DefaultPath())
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	listenAddr := cfg.ListenAddr
 
 	// Create router and server
 	router := api.NewRouter()

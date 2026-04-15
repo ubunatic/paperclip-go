@@ -325,8 +325,14 @@ Together this means porting a new upstream TS feature is a scripted loop: find T
 
 Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS.md`.
 
-1. **Skeleton + serve + health** ✅ — `go.mod`, cobra root, `serve` on `:3200`, `GET /api/health` → `{"status":"ok"}`. `make run` works.
-2. **Config + `init` + `doctor`** — YAML loader, writes default config + data dir, `doctor` reports status.
+1. ✅ **DONE: Skeleton + serve + health** — `go.mod`, cobra root, `serve` on `:3200`, `GET /api/health` → `{"status":"ok"}`. `make run` works.
+2. ✅ **DONE: Config + `init` + `doctor`** — YAML loader, writes default config + data dir, `doctor` reports status.
+   - Created `internal/config/config.go` with Config struct, Load/Write/DBPath methods
+   - Implemented `paperclip-go init` command that writes `~/.paperclip-go/config.yaml` and creates data directory
+   - Implemented `paperclip-go doctor` command that validates installation and reports configuration
+   - Updated `serve` command to load config and use ListenAddr from configuration
+   - Added comprehensive unit tests in `internal/config/config_test.go`
+   - All tests passing: `go test ./...` ✓
 3. **Store + migrations + companies** — SQLite, embedded `0001_init.sql`, companies CRUD (service + handler + CLI). First unit test + first e2e test.
 4. **Agents + activity log** — agents CRUD, `/api/agents/me`, activity table + `GET /api/activity`.
 5. **Issues + comments + checkout** — full issue lifecycle with atomic checkout/release; nested comments.
