@@ -37,6 +37,7 @@ on:
 
 jobs:
   smoke:
+    if: github.repository == 'paperclip/paperclip'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 

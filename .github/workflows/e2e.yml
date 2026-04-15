@@ -10,6 +10,7 @@ on:
 
 jobs:
   e2e:
+    if: github.repository == 'paperclip/paperclip'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
