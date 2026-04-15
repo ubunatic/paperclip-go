@@ -27,8 +27,12 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.DeploymentMode != "local_trusted" {
 		t.Errorf("expected DeploymentMode local_trusted, got %s", cfg.DeploymentMode)
 	}
-	if !filepath.HasPrefix(cfg.DataDir, os.Getenv("HOME")) {
-		t.Errorf("expected DataDir under HOME, got %s", cfg.DataDir)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("failed to determine user home directory: %v", err)
+	}
+	if !filepath.HasPrefix(cfg.DataDir, home) {
+		t.Errorf("expected DataDir under home directory %s, got %s", home, cfg.DataDir)
 	}
 }
 
