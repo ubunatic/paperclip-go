@@ -2,14 +2,14 @@
 package health
 
 import (
-	"encoding/json"
 	"net/http"
+
+	"github.com/ubunatic/paperclip-go/internal/respond"
 )
 
 // Handler handles GET /api/health requests.
 func Handler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
+	respond.JSON(w, http.StatusOK, map[string]string{
 		"status":  "ok",
 		"version": "dev",
 	})

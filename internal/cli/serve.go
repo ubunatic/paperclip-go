@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -24,37 +25,35 @@ var serveCmd = &cobra.Command{
 }
 
 func serveRun() error {
-	// Load config
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	listenAddr := cfg.ListenAddr
+	s, err := openStoreFromConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("opening store: %w", err)
+	}
+	defer s.Close()
 
-	// Create router and server
-	router := api.NewRouter()
+	router := api.NewRouter(s)
 	server := &http.Server{
-		Addr:    listenAddr,
+		Addr:    cfg.ListenAddr,
 		Handler: router,
 	}
 
-	// Channel to signal when server starts
 	done := make(chan error, 1)
-
-	// Start server in a goroutine
 	go func() {
-		fmt.Fprintf(os.Stdout, "server listening on %s\n", listenAddr)
+		fmt.Fprintf(os.Stdout, "server listening on %s\n", cfg.ListenAddr)
 		done <- server.ListenAndServe()
 	}()
 
-	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
 	select {
 	case <-sigChan:
-		// Graceful shutdown
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := server.Shutdown(ctx); err != nil {
@@ -62,6 +61,9 @@ func serveRun() error {
 		}
 		return nil
 	case err := <-done:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
 		return err
 	}
 }
