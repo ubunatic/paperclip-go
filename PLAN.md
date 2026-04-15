@@ -26,16 +26,16 @@ Since the Go port starts from scratch, it uses its own data dir (`~/.paperclip-g
 
 ## Tech choices
 
-| Concern       | Choice                                   | Why                                                              |
-|---------------|------------------------------------------|------------------------------------------------------------------|
-| CLI           | `github.com/spf13/cobra`                 | Mirrors TS commander; standard in Go tooling.                    |
-| HTTP router   | `github.com/go-chi/chi/v5`               | Clean per-resource subrouters; easier middleware than `ServeMux`.|
-| SQLite driver | `modernc.org/sqlite`                     | Pure Go, no CGO — fast to build in sandboxes/CI.                 |
-| UUIDs         | `github.com/google/uuid`                 | Standard.                                                        |
-| Config        | `gopkg.in/yaml.v3`                       | One tiny dep; human-editable config.                             |
-| Logging       | stdlib `log/slog`                        | Structured, zero extra dep.                                      |
-| Migrations    | stdlib `embed` + custom runner           | Avoids golang-migrate dep for MVP; SQL stays visible.            |
-| Testing       | stdlib `testing` + `net/http/httptest`   | Simple Go-style tests; no vitest/playwright port.                |
+| Concern       | Choice                                   | Why                                                              | Status   |
+|---------------|------------------------------------------|------------------------------------------------------------------|----------|
+| CLI           | `github.com/spf13/cobra`                 | Mirrors TS commander; standard in Go tooling.                    | ✅ added  |
+| HTTP router   | `github.com/go-chi/chi/v5`               | Clean per-resource subrouters; easier middleware than `ServeMux`.| ✅ added  |
+| SQLite driver | `modernc.org/sqlite`                     | Pure Go, no CGO — fast to build in sandboxes/CI.                 | pending  |
+| UUIDs         | `github.com/google/uuid`                 | Standard.                                                        | pending  |
+| Config        | `gopkg.in/yaml.v3`                       | One tiny dep; human-editable config.                             | pending  |
+| Logging       | stdlib `log/slog`                        | Structured, zero extra dep.                                      | pending  |
+| Migrations    | stdlib `embed` + custom runner           | Avoids golang-migrate dep for MVP; SQL stays visible.            | pending  |
+| Testing       | stdlib `testing` + `net/http/httptest`   | Simple Go-style tests; no vitest/playwright port.                | pending  |
 
 Explicitly **not** pulling in: viper, zap/logrus, gorm/ent/sqlc, testify.
 
@@ -43,17 +43,19 @@ Explicitly **not** pulling in: viper, zap/logrus, gorm/ent/sqlc, testify.
 
 ## Directory layout
 
+Files marked ✅ already exist; the rest are planned.
+
 ```
 / (repo root)
-  go.mod                               # module: github.com/ubunatic/paperclip-go
-  go.sum
-  Makefile
-  AGENTS-GO.md                         # Go-side agent playbook (NEW, top-level)
-  .gitignore                           # append Go-specific ignores in a marked block
+  go.mod                               # module: github.com/ubunatic/paperclip-go  ✅
+  go.sum                                                                             ✅
+  Makefile                                                                           ✅
+  AGENTS.md                            # Go-side agent playbook                     ✅
+  .gitignore                                                                         ✅
 
   cmd/
     paperclip-go/
-      main.go                          # func main() { cli.Execute() }
+      main.go                          # func main() { cli.Execute() }              ✅
 
   internal/
     README.md                          # one-line package responsibilities (for Haiku skims)
@@ -98,11 +100,11 @@ Explicitly **not** pulling in: viper, zap/logrus, gorm/ent/sqlc, testify.
       loader.go                        # scans /skills/*/SKILL.md + YAML front matter
 
     api/
-      router.go                        # chi router, mounts /api
+      router.go                        # chi router, mounts /api                    ✅
       middleware.go                    # request id, slog access log, recoverer, json content-type
       errors.go                        # typed errors -> HTTP status
       render.go                        # writeJSON, readJSON, decodeAndValidate
-      health/handler.go
+      health/handler.go                                                              ✅
       companies/handler.go
       agents/handler.go
       issues/handler.go
@@ -116,8 +118,8 @@ Explicitly **not** pulling in: viper, zap/logrus, gorm/ent/sqlc, testify.
       assets.go                        # serve /ui/dist if present; else embed.FS landing page + SPA fallback
 
     cli/
-      root.go                          # cobra root + Execute()
-      serve.go                         # paperclip-go serve
+      root.go                          # cobra root + Execute()                     ✅
+      serve.go                         # paperclip-go serve                         ✅
       initcmd.go                       # paperclip-go init
       doctor.go                        # paperclip-go doctor
       company.go                       # create/list
@@ -312,7 +314,7 @@ coverage.out
 
 Two new docs help Sonnet/Haiku stay cheap:
 
-- **`/AGENTS-GO.md`** (top-level, new): declares the TS files are read-only; lists the Go layout; maps TS → Go ("`server/src/routes/issues.ts` → `internal/api/issues/handler.go` + `internal/issues/service.go`"); describes the porting workflow (read TS route → read TS service → add failing Go test → implement → wire handler); lists MVP non-goals; has a "When stuck" section (`make doctor`, `go test ./internal/<pkg>`).
+- **`/AGENTS.md`** (top-level, ✅ exists): declares the TS files are read-only; lists the Go layout; maps TS → Go ("`server/src/routes/issues.ts` → `internal/api/issues/handler.go` + `internal/issues/service.go`"); describes the porting workflow (read TS route → read TS service → add failing Go test → implement → wire handler); lists MVP non-goals; has a "When stuck" section (`make doctor`, `go test ./internal/<pkg>`).
 - **`/internal/README.md`**: one-liners per package (mirrors the tree above). Paired with godoc on every `package x` declaration so `go doc ./internal/...` is the ground truth.
 
 Together this means porting a new upstream TS feature is a scripted loop: find TS file → look up Go target in the map → add test → implement → run `make test`.
@@ -321,7 +323,7 @@ Together this means porting a new upstream TS feature is a scripted loop: find T
 
 ## Phased implementation (validatable checkpoints)
 
-Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS-GO.md`.
+Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS.md`.
 
 1. ✅ **DONE: Skeleton + serve + health** — `go.mod`, cobra root, `serve` on `:3200`, `GET /api/health` → `{"status":"ok"}`. `make run` works.
 2. ✅ **DONE: Config + `init` + `doctor`** — YAML loader, writes default config + data dir, `doctor` reports status.
@@ -342,7 +344,7 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
 
 ## Risks & explicit non-goals
 
-Non-goals for MVP (document in `AGENTS-GO.md`):
+Non-goals for MVP (documented in `AGENTS.md`):
 
 - Auth / BetterAuth / board claim flow (always `local_trusted`).
 - WebSocket live events (poll for now).
@@ -355,30 +357,32 @@ Non-goals for MVP (document in `AGENTS-GO.md`):
 Risks & mitigations:
 
 - **UI expects endpoints Go lacks** → stub routes returning `{"items":[]}`.
-- **Agents accidentally editing TS** → enforced by layout (`/cmd`, `/internal` only) + prominent `AGENTS-GO.md`.
+- **Agents accidentally editing TS** → enforced by layout (`/cmd`, `/internal` only) + prominent `AGENTS.md`.
 - **Schema drift from TS** → accepted; MVP is isolated, not a port of Drizzle.
 - **modernc.org/sqlite perf** → fine for single-user MVP; swap to PG later if needed behind the `store` interface.
 - **Heartbeat stub hardens incorrectly** → keep `Adapter` interface small; first real adapter (`claude_local`) slots in as a second implementation.
 
 ---
 
-## Critical files the implementation will create
+## Critical files
 
-- `/home/user/paperclip-go/go.mod`
-- `/home/user/paperclip-go/Makefile`
-- `/home/user/paperclip-go/AGENTS-GO.md`
-- `/home/user/paperclip-go/cmd/paperclip-go/main.go`
-- `/home/user/paperclip-go/internal/api/router.go`
-- `/home/user/paperclip-go/internal/store/migrations/0001_init.sql`
-- `/home/user/paperclip-go/internal/heartbeat/runner.go`
-- `/home/user/paperclip-go/internal/cli/root.go`
-- `/home/user/paperclip-go/internal/testutil/server.go`
+Already created (Phase 1 ✅):
 
-## Existing files/folders reused (read-only)
+- `go.mod` / `go.sum`
+- `Makefile`
+- `AGENTS.md`
+- `cmd/paperclip-go/main.go`
+- `internal/api/router.go`
+- `internal/api/health/handler.go`
+- `internal/cli/root.go`
+- `internal/cli/serve.go`
 
-- `/home/user/paperclip-go/skills/**/SKILL.md` — loaded at startup by `internal/skills/loader.go`.
-- `/home/user/paperclip-go/ui/dist/` (optional) — served by `internal/ui/assets.go` if present.
-- `/home/user/paperclip-go/doc/SPEC-implementation.md` — canonical reference for invariants (single-assignee, atomic checkout, etc.) while porting.
+Still to create (Phases 2–8):
+
+- `internal/store/migrations/0001_init.sql`
+- `internal/heartbeat/runner.go`
+- `internal/testutil/server.go`
+- (all other packages listed in the layout above)
 
 ---
 
@@ -421,4 +425,4 @@ curl -s localhost:3200/api/skills | jq '.items | length'  # >= 1
 ./bin/paperclip-go heartbeat run --agent "$AID"
 ```
 
-The MVP is done when every step above succeeds and `make test` is green. From there, Sonnet/Haiku agents port upstream TS features one at a time using the TS→Go map in `AGENTS-GO.md`.
+The MVP is done when every step above succeeds and `make test` is green. From there, Sonnet/Haiku agents port upstream TS features one at a time using the TS→Go map in `AGENTS.md`.
