@@ -23,6 +23,12 @@
 
 <br/>
 
+> [!Warning] This is an experimental fork
+> Goals:
+> 1. Get rid of npm/TS/node.js
+> 2. Use Go std. lib where possible to have mininmal dependencies
+> 3. See how easy it is to let an agent refactor the project
+
 ## What is Paperclip?
 
 # Open-source orchestration for zero-human companies
