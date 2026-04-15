@@ -28,7 +28,7 @@ func New(s *store.Store) *Service {
 
 // Create inserts a new company and returns the created entity.
 func (s *Service) Create(ctx context.Context, name, shortname, description string) (*domain.Company, error) {
-	now := time.Now().UTC()
+	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	c := &domain.Company{
 		ID:          ids.NewUUID(),
@@ -81,7 +81,10 @@ func (s *Service) List(ctx context.Context) ([]*domain.Company, error) {
 		}
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating companies: %w", err)
+	}
+	return out, nil
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.

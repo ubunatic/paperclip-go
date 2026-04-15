@@ -88,6 +88,7 @@ func applyMigration(db *sql.DB, name, sqlText string) error {
 		return fmt.Errorf("recording migration %s: %w", name, err)
 	}
 	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
 		return fmt.Errorf("committing migration %s: %w", name, err)
 	}
 	return nil

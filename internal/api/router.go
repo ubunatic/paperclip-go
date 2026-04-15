@@ -2,8 +2,6 @@
 package api
 
 import (
-	"net/http"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	apicompanies "github.com/ubunatic/paperclip-go/internal/api/companies"
@@ -19,7 +17,6 @@ func NewRouter(s *store.Store) *chi.Mux {
 	// Global middleware
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
-	r.Use(contentTypeJSON)
 
 	// Services
 	companySvc := companies.New(s)
@@ -31,12 +28,4 @@ func NewRouter(s *store.Store) *chi.Mux {
 	})
 
 	return r
-}
-
-// contentTypeJSON sets Content-Type: application/json for every response.
-func contentTypeJSON(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		next.ServeHTTP(w, r)
-	})
 }
