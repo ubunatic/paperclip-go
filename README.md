@@ -1,3 +1,10 @@
+
+> [!Warning] This is an experimental fork
+> Goals:
+> 1. Get rid of npm/TS/node.js
+> 2. Use Go std. lib where possible to have mininmal dependencies
+> 3. See how easy it is to let an agent refactor the project
+
 <p align="center">
   <img src="doc/assets/header.png" alt="Paperclip — runs your business" width="720" />
 </p>
@@ -22,12 +29,6 @@
 </div>
 
 <br/>
-
-> [!Warning] This is an experimental fork
-> Goals:
-> 1. Get rid of npm/TS/node.js
-> 2. Use Go std. lib where possible to have mininmal dependencies
-> 3. See how easy it is to let an agent refactor the project
 
 ## What is Paperclip?
 
