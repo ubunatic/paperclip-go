@@ -186,9 +186,10 @@ All under `/api`, JSON, chi subrouters per resource. Middleware chain: `RequestI
 | `GET /api/agents/{id}`, `GET /api/agents/me`  | `me` reads `X-Agent-Id` header for MVP           |
 | `GET/POST /api/issues` (`?companyId=`, filters: `status`, `assigneeId`) |                           |
 | `GET /api/issues/{id}`, `PATCH /api/issues/{id}` |                                               |
-| `POST /api/issues/{id}/checkout`              | body: `{agentId}`; 409 if already held           |
-| `POST /api/issues/{id}/release`               | body: `{agentId}`                                |
-| `GET/POST /api/issues/{id}/comments`          |                                                  |
+| `POST /api/issues/{id}/checkout`              | body: `{agentId}`; 200 (idempotent), 409 if held by different agent |
+| `POST /api/issues/{id}/release`               | body: `{agentId}`; 200, 400 if not held by agent |
+| `GET /api/issues/{id}/comments`               | List comments for issue, ordered by created_at |
+| `POST /api/issues/{id}/comments`              | body: `{body, authorKind?, authorAgentId?}`; defaults authorKind to "system" |
 | `POST /api/heartbeat/runs`                    | body: `{agentId}`; kicks a stub run              |
 | `GET /api/heartbeat/runs` (`?agentId=`)       |                                                  |
 | `GET /api/skills`                             | in-memory list from `/skills/*/SKILL.md`         |
