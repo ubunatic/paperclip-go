@@ -207,7 +207,9 @@ func TestActivityE2E(t *testing.T) {
 	ctx := respCompany.Request.Context()
 	activityLog := testutil.SpawnActivityLog(store)
 	for i := 0; i < 3; i++ {
-		activityLog.Record(ctx, companyID, "agent", "agent-123", "action", "entity", "entity-id", "{}")
+		if err := activityLog.Record(ctx, companyID, "agent", "agent-123", "action", "entity", "entity-id", "{}"); err != nil {
+			t.Fatalf("recording activity %d: %v", i, err)
+		}
 	}
 
 	// GET /api/activity?companyId=... → list

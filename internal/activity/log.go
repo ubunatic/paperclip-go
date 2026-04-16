@@ -24,6 +24,15 @@ func New(s *store.Store) *Log {
 
 // Record inserts a new activity log entry.
 func (l *Log) Record(ctx context.Context, companyID, actorKind, actorID, action, entityKind, entityID, metaJSON string) error {
+	// Default empty metaJSON to '{}'
+	if metaJSON == "" {
+		metaJSON = "{}"
+	}
+	// Validate metaJSON is valid JSON
+	if !json.Valid([]byte(metaJSON)) {
+		return fmt.Errorf("metaJSON is not valid JSON: %q", metaJSON)
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 
@@ -42,7 +51,7 @@ func (l *Log) Record(ctx context.Context, companyID, actorKind, actorID, action,
 func (l *Log) List(ctx context.Context, companyID string, limit int) ([]*domain.Activity, error) {
 	rows, err := l.store.DB.QueryContext(ctx,
 		`SELECT id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at
-		 FROM activity_log WHERE company_id = ? ORDER BY created_at DESC LIMIT ?`,
+		 FROM activity_log WHERE company_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
 		companyID, limit,
 	)
 	if err != nil {
