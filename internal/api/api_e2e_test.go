@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
@@ -409,5 +410,59 @@ func TestIssuesE2E(t *testing.T) {
 	resp10.Body.Close()
 	if resp10.StatusCode != http.StatusNotFound {
 		t.Errorf("GET /api/issues/nonexistent status = %d, want 404", resp10.StatusCode)
+	}
+}
+
+func TestSkillsE2E(t *testing.T) {
+	// Create test skills
+	testSkills := []domain.Skill{
+		{
+			Name:        "Test Skill",
+			Description: "A test skill for E2E testing",
+			Path:        "/test/skill/SKILL.md",
+			Body:        "This is the test skill body",
+		},
+	}
+
+	srv, _ := testutil.SpawnTestServerWithSkills(t, testSkills)
+
+	// GET /api/skills → 200 with items
+	resp, err := http.Get(srv.URL + "/api/skills/")
+	if err != nil {
+		t.Fatalf("GET /api/skills/: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/skills/ status = %d, want 200", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+
+	items, ok := result["items"].([]any)
+	if !ok {
+		t.Fatalf("expected items to be an array, got %T", result["items"])
+	}
+
+	if len(items) != 1 {
+		t.Errorf("GET /api/skills/ returned %d items, want 1", len(items))
+	}
+
+	// Verify the skill data
+	if len(items) > 0 {
+		skillItem, ok := items[0].(map[string]any)
+		if !ok {
+			t.Fatalf("expected skill item to be an object, got %T", items[0])
+		}
+
+		if skillItem["name"] != "Test Skill" {
+			t.Errorf("skill name = %v, want 'Test Skill'", skillItem["name"])
+		}
+		if skillItem["description"] != "A test skill for E2E testing" {
+			t.Errorf("skill description = %v, want 'A test skill for E2E testing'", skillItem["description"])
+		}
 	}
 }
