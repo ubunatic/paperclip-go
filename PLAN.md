@@ -333,9 +333,17 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Updated `serve` command to load config and use ListenAddr from configuration
    - Added comprehensive unit tests in `internal/config/config_test.go`
    - All tests passing: `go test ./...` ✓
-3. **Store + migrations + companies** — SQLite, embedded `0001_init.sql`, companies CRUD (service + handler + CLI). First unit test + first e2e test.
-4. **Agents + activity log** — agents CRUD, `/api/agents/me`, activity table + `GET /api/activity`.
-5. **Issues + comments + checkout** — full issue lifecycle with atomic checkout/release; nested comments.
+3. ✅ **DONE: Store + migrations + companies** — SQLite, embedded `0001_init.sql`, companies CRUD (service + handler + CLI). First unit test + first e2e test.
+4. ✅ **DONE: Agents + activity log** — agents CRUD, `/api/agents/me`, activity table + `GET /api/activity`.
+5. ✅ **DONE: Issues + comments + checkout** — full issue lifecycle with atomic checkout/release; nested comments.
+   - Created `internal/domain/issue.go` and `domain/comment.go` with proper JSON serialization
+   - Implemented `issues/service.go` with full CRUD, atomic checkout/release with RowsAffected==1 verification
+   - Implemented `comments/service.go` with create/list and issue existence validation
+   - Created `api/issues/handler.go` with all endpoints: list, create, get, update, checkout, release, comments
+   - Created `cli/issue.go` with create, list, and get commands with proper flag handling
+   - Extended `api_e2e_test.go` with `TestIssuesE2E` covering checkout conflict, comment posting, and release
+   - Fixed atomic operations to distinguish ErrNotFound (404) from ErrCheckoutConflict (409)
+   - All tests passing: `go test ./...` ✓
 6. **Skills loader** — walk `/skills/`, expose `/api/skills`.
 7. **Heartbeat stub** — Adapter interface, `StubAdapter`, `POST /api/heartbeat/runs`, CLI `heartbeat run`; e2e covers the full loop.
 8. **UI serving + stub endpoints** — serve `/ui/dist` if present, SPA fallback; stub endpoints for approvals/costs/goals/projects/routines/plugins so the UI (if used) does not 404.
