@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/api"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
@@ -32,4 +33,9 @@ func SpawnTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 	return srv, s
+}
+
+// SpawnActivityLog returns a new activity Log using the given store.
+func SpawnActivityLog(s *store.Store) *activity.Log {
+	return activity.New(s)
 }
