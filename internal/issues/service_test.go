@@ -176,10 +176,20 @@ func TestCheckout(t *testing.T) {
 		t.Error("CheckedOutAt should not be nil after checkout")
 	}
 
-	// Second checkout should fail with ErrCheckoutConflict
+	// Second checkout by same agent should succeed (idempotent)
 	err = issueSvc.Checkout(ctx, issue.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("Second checkout (same agent): expected nil, got %v", err)
+	}
+
+	// Checkout by different agent should fail with ErrCheckoutConflict
+	agent2, err := agentSvc.Create(ctx, company.ID, "agent2", "Agent 2", "engineer", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent2: %v", err)
+	}
+	err = issueSvc.Checkout(ctx, issue.ID, agent2.ID)
 	if !errors.Is(err, issues.ErrCheckoutConflict) {
-		t.Fatalf("Second checkout: expected ErrCheckoutConflict, got %v", err)
+		t.Fatalf("Checkout by different agent: expected ErrCheckoutConflict, got %v", err)
 	}
 }
 

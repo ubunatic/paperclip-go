@@ -55,11 +55,11 @@ func (s *Service) Create(ctx context.Context, issueID string, authorAgentID *str
 	return c, nil
 }
 
-// ListByIssue returns all comments for a given issue, ordered by creation time ascending.
+// ListByIssue returns all comments for a given issue, ordered by creation time ascending (with id as tiebreaker for determinism).
 func (s *Service) ListByIssue(ctx context.Context, issueID string) ([]*domain.Comment, error) {
 	rows, err := s.store.DB.QueryContext(ctx,
 		`SELECT id, issue_id, author_agent_id, author_kind, body, created_at
-		 FROM comments WHERE issue_id = ? ORDER BY created_at ASC`,
+		 FROM comments WHERE issue_id = ? ORDER BY created_at ASC, id ASC`,
 		issueID,
 	)
 	if err != nil {

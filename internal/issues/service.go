@@ -166,22 +166,18 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 }
 
 // Checkout atomically checks out an issue for an agent.
+// Returns nil if the agent already holds the issue (idempotent).
 // Returns ErrNotFound if the issue does not exist.
-// Returns ErrCheckoutConflict if the issue is already checked out.
+// Returns ErrCheckoutConflict if the issue is checked out by a different agent.
 func (s *Service) Checkout(ctx context.Context, issueID, agentID string) error {
-	// Verify the issue exists first (to distinguish not found from conflict)
-	_, err := s.Get(ctx, issueID)
-	if err != nil {
-		return err
-	}
-
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 
+	// Try atomic update: only succeeds if issue exists and is not checked out
 	result, err := s.store.DB.ExecContext(ctx,
-		`UPDATE issues SET checked_out_by = ?, checked_out_at = ?, status = 'in_progress'
+		`UPDATE issues SET checked_out_by = ?, checked_out_at = ?, updated_at = ?, status = 'in_progress'
 		 WHERE id = ? AND checked_out_by IS NULL`,
-		agentID, ts, issueID,
+		agentID, ts, ts, issueID,
 	)
 	if err != nil {
 		return fmt.Errorf("checking out issue: %w", err)
@@ -192,27 +188,46 @@ func (s *Service) Checkout(ctx context.Context, issueID, agentID string) error {
 		return fmt.Errorf("getting rows affected: %w", err)
 	}
 
-	if rowsAffected != 1 {
-		return ErrCheckoutConflict
+	if rowsAffected == 1 {
+		return nil
 	}
 
-	return nil
+	// UPDATE affected 0 rows: either issue doesn't exist or is already checked out
+	// Query to distinguish the two cases
+	var checkedOutBy sql.NullString
+	err = s.store.DB.QueryRowContext(ctx,
+		`SELECT checked_out_by FROM issues WHERE id = ?`,
+		issueID,
+	).Scan(&checkedOutBy)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("checking issue state: %w", err)
+	}
+
+	// Issue exists; check if same agent or different agent
+	if checkedOutBy.Valid && checkedOutBy.String == agentID {
+		// Same agent already holds this issue (idempotent success)
+		return nil
+	}
+
+	// Different agent holds it (or it's held by someone)
+	return ErrCheckoutConflict
 }
 
 // Release releases an issue that was checked out by an agent.
 // Returns ErrNotFound if the issue does not exist.
 // Returns ErrNotCheckedOut if the issue is not held by the specified agent.
 func (s *Service) Release(ctx context.Context, issueID, agentID string) error {
-	// Verify the issue exists first
-	_, err := s.Get(ctx, issueID)
-	if err != nil {
-		return err
-	}
+	now := time.Now().UTC().Truncate(time.Second)
+	ts := now.Format(time.RFC3339)
 
+	// Try atomic update: only succeeds if issue exists and is held by this agent
 	result, err := s.store.DB.ExecContext(ctx,
-		`UPDATE issues SET checked_out_by = NULL, checked_out_at = NULL
+		`UPDATE issues SET checked_out_by = NULL, checked_out_at = NULL, updated_at = ?
 		 WHERE id = ? AND checked_out_by = ?`,
-		issueID, agentID,
+		ts, issueID, agentID,
 	)
 	if err != nil {
 		return fmt.Errorf("releasing issue: %w", err)
@@ -223,11 +238,26 @@ func (s *Service) Release(ctx context.Context, issueID, agentID string) error {
 		return fmt.Errorf("getting rows affected: %w", err)
 	}
 
-	if rowsAffected != 1 {
-		return ErrNotCheckedOut
+	if rowsAffected == 1 {
+		return nil
 	}
 
-	return nil
+	// UPDATE affected 0 rows: either issue doesn't exist or is not held by this agent
+	// Query to check if issue exists at all
+	var exists sql.NullString
+	err = s.store.DB.QueryRowContext(ctx,
+		`SELECT id FROM issues WHERE id = ? LIMIT 1`,
+		issueID,
+	).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("checking issue exists: %w", err)
+	}
+
+	// Issue exists but not held by this agent
+	return ErrNotCheckedOut
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.

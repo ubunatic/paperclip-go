@@ -34,13 +34,15 @@ func list(s *isvc.Service) http.HandlerFunc {
 		status := r.URL.Query().Get("status")
 		assigneeID := r.URL.Query().Get("assigneeId")
 
+		if companyID == "" {
+			respond.Error(w, http.StatusBadRequest, "validation_error", "companyId is required")
+			return
+		}
+
 		var items []*domain.Issue
 		var err error
 
-		if companyID == "" {
-			// If no companyId is provided, return empty list
-			items = make([]*domain.Issue, 0)
-		} else if status != "" || assigneeID != "" {
+		if status != "" || assigneeID != "" {
 			// Use filters if provided
 			var aid *string
 			if assigneeID != "" {
@@ -228,8 +230,19 @@ func createComment(s *comments.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 			return
 		}
-		if body.Body == "" || body.AuthorKind == "" {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "body and authorKind are required")
+		if body.Body == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "body is required")
+			return
+		}
+		if body.AuthorKind == "" {
+			body.AuthorKind = "system"
+		}
+		if body.AuthorKind == "agent" && body.AuthorAgentID == nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "authorAgentId is required when authorKind is agent")
+			return
+		}
+		if body.AuthorKind != "agent" && body.AuthorAgentID != nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "authorAgentId is only allowed when authorKind is agent")
 			return
 		}
 		comment, err := s.Create(r.Context(), issueID, body.AuthorAgentID, body.AuthorKind, body.Body)

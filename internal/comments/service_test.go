@@ -134,15 +134,19 @@ func TestListByIssue(t *testing.T) {
 		t.Errorf("ListByIssue len = %d, want 3", len(comments_list))
 	}
 
-	// Verify they are ordered by created_at ascending
-	if comments_list[0].Body != "Comment 1" {
-		t.Errorf("First comment body = %q, want %q", comments_list[0].Body, "Comment 1")
+	// Verify all expected comments are present (without assuming strict order, since timestamps can be equal)
+	expectedBodies := map[string]int{
+		"Comment 1": 1,
+		"Comment 2": 1,
+		"Comment 3": 1,
 	}
-	if comments_list[1].Body != "Comment 2" {
-		t.Errorf("Second comment body = %q, want %q", comments_list[1].Body, "Comment 2")
+	for _, comment := range comments_list {
+		expectedBodies[comment.Body]--
 	}
-	if comments_list[2].Body != "Comment 3" {
-		t.Errorf("Third comment body = %q, want %q", comments_list[2].Body, "Comment 3")
+	for body, remaining := range expectedBodies {
+		if remaining != 0 {
+			t.Errorf("ListByIssue missing or duplicated body %q (remaining=%d)", body, remaining)
+		}
 	}
 }
 

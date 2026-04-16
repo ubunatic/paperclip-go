@@ -326,20 +326,21 @@ func TestIssuesE2E(t *testing.T) {
 		t.Errorf("POST /api/issues/%s/checkout status = %d, want 200", issueID, resp3.StatusCode)
 	}
 
-	// POST /api/issues/{id}/checkout again → 409
+	// POST /api/issues/{id}/checkout again by same agent → 200 (idempotent)
 	resp4, err := http.Post(srv.URL+"/api/issues/"+issueID+"/checkout", "application/json", bytes.NewReader(checkoutBody))
 	if err != nil {
-		t.Fatalf("POST /api/issues/%s/checkout (conflict): %v", issueID, err)
+		t.Fatalf("POST /api/issues/%s/checkout (idempotent): %v", issueID, err)
 	}
 	resp4.Body.Close()
-	if resp4.StatusCode != http.StatusConflict {
-		t.Errorf("POST /api/issues/%s/checkout (conflict) status = %d, want 409", issueID, resp4.StatusCode)
+	if resp4.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/issues/%s/checkout (idempotent) status = %d, want 200", issueID, resp4.StatusCode)
 	}
 
 	// POST /api/issues/{id}/comments → 201
 	commentBody, _ := json.Marshal(map[string]any{
-		"body":       "Test comment",
-		"authorKind": "agent",
+		"body":           "Test comment",
+		"authorKind":     "agent",
+		"authorAgentId":  agentID,
 	})
 	resp5, err := http.Post(srv.URL+"/api/issues/"+issueID+"/comments", "application/json", bytes.NewReader(commentBody))
 	if err != nil {
