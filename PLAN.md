@@ -30,12 +30,12 @@ Since the Go port starts from scratch, it uses its own data dir (`~/.paperclip-g
 |---------------|------------------------------------------|------------------------------------------------------------------|----------|
 | CLI           | `github.com/spf13/cobra`                 | Mirrors TS commander; standard in Go tooling.                    | ✅ added  |
 | HTTP router   | `github.com/go-chi/chi/v5`               | Clean per-resource subrouters; easier middleware than `ServeMux`.| ✅ added  |
-| SQLite driver | `modernc.org/sqlite`                     | Pure Go, no CGO — fast to build in sandboxes/CI.                 | pending  |
-| UUIDs         | `github.com/google/uuid`                 | Standard.                                                        | pending  |
-| Config        | `gopkg.in/yaml.v3`                       | One tiny dep; human-editable config.                             | pending  |
+| SQLite driver | `modernc.org/sqlite`                     | Pure Go, no CGO — fast to build in sandboxes/CI.                 | ✅ done  |
+| UUIDs         | `github.com/google/uuid`                 | Standard.                                                        | ✅ done  |
+| Config        | `gopkg.in/yaml.v3`                       | One tiny dep; human-editable config.                             | ✅ done  |
 | Logging       | stdlib `log/slog`                        | Structured, zero extra dep.                                      | pending  |
-| Migrations    | stdlib `embed` + custom runner           | Avoids golang-migrate dep for MVP; SQL stays visible.            | pending  |
-| Testing       | stdlib `testing` + `net/http/httptest`   | Simple Go-style tests; no vitest/playwright port.                | pending  |
+| Migrations    | stdlib `embed` + custom runner           | Avoids golang-migrate dep for MVP; SQL stays visible.            | ✅ done  |
+| Testing       | stdlib `testing` + `net/http/httptest`   | Simple Go-style tests; no vitest/playwright port.                | ✅ done  |
 
 Explicitly **not** pulling in: viper, zap/logrus, gorm/ent/sqlc, testify.
 
@@ -64,30 +64,32 @@ Files marked ✅ already exist; the rest are planned.
       app.go                           # App struct wires Config, Store, Logger, Clock, Router
       clock.go                         # Clock interface, stubable in tests
     config/
-      config.go                        # Load(path) (*Config, error); defaults; env/flag overrides
-      config_test.go
+      config.go                        # Load(path) (*Config, error); defaults; env/flag overrides  ✅
+      config_test.go                                                                 ✅
     logging/
       logging.go                       # slog setup (text|json), request-id helpers
     ids/
-      ids.go                           # NewUUID() string
+      ids.go                           # NewUUID() string                            ✅
+    respond/
+      respond.go                       # JSON / Error response helpers               ✅
 
     store/
-      store.go                         # *Store wraps *sql.DB; Open(dsn)
-      tx.go                            # WithTx(ctx, fn)
-      migrations.go                    # embed.FS loader + runner + schema_migrations table
+      store.go                         # *Store wraps *sql.DB; Open(dsn)             ✅
+      tx.go                            # WithTx(ctx, fn)                             ✅
+      migrations.go                    # embed.FS loader + runner + schema_migrations table  ✅
       migrations/
-        0001_init.sql                  # all MVP tables in one file
+        0001_init.sql                  # all MVP tables in one file                  ✅
 
     domain/                            # pure data types, no deps on db/http
-      company.go
-      agent.go
+      company.go                                                                      ✅
+      agent.go                                                                        ✅
       issue.go
       comment.go
       heartbeat.go
-      activity.go
+      activity.go                                                                     ✅
 
-    companies/   {service.go, service_test.go}
-    agents/      {service.go, service_test.go}
+    companies/   {service.go, service_test.go}                                       ✅
+    agents/      {service.go, service_test.go}                                       ✅
     issues/      {service.go, service_test.go}      # checkout/release atomic transitions live here
     comments/    {service.go}
     heartbeat/
@@ -95,23 +97,25 @@ Files marked ✅ already exist; the rest are planned.
       adapter.go                       # Adapter interface + StubAdapter + registry
       runner_test.go
     activity/
-      log.go                           # Record(ctx, actor, action, entity, meta)
+      log.go                           # Record(ctx, actor, action, entity, meta)    ✅
+      log_test.go                                                                     ✅
     skills/
       loader.go                        # scans /skills/*/SKILL.md + YAML front matter
 
     api/
       router.go                        # chi router, mounts /api                    ✅
+      api_e2e_test.go                  # end-to-end tests (companies, agents, activity)  ✅
       middleware.go                    # request id, slog access log, recoverer, json content-type
       errors.go                        # typed errors -> HTTP status
       render.go                        # writeJSON, readJSON, decodeAndValidate
       health/handler.go                                                              ✅
-      companies/handler.go
-      agents/handler.go
+      companies/handler.go                                                           ✅
+      agents/handler.go                                                              ✅
       issues/handler.go
       comments/handler.go
       heartbeat/handler.go
       skills/handler.go
-      activity/handler.go
+      activity/handler.go                                                            ✅
       stubs/handler.go                 # approvals/costs/goals/projects/routines/plugins → {"items":[]}
 
     ui/
@@ -120,16 +124,17 @@ Files marked ✅ already exist; the rest are planned.
     cli/
       root.go                          # cobra root + Execute()                     ✅
       serve.go                         # paperclip-go serve                         ✅
-      initcmd.go                       # paperclip-go init
-      doctor.go                        # paperclip-go doctor
-      company.go                       # create/list
-      agent.go                         # create/list
+      initcmd.go                       # paperclip-go init                          ✅
+      doctor.go                        # paperclip-go doctor                        ✅
+      store.go                         # openStore / openStoreFromConfig helpers     ✅
+      company.go                       # create/list                                ✅
+      agent.go                         # create/list                                ✅
       issue.go                         # create/list/get
       heartbeat.go                     # run
       client.go                        # thin HTTP client (for --remote mode)
 
     testutil/
-      server.go                        # SpawnTestServer(t) — full router on temp sqlite
+      server.go                        # SpawnTestServer(t) — full router on temp sqlite  ✅
       factories.go                     # MakeCompany, MakeAgent, MakeIssue
 ```
 
@@ -333,8 +338,18 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Updated `serve` command to load config and use ListenAddr from configuration
    - Added comprehensive unit tests in `internal/config/config_test.go`
    - All tests passing: `go test ./...` ✓
-3. **Store + migrations + companies** — SQLite, embedded `0001_init.sql`, companies CRUD (service + handler + CLI). First unit test + first e2e test.
-4. **Agents + activity log** — agents CRUD, `/api/agents/me`, activity table + `GET /api/activity`.
+3. ✅ **DONE: Store + migrations + companies** — SQLite, embedded `0001_init.sql`, companies CRUD (service + handler + CLI). First unit test + first e2e test.
+   - `internal/store/` (store.go, tx.go, migrations.go) + `migrations/0001_init.sql`
+   - `internal/domain/` (company.go, agent.go, activity.go) + `internal/ids/ids.go`
+   - `internal/companies/` (service.go, service_test.go) + `internal/api/companies/handler.go`
+   - `internal/respond/respond.go` (JSON/error helpers shared by all handlers)
+   - `internal/testutil/server.go` (SpawnTestServer + NewStore); `internal/api/api_e2e_test.go`
+   - All tests passing: `make test` ✓
+4. ✅ **DONE: Agents + activity log** — agents CRUD, `/api/agents/me`, activity table + `GET /api/activity`.
+   - `internal/agents/` (service.go, service_test.go) + `internal/api/agents/handler.go`
+   - `internal/activity/` (log.go, log_test.go) + `internal/api/activity/handler.go`
+   - `internal/cli/company.go`, `internal/cli/agent.go`, `internal/cli/store.go`
+   - All tests passing: `make test` ✓
 5. **Issues + comments + checkout** — full issue lifecycle with atomic checkout/release; nested comments.
 6. **Skills loader** — walk `/skills/`, expose `/api/skills`.
 7. **Heartbeat stub** — Adapter interface, `StubAdapter`, `POST /api/heartbeat/runs`, CLI `heartbeat run`; e2e covers the full loop.
@@ -366,23 +381,36 @@ Risks & mitigations:
 
 ## Critical files
 
-Already created (Phase 1 ✅):
+Already created (Phases 1–4 ✅):
 
-- `go.mod` / `go.sum`
-- `Makefile`
-- `AGENTS.md`
+- `go.mod` / `go.sum`, `Makefile`, `AGENTS.md`
 - `cmd/paperclip-go/main.go`
-- `internal/api/router.go`
-- `internal/api/health/handler.go`
-- `internal/cli/root.go`
-- `internal/cli/serve.go`
-
-Still to create (Phases 2–8):
-
+- `internal/api/router.go`, `internal/api/health/handler.go`, `internal/api/api_e2e_test.go`
+- `internal/api/companies/handler.go`, `internal/api/agents/handler.go`, `internal/api/activity/handler.go`
+- `internal/cli/root.go`, `internal/cli/serve.go`, `internal/cli/initcmd.go`, `internal/cli/doctor.go`
+- `internal/cli/company.go`, `internal/cli/agent.go`, `internal/cli/store.go`
+- `internal/config/config.go`, `internal/config/config_test.go`
+- `internal/ids/ids.go`, `internal/respond/respond.go`
+- `internal/store/store.go`, `internal/store/tx.go`, `internal/store/migrations.go`
 - `internal/store/migrations/0001_init.sql`
-- `internal/heartbeat/runner.go`
+- `internal/domain/company.go`, `internal/domain/agent.go`, `internal/domain/activity.go`
+- `internal/companies/service.go`, `internal/companies/service_test.go`
+- `internal/agents/service.go`, `internal/agents/service_test.go`
+- `internal/activity/log.go`, `internal/activity/log_test.go`
 - `internal/testutil/server.go`
-- (all other packages listed in the layout above)
+
+Still to create (Phases 5–8):
+
+- `internal/domain/issue.go`, `internal/domain/comment.go`, `internal/domain/heartbeat.go`
+- `internal/issues/service.go`, `internal/issues/service_test.go`
+- `internal/comments/service.go`
+- `internal/heartbeat/runner.go`, `internal/heartbeat/adapter.go`, `internal/heartbeat/runner_test.go`
+- `internal/skills/loader.go`
+- `internal/api/issues/handler.go`, `internal/api/comments/handler.go`
+- `internal/api/heartbeat/handler.go`, `internal/api/skills/handler.go`, `internal/api/stubs/handler.go`
+- `internal/ui/assets.go`
+- `internal/cli/issue.go`, `internal/cli/heartbeat.go`, `internal/cli/client.go`
+- `internal/testutil/factories.go`
 
 ---
 
