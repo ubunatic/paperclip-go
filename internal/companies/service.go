@@ -87,6 +87,19 @@ func (s *Service) List(ctx context.Context) ([]*domain.Company, error) {
 	return out, nil
 }
 
+// GetByShortname returns the company with the given shortname, or ErrNotFound if it doesn't exist.
+func (s *Service) GetByShortname(ctx context.Context, shortname string) (*domain.Company, error) {
+	row := s.store.DB.QueryRowContext(ctx,
+		`SELECT id, name, shortname, description, created_at, updated_at
+		 FROM companies WHERE shortname = ?`, shortname,
+	)
+	c, err := scanCompany(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	return c, err
+}
+
 // scanner is satisfied by both *sql.Row and *sql.Rows.
 type scanner interface {
 	Scan(dest ...any) error

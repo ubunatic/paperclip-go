@@ -3,6 +3,7 @@ package activity
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -71,9 +72,11 @@ type scanner interface {
 func scanActivity(s scanner) (*domain.Activity, error) {
 	var a domain.Activity
 	var createdAt string
-	if err := s.Scan(&a.ID, &a.CompanyID, &a.ActorKind, &a.ActorID, &a.Action, &a.EntityKind, &a.EntityID, &a.MetaJSON, &createdAt); err != nil {
+	var metaJSONBytes []byte
+	if err := s.Scan(&a.ID, &a.CompanyID, &a.ActorKind, &a.ActorID, &a.Action, &a.EntityKind, &a.EntityID, &metaJSONBytes, &createdAt); err != nil {
 		return nil, err
 	}
+	a.MetaJSON = json.RawMessage(metaJSONBytes)
 	var err error
 	a.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
 	if err != nil {

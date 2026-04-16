@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ubunatic/paperclip-go/internal/domain"
 	svc "github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/respond"
 )
@@ -26,7 +27,7 @@ func list(s *svc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		companyID := r.URL.Query().Get("companyId")
 
-		var items interface{}
+		var items []*domain.Agent
 		var err error
 
 		if companyID != "" {

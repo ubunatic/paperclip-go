@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/domain"
 )
 
 var agentCmd = &cobra.Command{
@@ -35,6 +36,18 @@ var (
 	flagAgentRole        string
 )
 
+// resolveCompanyID looks up a company by shortname and returns its ID.
+func resolveCompanyID(ctx context.Context, svc *companies.Service, shortname string) (string, error) {
+	company, err := svc.GetByShortname(ctx, shortname)
+	if err != nil {
+		if err == companies.ErrNotFound {
+			return "", fmt.Errorf("company %q not found", shortname)
+		}
+		return "", err
+	}
+	return company.ID, nil
+}
+
 func init() {
 	agentCreateCmd.Flags().StringVar(&flagAgentCompany, "company", "", "Company shortname (required)")
 	agentCreateCmd.Flags().StringVar(&flagAgentShortname, "shortname", "", "Agent shortname (required)")
@@ -57,23 +70,13 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 	}
 	defer s.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 
 	// Resolve company ID by shortname
 	companySvc := companies.New(s)
-	company, err := companySvc.List(ctx)
+	companyID, err := resolveCompanyID(ctx, companySvc, flagAgentCompany)
 	if err != nil {
 		return err
-	}
-	var companyID string
-	for _, c := range company {
-		if c.Shortname == flagAgentCompany {
-			companyID = c.ID
-			break
-		}
-	}
-	if companyID == "" {
-		return fmt.Errorf("company %q not found", flagAgentCompany)
 	}
 
 	svc := agents.New(s)
@@ -93,26 +96,16 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	}
 	defer s.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	svc := agents.New(s)
 
-	var list interface{}
+	var list []*domain.Agent
 	if flagAgentCompany != "" {
 		// Resolve company ID by shortname
 		companySvc := companies.New(s)
-		companies, err := companySvc.List(ctx)
+		companyID, err := resolveCompanyID(ctx, companySvc, flagAgentCompany)
 		if err != nil {
 			return err
-		}
-		var companyID string
-		for _, c := range companies {
-			if c.Shortname == flagAgentCompany {
-				companyID = c.ID
-				break
-			}
-		}
-		if companyID == "" {
-			return fmt.Errorf("company %q not found", flagAgentCompany)
 		}
 		list, err = svc.ListByCompany(ctx, companyID)
 		if err != nil {

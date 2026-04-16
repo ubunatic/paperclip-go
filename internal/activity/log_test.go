@@ -3,6 +3,7 @@ package activity_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/companies"
@@ -39,12 +40,15 @@ func TestListActivities(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	// Record multiple activities
+	// Record multiple activities with 1 second delay between each to ensure distinct timestamps
 	log := activity.New(s)
 	for i := 0; i < 5; i++ {
 		err := log.Record(ctx, company.ID, "agent", "agent-123", "action", "entity", "entity-id", "{}")
 		if err != nil {
 			t.Fatalf("Record activity %d: %v", i, err)
+		}
+		if i < 4 {
+			time.Sleep(1 * time.Second)
 		}
 	}
 

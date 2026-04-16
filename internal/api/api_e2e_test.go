@@ -100,7 +100,9 @@ func TestAgentsE2E(t *testing.T) {
 		t.Fatalf("POST /api/companies: %v", err)
 	}
 	var company map[string]any
-	json.NewDecoder(respCompany.Body).Decode(&company)
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
 	respCompany.Body.Close()
 	companyID, _ := company["id"].(string)
 
@@ -195,7 +197,9 @@ func TestActivityE2E(t *testing.T) {
 		t.Fatalf("POST /api/companies: %v", err)
 	}
 	var company map[string]any
-	json.NewDecoder(respCompany.Body).Decode(&company)
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
 	respCompany.Body.Close()
 	companyID, _ := company["id"].(string)
 

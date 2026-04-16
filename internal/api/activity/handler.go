@@ -18,6 +18,8 @@ func Handler(s *svc.Log) http.Handler {
 	return r
 }
 
+const maxLimit = 500
+
 func list(s *svc.Log) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		companyID := r.URL.Query().Get("companyId")
@@ -31,6 +33,9 @@ func list(s *svc.Log) http.HandlerFunc {
 			if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 				limit = l
 			}
+		}
+		if limit > maxLimit {
+			limit = maxLimit
 		}
 
 		items, err := s.List(r.Context(), companyID, limit)
