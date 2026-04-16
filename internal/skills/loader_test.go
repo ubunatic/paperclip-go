@@ -3,6 +3,7 @@ package skills
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -58,7 +59,7 @@ This is the body of skill 2.`
 			if s.Description != "This is the first test skill" {
 				t.Errorf("skill1 description = %q, want %q", s.Description, "This is the first test skill")
 			}
-			if !contains(s.Body, "body of skill 1") {
+			if !strings.Contains(s.Body, "body of skill 1") {
 				t.Errorf("skill1 body doesn't contain expected content")
 			}
 		}
@@ -75,7 +76,7 @@ This is the body of skill 2.`
 			if s.Description != "This is the second test skill" {
 				t.Errorf("skill2 description = %q, want %q", s.Description, "This is the second test skill")
 			}
-			if !contains(s.Body, "body of skill 2") {
+			if !strings.Contains(s.Body, "body of skill 2") {
 				t.Errorf("skill2 body doesn't contain expected content")
 			}
 		}
@@ -87,7 +88,7 @@ This is the body of skill 2.`
 
 func TestLoad_MissingDir(t *testing.T) {
 	// Load from non-existent directory
-	skills, err := Load("/nonexistent/skills/dir")
+	skills, err := Load(filepath.Join(t.TempDir(), "nonexistent"))
 
 	// Should return nil, nil (no error)
 	if err != nil {
@@ -200,18 +201,4 @@ Body content`
 	if len(skills) > 0 && skills[0].Name != "my_skill_dir" {
 		t.Errorf("skill name = %q, want %q (directory name fallback)", skills[0].Name, "my_skill_dir")
 	}
-}
-
-// Helper function to check if string contains substring
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) >= len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

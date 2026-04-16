@@ -4,6 +4,7 @@ package api
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
 	apiactivity "github.com/ubunatic/paperclip-go/internal/api/activity"
 	apiagents "github.com/ubunatic/paperclip-go/internal/api/agents"
 	apicompanies "github.com/ubunatic/paperclip-go/internal/api/companies"

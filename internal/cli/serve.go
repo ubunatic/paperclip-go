@@ -39,6 +39,7 @@ func serveRun() error {
 	defer s.Close()
 
 	skillsList, err := skills.Load(cfg.SkillsDir)
+	// Skills are optional; log warning if loading fails, but don't fail the entire server startup.
 	if err != nil {
 		log.Printf("warning: failed to load skills: %v", err)
 	}

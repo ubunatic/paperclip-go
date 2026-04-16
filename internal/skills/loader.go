@@ -2,6 +2,7 @@
 package skills
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -19,7 +20,7 @@ import (
 func Load(dir string) ([]domain.Skill, error) {
 	// Handle missing directory gracefully
 	entries, err := os.ReadDir(dir)
-	if os.IsNotExist(err) {
+	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
@@ -53,8 +54,8 @@ func Load(dir string) ([]domain.Skill, error) {
 // Returns an error only for actual parsing failures.
 func parseSkillFile(path, name string) (*domain.Skill, error) {
 	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("SKILL.md not found")
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading file: %w", err)
@@ -64,12 +65,12 @@ func parseSkillFile(path, name string) (*domain.Skill, error) {
 	content := string(data)
 
 	// Check for front matter delimiters
-	if !strings.HasPrefix(content, "---") {
+	if !strings.HasPrefix(content, "---\n") {
 		return nil, fmt.Errorf("no YAML front matter (missing opening ---)")
 	}
 
 	// Find the closing delimiter
-	parts := strings.SplitN(content[3:], "\n---\n", 2)
+	parts := strings.SplitN(content[4:], "\n---\n", 2)
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("no closing --- delimiter for front matter")
 	}
