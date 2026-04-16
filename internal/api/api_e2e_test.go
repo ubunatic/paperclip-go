@@ -241,3 +241,173 @@ func TestActivityE2E(t *testing.T) {
 		t.Errorf("GET /api/activity without companyId status = %d, want 400", resp2.StatusCode)
 	}
 }
+
+func TestIssuesE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Create a company first
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	respCompany.Body.Close()
+	companyID, _ := company["id"].(string)
+
+	// Create an agent
+	agentBody, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "alice",
+		"displayName": "Alice",
+		"role":        "manager",
+		"adapter":     "stub",
+	})
+	respAgent, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agentBody))
+	if err != nil {
+		t.Fatalf("POST /api/agents: %v", err)
+	}
+	var agent map[string]any
+	if err := json.NewDecoder(respAgent.Body).Decode(&agent); err != nil {
+		t.Fatalf("decoding agent response: %v", err)
+	}
+	respAgent.Body.Close()
+	agentID, _ := agent["id"].(string)
+
+	// POST /api/issues → 201
+	issueBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue",
+		"body":      "This is a test issue",
+	})
+	resp, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/issues status = %d, want 201", resp.StatusCode)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	issueID, _ := created["id"].(string)
+	if issueID == "" {
+		t.Fatalf("expected id in POST response, got %v", created)
+	}
+
+	// GET /api/issues/{id} → 200
+	resp2, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s: %v", issueID, err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/issues/%s status = %d, want 200", issueID, resp2.StatusCode)
+	}
+
+	// POST /api/issues/{id}/checkout → 200
+	checkoutBody, _ := json.Marshal(map[string]string{"agentId": agentID})
+	resp3, err := http.Post(srv.URL+"/api/issues/"+issueID+"/checkout", "application/json", bytes.NewReader(checkoutBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/checkout: %v", issueID, err)
+	}
+	resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/issues/%s/checkout status = %d, want 200", issueID, resp3.StatusCode)
+	}
+
+	// POST /api/issues/{id}/checkout again by same agent → 200 (idempotent)
+	resp4, err := http.Post(srv.URL+"/api/issues/"+issueID+"/checkout", "application/json", bytes.NewReader(checkoutBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/checkout (idempotent): %v", issueID, err)
+	}
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/issues/%s/checkout (idempotent) status = %d, want 200", issueID, resp4.StatusCode)
+	}
+
+	// POST /api/issues/{id}/comments → 201
+	commentBody, _ := json.Marshal(map[string]any{
+		"body":           "Test comment",
+		"authorKind":     "agent",
+		"authorAgentId":  agentID,
+	})
+	resp5, err := http.Post(srv.URL+"/api/issues/"+issueID+"/comments", "application/json", bytes.NewReader(commentBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/comments: %v", issueID, err)
+	}
+	resp5.Body.Close()
+	if resp5.StatusCode != http.StatusCreated {
+		t.Errorf("POST /api/issues/%s/comments status = %d, want 201", issueID, resp5.StatusCode)
+	}
+
+	// GET /api/issues/{id}/comments → 200 (contains comment)
+	resp6, err := http.Get(srv.URL + "/api/issues/" + issueID + "/comments")
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s/comments: %v", issueID, err)
+	}
+	defer resp6.Body.Close()
+	if resp6.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/issues/%s/comments status = %d, want 200", issueID, resp6.StatusCode)
+	}
+	var comments map[string]any
+	if err := json.NewDecoder(resp6.Body).Decode(&comments); err != nil {
+		t.Fatalf("decoding comments: %v", err)
+	}
+	commentItems, _ := comments["items"].([]any)
+	if len(commentItems) != 1 {
+		t.Errorf("comments list len = %d, want 1", len(commentItems))
+	}
+
+	// POST /api/issues/{id}/release → 200
+	releaseBody, _ := json.Marshal(map[string]string{"agentId": agentID})
+	resp7, err := http.Post(srv.URL+"/api/issues/"+issueID+"/release", "application/json", bytes.NewReader(releaseBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/release: %v", issueID, err)
+	}
+	resp7.Body.Close()
+	if resp7.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/issues/%s/release status = %d, want 200", issueID, resp7.StatusCode)
+	}
+
+	// POST /api/issues/{id}/checkout again → 200 (succeeds after release)
+	resp8, err := http.Post(srv.URL+"/api/issues/"+issueID+"/checkout", "application/json", bytes.NewReader(checkoutBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/checkout (after release): %v", issueID, err)
+	}
+	resp8.Body.Close()
+	if resp8.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/issues/%s/checkout (after release) status = %d, want 200", issueID, resp8.StatusCode)
+	}
+
+	// Test error cases: missing required fields
+	badIssueBody, _ := json.Marshal(map[string]string{"companyId": companyID})
+	resp9, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(badIssueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues (bad): %v", err)
+	}
+	resp9.Body.Close()
+	if resp9.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST /api/issues (bad) status = %d, want 422", resp9.StatusCode)
+	}
+
+	// Test 404 not found
+	resp10, err := http.Get(srv.URL + "/api/issues/nonexistent-id")
+	if err != nil {
+		t.Fatalf("GET /api/issues/nonexistent: %v", err)
+	}
+	resp10.Body.Close()
+	if resp10.StatusCode != http.StatusNotFound {
+		t.Errorf("GET /api/issues/nonexistent status = %d, want 404", resp10.StatusCode)
+	}
+}
