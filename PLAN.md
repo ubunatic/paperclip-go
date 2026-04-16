@@ -333,8 +333,22 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Updated `serve` command to load config and use ListenAddr from configuration
    - Added comprehensive unit tests in `internal/config/config_test.go`
    - All tests passing: `go test ./...` ✓
-3. **Store + migrations + companies** — SQLite, embedded `0001_init.sql`, companies CRUD (service + handler + CLI). First unit test + first e2e test.
-4. **Agents + activity log** — agents CRUD, `/api/agents/me`, activity table + `GET /api/activity`.
+3. ✅ **DONE: Store + migrations + companies** — SQLite, embedded `0001_init.sql`, companies CRUD (service + handler + CLI). First unit test + first e2e test.
+   - Created SQLite store with migrations
+   - Implemented companies service with full CRUD operations
+   - Added HTTP handlers for company endpoints
+   - Created CLI commands for company management
+   - All tests passing ✓
+4. ✅ **DONE: Agents + activity log** — agents CRUD, `/api/agents/me`, activity table + `GET /api/activity`.
+   - Created domain models for Agent and Activity
+   - Implemented agents service with CRUD + GetByShortname + ListByCompany
+   - Implemented activity log service with Record + List operations
+   - Added HTTP handlers for agents (GET/POST, /me endpoint) and activity
+   - Created CLI commands: agent create/list with company filtering
+   - Added companies.GetByShortname() helper
+   - Full unit + E2E test coverage
+   - Code review cycle completed with all fixes applied
+   - PR #13 merged ✓
 5. **Issues + comments + checkout** — full issue lifecycle with atomic checkout/release; nested comments.
 6. **Skills loader** — walk `/skills/`, expose `/api/skills`.
 7. **Heartbeat stub** — Adapter interface, `StubAdapter`, `POST /api/heartbeat/runs`, CLI `heartbeat run`; e2e covers the full loop.
