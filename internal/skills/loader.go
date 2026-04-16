@@ -50,8 +50,8 @@ func Load(dir string) ([]domain.Skill, error) {
 }
 
 // parseSkillFile reads and parses a SKILL.md file with YAML front matter.
-// Returns nil, nil if the file doesn't exist or has no front matter.
-// Returns an error only for actual parsing failures.
+// Returns nil, nil if file doesn't exist.
+// Returns error if file exists but has no front matter or parsing fails.
 func parseSkillFile(path, name string) (*domain.Skill, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -93,10 +93,12 @@ func parseSkillFile(path, name string) (*domain.Skill, error) {
 		skillName = name
 	}
 
+	// Use relative path from the skills directory for portability
+	relPath := filepath.ToSlash(filepath.Join(name, "SKILL.md"))
 	skill := &domain.Skill{
 		Name:        skillName,
 		Description: meta.Description,
-		Path:        path,
+		Path:        relPath,
 		Body:        body,
 	}
 
