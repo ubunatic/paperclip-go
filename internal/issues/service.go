@@ -166,8 +166,15 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 }
 
 // Checkout atomically checks out an issue for an agent.
+// Returns ErrNotFound if the issue does not exist.
 // Returns ErrCheckoutConflict if the issue is already checked out.
 func (s *Service) Checkout(ctx context.Context, issueID, agentID string) error {
+	// Verify the issue exists first (to distinguish not found from conflict)
+	_, err := s.Get(ctx, issueID)
+	if err != nil {
+		return err
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 
@@ -193,8 +200,15 @@ func (s *Service) Checkout(ctx context.Context, issueID, agentID string) error {
 }
 
 // Release releases an issue that was checked out by an agent.
+// Returns ErrNotFound if the issue does not exist.
 // Returns ErrNotCheckedOut if the issue is not held by the specified agent.
 func (s *Service) Release(ctx context.Context, issueID, agentID string) error {
+	// Verify the issue exists first
+	_, err := s.Get(ctx, issueID)
+	if err != nil {
+		return err
+	}
+
 	result, err := s.store.DB.ExecContext(ctx,
 		`UPDATE issues SET checked_out_by = NULL, checked_out_at = NULL
 		 WHERE id = ? AND checked_out_by = ?`,

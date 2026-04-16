@@ -7,10 +7,13 @@ import (
 	apiactivity "github.com/ubunatic/paperclip-go/internal/api/activity"
 	apiagents "github.com/ubunatic/paperclip-go/internal/api/agents"
 	apicompanies "github.com/ubunatic/paperclip-go/internal/api/companies"
+	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
 	"github.com/ubunatic/paperclip-go/internal/api/health"
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
+	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
 
@@ -26,6 +29,8 @@ func NewRouter(s *store.Store) *chi.Mux {
 	companySvc := companies.New(s)
 	agentSvc := agents.New(s)
 	activityLog := activity.New(s)
+	issueSvc := issues.New(s)
+	commentSvc := comments.New(s)
 
 	// /api routes
 	r.Route("/api", func(r chi.Router) {
@@ -33,6 +38,7 @@ func NewRouter(s *store.Store) *chi.Mux {
 		r.Mount("/companies", apicompanies.Handler(companySvc))
 		r.Mount("/agents", apiagents.Handler(agentSvc))
 		r.Mount("/activity", apiactivity.Handler(activityLog))
+		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc))
 	})
 
 	return r
