@@ -8,8 +8,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ubunatic/paperclip-go/internal/domain"
 	svc "github.com/ubunatic/paperclip-go/internal/agents"
+	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/respond"
 )
 

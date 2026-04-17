@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ubunatic/paperclip-go/internal/api"
 	"github.com/ubunatic/paperclip-go/internal/config"
-	"github.com/ubunatic/paperclip-go/internal/skills"
 )
 
 var serveCmd = &cobra.Command{
@@ -38,13 +36,7 @@ func serveRun() error {
 	}
 	defer s.Close()
 
-	skillsList, err := skills.Load(cfg.SkillsDir)
-	// Skills are optional; log warning if loading fails, but don't fail the entire server startup.
-	if err != nil {
-		log.Printf("warning: failed to load skills: %v", err)
-	}
-
-	router := api.NewRouter(s, skillsList)
+	router := api.NewRouter(s, cfg.SkillsDir)
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
 		Handler: router,

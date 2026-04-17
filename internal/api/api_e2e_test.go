@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
@@ -243,6 +244,79 @@ func TestActivityE2E(t *testing.T) {
 	}
 }
 
+func TestSkillsE2E(t *testing.T) {
+	// Create a temporary directory with synthetic SKILL.md files
+	tempdir := t.TempDir()
+
+	// Create a test skill directory
+	skillDir := filepath.Join(tempdir, "test-skill")
+	if err := os.Mkdir(skillDir, 0755); err != nil {
+		t.Fatalf("creating skill dir: %v", err)
+	}
+
+	// Create a SKILL.md file
+	skillPath := filepath.Join(skillDir, "SKILL.md")
+	skillContent := `---
+name: test-skill-e2e
+description: A test skill for E2E testing
+---
+# Test Skill
+
+This is a test skill for E2E testing.
+`
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
+		t.Fatalf("writing SKILL.md: %v", err)
+	}
+
+	srv, _ := testutil.SpawnTestServerWithSkillsDir(t, tempdir)
+
+	// GET /api/skills → list
+	resp, err := http.Get(srv.URL + "/api/skills")
+	if err != nil {
+		t.Fatalf("GET /api/skills: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/skills status = %d, want 200", resp.StatusCode)
+	}
+
+	var skillsResponse map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&skillsResponse); err != nil {
+		t.Fatalf("decoding skills response: %v", err)
+	}
+
+	// Verify response has items key
+	items, ok := skillsResponse["items"]
+	if !ok {
+		t.Fatalf("expected 'items' key in response, got %v", skillsResponse)
+	}
+
+	itemsList, ok := items.([]any)
+	if !ok {
+		t.Fatalf("expected items to be array, got %T", items)
+	}
+
+	// Should have loaded exactly 1 skill from our temporary directory
+	if len(itemsList) != 1 {
+		t.Errorf("skills list len = %d, want 1", len(itemsList))
+	}
+
+	// Verify structure: item should have name and description fields
+	if len(itemsList) > 0 {
+		skillMap, ok := itemsList[0].(map[string]any)
+		if !ok {
+			t.Errorf("expected skill to be map, got %T", itemsList[0])
+		} else {
+			if name, ok := skillMap["name"]; !ok || name == "" {
+				t.Errorf("expected 'name' field in skill, got %v", skillMap)
+			}
+			if name, ok := skillMap["name"].(string); ok && name != "test-skill-e2e" {
+				t.Errorf("expected name 'test-skill-e2e', got %q", name)
+			}
+		}
+	}
+}
+
 func TestIssuesE2E(t *testing.T) {
 	srv, _ := testutil.SpawnTestServer(t)
 
@@ -339,9 +413,9 @@ func TestIssuesE2E(t *testing.T) {
 
 	// POST /api/issues/{id}/comments → 201
 	commentBody, _ := json.Marshal(map[string]any{
-		"body":           "Test comment",
-		"authorKind":     "agent",
-		"authorAgentId":  agentID,
+		"body":          "Test comment",
+		"authorKind":    "agent",
+		"authorAgentId": agentID,
 	})
 	resp5, err := http.Post(srv.URL+"/api/issues/"+issueID+"/comments", "application/json", bytes.NewReader(commentBody))
 	if err != nil {
@@ -410,59 +484,5 @@ func TestIssuesE2E(t *testing.T) {
 	resp10.Body.Close()
 	if resp10.StatusCode != http.StatusNotFound {
 		t.Errorf("GET /api/issues/nonexistent status = %d, want 404", resp10.StatusCode)
-	}
-}
-
-func TestSkillsE2E(t *testing.T) {
-	// Create test skills
-	testSkills := []domain.Skill{
-		{
-			Name:        "Test Skill",
-			Description: "A test skill for E2E testing",
-			Path:        "/test/skill/SKILL.md",
-			Body:        "This is the test skill body",
-		},
-	}
-
-	srv, _ := testutil.SpawnTestServerWithSkills(t, testSkills)
-
-	// GET /api/skills → 200 with items
-	resp, err := http.Get(srv.URL + "/api/skills/")
-	if err != nil {
-		t.Fatalf("GET /api/skills/: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GET /api/skills/ status = %d, want 200", resp.StatusCode)
-	}
-
-	var result map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding response: %v", err)
-	}
-
-	items, ok := result["items"].([]any)
-	if !ok {
-		t.Fatalf("expected items to be an array, got %T", result["items"])
-	}
-
-	if len(items) != 1 {
-		t.Errorf("GET /api/skills/ returned %d items, want 1", len(items))
-	}
-
-	// Verify the skill data
-	if len(items) > 0 {
-		skillItem, ok := items[0].(map[string]any)
-		if !ok {
-			t.Fatalf("expected skill item to be an object, got %T", items[0])
-		}
-
-		if skillItem["name"] != "Test Skill" {
-			t.Errorf("skill name = %v, want 'Test Skill'", skillItem["name"])
-		}
-		if skillItem["description"] != "A test skill for E2E testing" {
-			t.Errorf("skill description = %v, want 'A test skill for E2E testing'", skillItem["description"])
-		}
 	}
 }

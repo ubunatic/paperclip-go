@@ -346,14 +346,13 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Fixed atomic operations to distinguish ErrNotFound (404) from ErrCheckoutConflict (409)
    - All tests passing: `go test ./...` ✓
 6. ✅ **DONE: Skills loader** — walk `/skills/`, expose `/api/skills`.
-   - Created `internal/domain/skill.go` with `Skill` struct (Name, Description, Path, Body)
-   - Implemented `internal/skills/loader.go`: Load(dir) walks directory, parses YAML front matter from SKILL.md files, returns []domain.Skill
-   - Implemented `internal/api/skills/handler.go`: HTTP handler for GET /api/skills → {"items": skills}
-   - Wired skills into api.NewRouter and cli/serve.go integration
-   - Added comprehensive unit tests: missing dir, malformed YAML, no front matter
-   - Added TestSkillsE2E covering GET /api/skills with loaded skills
-   - Updated testutil.SpawnTestServerWithSkills for e2e flexibility
-   - Code review: fixed 6 issues (error handling, YAML prefix, dead code, imports)
+   - Created `internal/domain/skill.go` with Skill data type (Name, Description, Path, Body)
+   - Implemented `internal/skills/loader.go` with YAML frontmatter parsing from SKILL.md files
+   - Created `internal/api/skills/handler.go` with GET /api/skills endpoint returning full skill objects
+   - Added comprehensive unit tests in `loader_test.go` and `handler_test.go`
+   - Added hermetic E2E test using temporary directory with synthetic SKILL.md files
+   - Security fix: Path field omitted from JSON response (json:"-" tag to prevent info disclosure)
+   - Code review: fixed 8 issues (2 critical, 3 important) including nil slice handling, hermetic tests
    - All tests passing: `go test ./...` ✓
 7. **Heartbeat stub** — Adapter interface, `StubAdapter`, `POST /api/heartbeat/runs`, CLI `heartbeat run`; e2e covers the full loop.
 8. **UI serving + stub endpoints** — serve `/ui/dist` if present, SPA fallback; stub endpoints for approvals/costs/goals/projects/routines/plugins so the UI (if used) does not 404.
