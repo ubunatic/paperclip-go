@@ -66,8 +66,11 @@ It can have multiple lines and sections.
 }
 
 func TestLoadMissingDirectory(t *testing.T) {
-	// Try to load from a directory that doesn't exist
-	skillsList, err := skills.Load("/nonexistent/directory/path")
+	// Use a guaranteed-missing path under temp dir for cross-platform portability
+	tempdir := t.TempDir()
+	nonexistentDir := filepath.Join(tempdir, "does-not-exist")
+
+	skillsList, err := skills.Load(nonexistentDir)
 
 	// Should return empty slice and nil error (graceful handling)
 	if err != nil {

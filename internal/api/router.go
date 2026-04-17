@@ -16,6 +16,7 @@ import (
 	apiskills "github.com/ubunatic/paperclip-go/internal/api/skills"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/skills"
 	"github.com/ubunatic/paperclip-go/internal/store"
@@ -40,6 +41,7 @@ func NewRouter(s *store.Store, skillsDir string) *chi.Mux {
 	skillsList, err := skills.Load(skillsDir)
 	if err != nil {
 		log.Printf("skills: failed to load from %s: %v", skillsDir, err)
+		skillsList = []domain.Skill{}
 	}
 
 	// /api routes

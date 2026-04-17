@@ -162,8 +162,12 @@ func TestSkillsHandlerNil(t *testing.T) {
 		t.Fatalf("expected 'items' key in response, got %v", response)
 	}
 
-	// Verify items is nil (not a non-nil empty array when nil is passed)
-	if items != nil {
-		t.Errorf("expected nil items, got %v", items)
+	// Verify items is an empty array (normalized from nil)
+	itemsArray, ok := items.([]any)
+	if !ok {
+		t.Fatalf("expected items to be array, got %T", items)
+	}
+	if len(itemsArray) != 0 {
+		t.Errorf("expected 0 items, got %d", len(itemsArray))
 	}
 }
