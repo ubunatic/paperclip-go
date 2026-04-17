@@ -486,3 +486,122 @@ func TestIssuesE2E(t *testing.T) {
 		t.Errorf("GET /api/issues/nonexistent status = %d, want 404", resp10.StatusCode)
 	}
 }
+
+func TestHeartbeatE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Create a company
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	respCompany.Body.Close()
+	companyID, _ := company["id"].(string)
+
+	// Create an agent
+	agentBody, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "alice",
+		"displayName": "Alice",
+		"role":        "manager",
+		"adapter":     "stub",
+	})
+	respAgent, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agentBody))
+	if err != nil {
+		t.Fatalf("POST /api/agents: %v", err)
+	}
+	var agent map[string]any
+	if err := json.NewDecoder(respAgent.Body).Decode(&agent); err != nil {
+		t.Fatalf("decoding agent response: %v", err)
+	}
+	respAgent.Body.Close()
+	agentID, _ := agent["id"].(string)
+
+	// POST /api/heartbeat/runs with agentId → 201
+	runBody, _ := json.Marshal(map[string]string{
+		"agentId": agentID,
+	})
+	resp, err := http.Post(srv.URL+"/api/heartbeat/runs", "application/json", bytes.NewReader(runBody))
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/heartbeat/runs status = %d, want 201", resp.StatusCode)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	runID, _ := created["id"].(string)
+	if runID == "" {
+		t.Fatalf("expected id in POST response, got %v", created)
+	}
+	status, _ := created["status"].(string)
+	if status != "success" {
+		t.Errorf("expected status=success, got %q", status)
+	}
+
+	// POST /api/heartbeat/runs without agentId → 422
+	badBody, _ := json.Marshal(map[string]string{})
+	resp2, err := http.Post(srv.URL+"/api/heartbeat/runs", "application/json", bytes.NewReader(badBody))
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs (bad): %v", err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST /api/heartbeat/runs (bad) status = %d, want 422", resp2.StatusCode)
+	}
+
+	// GET /api/heartbeat/runs?agentId=... → 200 with list
+	resp3, err := http.Get(srv.URL + "/api/heartbeat/runs?agentId=" + agentID)
+	if err != nil {
+		t.Fatalf("GET /api/heartbeat/runs: %v", err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/heartbeat/runs status = %d, want 200", resp3.StatusCode)
+	}
+
+	var list map[string]any
+	if err := json.NewDecoder(resp3.Body).Decode(&list); err != nil {
+		t.Fatalf("decoding list response: %v", err)
+	}
+	items, _ := list["items"].([]any)
+	if len(items) != 1 {
+		t.Errorf("list items len = %d, want 1", len(items))
+	}
+
+	// GET /api/heartbeat/runs without agentId → 400
+	resp4, err := http.Get(srv.URL + "/api/heartbeat/runs")
+	if err != nil {
+		t.Fatalf("GET /api/heartbeat/runs (no agentId): %v", err)
+	}
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusBadRequest {
+		t.Errorf("GET /api/heartbeat/runs (no agentId) status = %d, want 400", resp4.StatusCode)
+	}
+
+	// POST /api/heartbeat/runs with non-existent agent → 404
+	notFoundBody, _ := json.Marshal(map[string]string{
+		"agentId": "nonexistent-agent-id",
+	})
+	resp5, err := http.Post(srv.URL+"/api/heartbeat/runs", "application/json", bytes.NewReader(notFoundBody))
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs (not found): %v", err)
+	}
+	resp5.Body.Close()
+	if resp5.StatusCode != http.StatusNotFound {
+		t.Errorf("POST /api/heartbeat/runs (not found) status = %d, want 404", resp5.StatusCode)
+	}
+}

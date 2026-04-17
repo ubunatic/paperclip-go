@@ -354,7 +354,18 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Security fix: Path field omitted from JSON response (json:"-" tag to prevent info disclosure)
    - Code review: fixed 8 issues (2 critical, 3 important) including nil slice handling, hermetic tests
    - All tests passing: `go test ./...` ✓
-7. **Heartbeat stub** — Adapter interface, `StubAdapter`, `POST /api/heartbeat/runs`, CLI `heartbeat run`; e2e covers the full loop.
+7. ✅ **DONE: Heartbeat stub** — Adapter interface, `StubAdapter`, `POST /api/heartbeat/runs`, CLI `heartbeat run`; e2e covers the full loop.
+   - Created `internal/domain/heartbeat.go` with HeartbeatRun, RunContext, RunResult types
+   - Implemented `internal/heartbeat/adapter.go` with Adapter interface, StubAdapter, thread-safe Registry
+   - Implemented `internal/heartbeat/runner.go` with Run(), Create(), Update(), GetByID(), ListByAgent() methods
+   - Created `internal/api/heartbeat/handler.go` with POST /api/heartbeat/runs and GET /api/heartbeat/runs endpoints
+   - Created `internal/cli/heartbeat.go` with CLI command: `paperclip-go heartbeat run --agent <id>`
+   - Integrated heartbeat handler and registry into `internal/api/router.go`
+   - Added CLI command to `internal/cli/root.go`
+   - Implemented comprehensive unit tests in `internal/heartbeat/runner_test.go` with 12 test cases
+   - Added E2E test `TestHeartbeatE2E()` in `internal/api/api_e2e_test.go` covering full loop
+   - Code review: Fixed 3 critical issues (Registry race condition, nil service panic, Go convention violation)
+   - All tests passing: `go test ./...` ✓
 8. **UI serving + stub endpoints** — serve `/ui/dist` if present, SPA fallback; stub endpoints for approvals/costs/goals/projects/routines/plugins so the UI (if used) does not 404.
 
 ---
