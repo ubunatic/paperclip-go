@@ -78,11 +78,13 @@ func TestSkillsHandler(t *testing.T) {
 	if _, ok := firstItem["description"]; !ok {
 		t.Errorf("expected 'description' field in item, got %v", firstItem)
 	}
-	if _, ok := firstItem["path"]; !ok {
-		t.Errorf("expected 'path' field in item, got %v", firstItem)
-	}
+	// Note: 'path' field is intentionally omitted from JSON (json:"-" tag for security)
 	if _, ok := firstItem["body"]; !ok {
 		t.Errorf("expected 'body' field in item, got %v", firstItem)
+	}
+	// Verify 'path' is NOT in the response (for security)
+	if _, ok := firstItem["path"]; ok {
+		t.Errorf("'path' field should not be in response for security reasons, got %v", firstItem)
 	}
 
 	// Verify specific values
@@ -129,5 +131,39 @@ func TestSkillsHandlerEmpty(t *testing.T) {
 	}
 	if len(itemsArray) != 0 {
 		t.Errorf("expected 0 items, got %d", len(itemsArray))
+	}
+}
+
+func TestSkillsHandlerNil(t *testing.T) {
+	// Create handler with nil skills
+	handler := skills.Handler(nil)
+
+	// Make a request
+	req := httptest.NewRequest("GET", "/api/skills", nil)
+	w := httptest.NewRecorder()
+
+	// Call handler
+	handler(w, req)
+
+	// Verify status code
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+
+	// Verify response structure
+	var response map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+
+	// Verify 'items' key exists
+	items, ok := response["items"]
+	if !ok {
+		t.Fatalf("expected 'items' key in response, got %v", response)
+	}
+
+	// Verify items is nil (not a non-nil empty array when nil is passed)
+	if items != nil {
+		t.Errorf("expected nil items, got %v", items)
 	}
 }

@@ -23,7 +23,7 @@ func Load(skillsDir string) ([]domain.Skill, error) {
 		return []domain.Skill{}, nil
 	}
 
-	var skills []domain.Skill
+	skills := []domain.Skill{}
 
 	err := filepath.WalkDir(skillsDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

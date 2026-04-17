@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -245,9 +246,30 @@ func TestActivityE2E(t *testing.T) {
 }
 
 func TestSkillsE2E(t *testing.T) {
-	// Use the real skills directory from the repository
-	skillsDir := filepath.Join("..", "..", "skills")
-	srv, _ := testutil.SpawnTestServerWithSkillsDir(t, skillsDir)
+	// Create a temporary directory with synthetic SKILL.md files
+	tempdir := t.TempDir()
+
+	// Create a test skill directory
+	skillDir := filepath.Join(tempdir, "test-skill")
+	if err := os.Mkdir(skillDir, 0755); err != nil {
+		t.Fatalf("creating skill dir: %v", err)
+	}
+
+	// Create a SKILL.md file
+	skillPath := filepath.Join(skillDir, "SKILL.md")
+	skillContent := `---
+name: test-skill-e2e
+description: A test skill for E2E testing
+---
+# Test Skill
+
+This is a test skill for E2E testing.
+`
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
+		t.Fatalf("writing SKILL.md: %v", err)
+	}
+
+	srv, _ := testutil.SpawnTestServerWithSkillsDir(t, tempdir)
 
 	// GET /api/skills → list
 	resp, err := http.Get(srv.URL + "/api/skills")
@@ -275,12 +297,12 @@ func TestSkillsE2E(t *testing.T) {
 		t.Fatalf("expected items to be array, got %T", items)
 	}
 
-	// Should have loaded at least 1 skill from the real skills directory
-	if len(itemsList) < 1 {
-		t.Errorf("skills list len = %d, want >= 1", len(itemsList))
+	// Should have loaded exactly 1 skill from our temporary directory
+	if len(itemsList) != 1 {
+		t.Errorf("skills list len = %d, want 1", len(itemsList))
 	}
 
-	// Verify structure: each item should have name and description fields
+	// Verify structure: item should have name and description fields
 	if len(itemsList) > 0 {
 		skillMap, ok := itemsList[0].(map[string]any)
 		if !ok {
@@ -288,6 +310,9 @@ func TestSkillsE2E(t *testing.T) {
 		} else {
 			if name, ok := skillMap["name"]; !ok || name == "" {
 				t.Errorf("expected 'name' field in skill, got %v", skillMap)
+			}
+			if name, ok := skillMap["name"].(string); ok && name != "test-skill-e2e" {
+				t.Errorf("expected name 'test-skill-e2e', got %q", name)
 			}
 		}
 	}

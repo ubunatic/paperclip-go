@@ -5,6 +5,6 @@ package domain
 type Skill struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Path        string `json:"path"`
+	Path        string `json:"-"`
 	Body        string `json:"body"`
 }

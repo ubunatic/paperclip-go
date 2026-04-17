@@ -3,6 +3,7 @@ package skills_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ubunatic/paperclip-go/internal/skills"
@@ -56,10 +57,10 @@ It can have multiple lines and sections.
 	}
 
 	// Verify the body contains the markdown
-	if !contains(skill.Body, "# Test Skill") {
+	if !strings.Contains(skill.Body, "# Test Skill") {
 		t.Errorf("Body should contain '# Test Skill', got: %q", skill.Body)
 	}
-	if !contains(skill.Body, "This is the body content") {
+	if !strings.Contains(skill.Body, "This is the body content") {
 		t.Errorf("Body should contain body content, got: %q", skill.Body)
 	}
 }
@@ -227,14 +228,4 @@ Body
 	if skillsList[0].Name != "real-skill" {
 		t.Errorf("expected real-skill, got %q", skillsList[0].Name)
 	}
-}
-
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
