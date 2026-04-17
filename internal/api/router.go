@@ -51,6 +51,7 @@ func NewRouter(s *store.Store, skillsDir string) *chi.Mux {
 		r.Mount("/agents", apiagents.Handler(agentSvc))
 		r.Mount("/activity", apiactivity.Handler(activityLog))
 		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc))
+		// GET /skills is read-only; use Get, not Mount
 		r.Get("/skills", apiskills.Handler(skillsList))
 	})
 

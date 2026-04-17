@@ -443,3 +443,41 @@ curl -s localhost:3200/api/skills | jq '.items | length'  # >= 1
 ```
 
 The MVP is done when every step above succeeds and `make test` is green. From there, Sonnet/Haiku agents port upstream TS features one at a time using the TS→Go map in `AGENTS.md`.
+
+---
+
+## Review Notes (Post–Phase 6)
+
+**Status:** ✅ Phases 1–6 complete. All unit & E2E tests passing. Ready for Phase 7.
+
+### Code Quality Observations
+
+**✅ Security:** Path field correctly hidden from API responses (json:"-" tag); prevents filesystem path disclosure.
+
+**✅ Error handling:** Graceful degradation throughout:
+- Missing skillsDir → empty slice (no crash)
+- YAML parse failures → logged warning, continue
+- This ensures server startup resilience
+
+**✅ Test coverage:** Unit tests + hermetic E2E; loader tests cover edge cases (empty, nil, malformed YAML).
+
+### Consistency Notes
+
+- **Router pattern:** Skills endpoint uses `.Get()` (read-only singleton) vs `.Mount()` (for resource collections). Intentional design, now documented in code.
+- **Handler signatures:** Skills handler takes `[]domain.Skill` (value); other handlers take `*svc.Service` (pointer). Both patterns work; services are reused (mutable), skills are loaded once (immutable).
+
+### Phase 7 Readiness
+
+**Heartbeat (Phase 7) will introduce:**
+- `Adapter` interface + registry (similar to how skills are loaded at startup)
+- `Runner` orchestrating runs (may be a service like companies/agents or a value like skills)
+- `/api/heartbeat/runs` as a mutable resource (will use `.Mount()` pattern)
+
+**Pre-Phase-7 checklist:**
+- [ ] Determine if Runner/Adapter should be service-like (pointer, reused) or value-like (immutable)
+- [ ] Sketch `internal/heartbeat/runner.go` and `internal/heartbeat/adapter.go` stubs
+- [ ] Plan `/api/heartbeat/runs` handler routing
+
+### Upstream Drift
+
+No TS changes tracked yet for Phase 7 (heartbeat). If `server/src/heartbeat/` is added upstream, cross-check before implementing.
