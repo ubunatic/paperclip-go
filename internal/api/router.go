@@ -4,21 +4,24 @@ package api
 import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	"github.com/ubunatic/paperclip-go/internal/activity"
+	"github.com/ubunatic/paperclip-go/internal/agents"
 	apiactivity "github.com/ubunatic/paperclip-go/internal/api/activity"
 	apiagents "github.com/ubunatic/paperclip-go/internal/api/agents"
 	apicompanies "github.com/ubunatic/paperclip-go/internal/api/companies"
-	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
 	"github.com/ubunatic/paperclip-go/internal/api/health"
-	"github.com/ubunatic/paperclip-go/internal/activity"
-	"github.com/ubunatic/paperclip-go/internal/agents"
+	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
+	apiskills "github.com/ubunatic/paperclip-go/internal/api/skills"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
 
 // NewRouter creates and returns a chi router with all API routes and middleware.
-func NewRouter(s *store.Store) *chi.Mux {
+func NewRouter(s *store.Store, skills []domain.Skill) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -39,6 +42,7 @@ func NewRouter(s *store.Store) *chi.Mux {
 		r.Mount("/agents", apiagents.Handler(agentSvc))
 		r.Mount("/activity", apiactivity.Handler(activityLog))
 		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc))
+		r.Mount("/skills", apiskills.Handler(skills))
 	})
 
 	return r

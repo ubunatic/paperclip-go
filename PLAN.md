@@ -345,7 +345,16 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Extended `api_e2e_test.go` with `TestIssuesE2E` covering checkout conflict, comment posting, and release
    - Fixed atomic operations to distinguish ErrNotFound (404) from ErrCheckoutConflict (409)
    - All tests passing: `go test ./...` ✓
-6. **Skills loader** — walk `/skills/`, expose `/api/skills`.
+6. ✅ **DONE: Skills loader** — walk `/skills/`, expose `/api/skills`.
+   - Created `internal/domain/skill.go` with `Skill` struct (Name, Description, Path, Body)
+   - Implemented `internal/skills/loader.go`: Load(dir) walks directory, parses YAML front matter from SKILL.md files, returns []domain.Skill
+   - Implemented `internal/api/skills/handler.go`: HTTP handler for GET /api/skills → {"items": skills}
+   - Wired skills into api.NewRouter and cli/serve.go integration
+   - Added comprehensive unit tests: missing dir, malformed YAML, no front matter
+   - Added TestSkillsE2E covering GET /api/skills with loaded skills
+   - Updated testutil.SpawnTestServerWithSkills for e2e flexibility
+   - Code review: fixed 6 issues (error handling, YAML prefix, dead code, imports)
+   - All tests passing: `go test ./...` ✓
 7. **Heartbeat stub** — Adapter interface, `StubAdapter`, `POST /api/heartbeat/runs`, CLI `heartbeat run`; e2e covers the full loop.
 8. **UI serving + stub endpoints** — serve `/ui/dist` if present, SPA fallback; stub endpoints for approvals/costs/goals/projects/routines/plugins so the UI (if used) does not 404.
 
