@@ -1,106 +1,102 @@
-// Package skills provides functions for loading skills from disk.
+// Package skills loads skill definitions from the filesystem.
 package skills
 
 import (
-	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/ubunatic/paperclip-go/internal/domain"
 	"gopkg.in/yaml.v3"
+
+	"github.com/ubunatic/paperclip-go/internal/domain"
 )
 
-// Load walks the given directory and loads all skills from SKILL.md files.
-// For each subdirectory, it looks for a SKILL.md file with YAML front matter.
-// Malformed skills are logged but skipped (do not error out).
-// Missing directory returns nil, nil without error.
-func Load(dir string) ([]domain.Skill, error) {
+// Load walks the skillsDir looking for SKILL.md files and returns a slice of parsed Skills.
+// Returns an empty slice and nil error if the directory doesn't exist.
+// Logs warnings for unparseable files but doesn't fail the entire load.
+func Load(skillsDir string) ([]domain.Skill, error) {
 	// Handle missing directory gracefully
-	entries, err := os.ReadDir(dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("reading skills directory %s: %w", dir, err)
+	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
+		return []domain.Skill{}, nil
 	}
 
 	var skills []domain.Skill
 
-	// Walk through each entry
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	err := filepath.WalkDir(skillsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
 
-		skillPath := filepath.Join(dir, entry.Name(), "SKILL.md")
-		skill, err := parseSkillFile(skillPath, entry.Name())
-		if err != nil {
-			log.Printf("skills: skipping %s: %v", entry.Name(), err)
-			continue
+		// Look for SKILL.md files
+		if !d.IsDir() && d.Name() == "SKILL.md" {
+			skill, parseErr := parseSkillFile(path)
+			if parseErr != nil {
+				log.Printf("skills: warning parsing %s: %v", path, parseErr)
+				return nil // Log warning but continue
+			}
+			skills = append(skills, skill)
 		}
-		if skill != nil {
-			skills = append(skills, *skill)
-		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("walking skills directory: %w", err)
 	}
 
 	return skills, nil
 }
 
-// parseSkillFile reads and parses a SKILL.md file with YAML front matter.
-// Returns nil, nil if file doesn't exist.
-// Returns error if file exists but has no front matter or parsing fails.
-func parseSkillFile(path, name string) (*domain.Skill, error) {
+// frontmatter holds the YAML frontmatter fields from a SKILL.md file.
+type frontmatter struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description"`
+}
+
+// parseSkillFile reads a SKILL.md file, extracts YAML frontmatter (between --- delimiters),
+// and returns a Skill with the parsed metadata and body content.
+func parseSkillFile(path string) (domain.Skill, error) {
 	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
 	if err != nil {
-		return nil, fmt.Errorf("reading file: %w", err)
+		return domain.Skill{}, fmt.Errorf("reading file: %w", err)
 	}
 
-	// Parse YAML front matter: ---\nYAML\n---\nBody
 	content := string(data)
 
-	// Check for front matter delimiters
-	if !strings.HasPrefix(content, "---\n") {
-		return nil, fmt.Errorf("no YAML front matter (missing opening ---)")
+	// Extract YAML frontmatter (between --- delimiters)
+	var name, description, body string
+
+	if strings.HasPrefix(content, "---\n") {
+		// Find the closing ---
+		rest := content[4:] // Skip opening "---\n"
+		endIdx := strings.Index(rest, "\n---\n")
+		if endIdx != -1 {
+			yamlBlock := rest[:endIdx]
+			body = strings.TrimLeft(rest[endIdx+5:], "\n") // Skip "\n---\n"
+
+			// Parse YAML frontmatter
+			var fm frontmatter
+			if err := yaml.Unmarshal([]byte(yamlBlock), &fm); err != nil {
+				return domain.Skill{}, fmt.Errorf("parsing YAML frontmatter: %w", err)
+			}
+
+			name = fm.Name
+			description = fm.Description
+		}
 	}
 
-	// Find the closing delimiter
-	parts := strings.SplitN(content[4:], "\n---\n", 2)
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("no closing --- delimiter for front matter")
+	// name is required
+	if name == "" {
+		return domain.Skill{}, fmt.Errorf("missing required 'name' field in frontmatter")
 	}
 
-	frontMatter := strings.TrimSpace(parts[0])
-	body := strings.TrimSpace(parts[1])
-
-	// Parse YAML front matter
-	var meta struct {
-		Name        string `yaml:"name"`
-		Description string `yaml:"description"`
-	}
-	if err := yaml.Unmarshal([]byte(frontMatter), &meta); err != nil {
-		return nil, fmt.Errorf("parsing YAML front matter: %w", err)
-	}
-
-	// Use provided name in front matter, fallback to directory name
-	skillName := meta.Name
-	if skillName == "" {
-		skillName = name
-	}
-
-	// Use relative path from the skills directory for portability
-	relPath := filepath.ToSlash(filepath.Join(name, "SKILL.md"))
-	skill := &domain.Skill{
-		Name:        skillName,
-		Description: meta.Description,
-		Path:        relPath,
+	return domain.Skill{
+		Name:        name,
+		Description: description,
+		Path:        path,
 		Body:        body,
-	}
-
-	return skill, nil
+	}, nil
 }

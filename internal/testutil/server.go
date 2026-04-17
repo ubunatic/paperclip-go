@@ -8,7 +8,6 @@ import (
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/api"
-	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
 
@@ -29,15 +28,19 @@ func NewStore(t *testing.T) *store.Store {
 // Both the server and the store are closed when t finishes.
 func SpawnTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
-	return SpawnTestServerWithSkills(t, nil)
+	s := NewStore(t)
+	skillsDir := filepath.Join(t.TempDir(), "skills")
+	router := api.NewRouter(s, skillsDir)
+	srv := httptest.NewServer(router)
+	t.Cleanup(srv.Close)
+	return srv, s
 }
 
-// SpawnTestServerWithSkills starts a full httptest.Server with provided skills.
-// Both the server and the store are closed when t finishes.
-func SpawnTestServerWithSkills(t *testing.T, skills []domain.Skill) (*httptest.Server, *store.Store) {
+// SpawnTestServerWithSkillsDir starts a full httptest.Server with a specific skills directory.
+func SpawnTestServerWithSkillsDir(t *testing.T, skillsDir string) (*httptest.Server, *store.Store) {
 	t.Helper()
 	s := NewStore(t)
-	router := api.NewRouter(s, skills)
+	router := api.NewRouter(s, skillsDir)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 	return srv, s

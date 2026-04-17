@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	"github.com/ubunatic/paperclip-go/internal/domain"
@@ -243,6 +244,55 @@ func TestActivityE2E(t *testing.T) {
 	}
 }
 
+func TestSkillsE2E(t *testing.T) {
+	// Use the real skills directory from the repository
+	skillsDir := filepath.Join("..", "..", "skills")
+	srv, _ := testutil.SpawnTestServerWithSkillsDir(t, skillsDir)
+
+	// GET /api/skills → list
+	resp, err := http.Get(srv.URL + "/api/skills")
+	if err != nil {
+		t.Fatalf("GET /api/skills: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/skills status = %d, want 200", resp.StatusCode)
+	}
+
+	var skillsResponse map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&skillsResponse); err != nil {
+		t.Fatalf("decoding skills response: %v", err)
+	}
+
+	// Verify response has items key
+	items, ok := skillsResponse["items"]
+	if !ok {
+		t.Fatalf("expected 'items' key in response, got %v", skillsResponse)
+	}
+
+	itemsList, ok := items.([]any)
+	if !ok {
+		t.Fatalf("expected items to be array, got %T", items)
+	}
+
+	// Should have loaded at least 1 skill from the real skills directory
+	if len(itemsList) < 1 {
+		t.Errorf("skills list len = %d, want >= 1", len(itemsList))
+	}
+
+	// Verify structure: each item should have name and description fields
+	if len(itemsList) > 0 {
+		skillMap, ok := itemsList[0].(map[string]any)
+		if !ok {
+			t.Errorf("expected skill to be map, got %T", itemsList[0])
+		} else {
+			if name, ok := skillMap["name"]; !ok || name == "" {
+				t.Errorf("expected 'name' field in skill, got %v", skillMap)
+			}
+		}
+	}
+}
+
 func TestIssuesE2E(t *testing.T) {
 	srv, _ := testutil.SpawnTestServer(t)
 
@@ -339,9 +389,9 @@ func TestIssuesE2E(t *testing.T) {
 
 	// POST /api/issues/{id}/comments → 201
 	commentBody, _ := json.Marshal(map[string]any{
-		"body":           "Test comment",
-		"authorKind":     "agent",
-		"authorAgentId":  agentID,
+		"body":          "Test comment",
+		"authorKind":    "agent",
+		"authorAgentId": agentID,
 	})
 	resp5, err := http.Post(srv.URL+"/api/issues/"+issueID+"/comments", "application/json", bytes.NewReader(commentBody))
 	if err != nil {

@@ -37,14 +37,14 @@ func (s *Service) Create(ctx context.Context, companyID, title, body string, ass
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	i := &domain.Issue{
-		ID:        ids.NewUUID(),
-		CompanyID: companyID,
-		Title:     title,
-		Body:      body,
-		Status:    "open",
+		ID:         ids.NewUUID(),
+		CompanyID:  companyID,
+		Title:      title,
+		Body:       body,
+		Status:     "open",
 		AssigneeID: assigneeID,
-		CreatedAt: now,
-		UpdatedAt: now,
+		CreatedAt:  now,
+		UpdatedAt:  now,
 	}
 	_, err := s.store.DB.ExecContext(ctx,
 		`INSERT INTO issues(id, company_id, title, body, status, assignee_id, created_at, updated_at)

@@ -1,7 +1,7 @@
-// Package domain holds pure data types shared across service and API packages.
+// Package domain defines pure data types for the control plane.
 package domain
 
-// Skill represents a skill available in the control plane.
+// Skill represents a skill definition with metadata and body content.
 type Skill struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
