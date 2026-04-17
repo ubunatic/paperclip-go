@@ -486,3 +486,170 @@ func TestIssuesE2E(t *testing.T) {
 		t.Errorf("GET /api/issues/nonexistent status = %d, want 404", resp10.StatusCode)
 	}
 }
+
+func TestHeartbeatE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Create a company
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	respCompany.Body.Close()
+	companyID, _ := company["id"].(string)
+
+	// Create an agent
+	agentBody, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "alice",
+		"displayName": "Alice",
+		"role":        "manager",
+		"adapter":     "stub",
+	})
+	respAgent, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agentBody))
+	if err != nil {
+		t.Fatalf("POST /api/agents: %v", err)
+	}
+	var agent map[string]any
+	if err := json.NewDecoder(respAgent.Body).Decode(&agent); err != nil {
+		t.Fatalf("decoding agent response: %v", err)
+	}
+	respAgent.Body.Close()
+	agentID, _ := agent["id"].(string)
+
+	// Create an issue for the heartbeat to work on
+	issueBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue for Heartbeat",
+		"body":      "This issue will be worked on by heartbeat",
+	})
+	respIssue, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
+	var issue map[string]any
+	if err := json.NewDecoder(respIssue.Body).Decode(&issue); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	respIssue.Body.Close()
+	issueID, _ := issue["id"].(string)
+
+	// POST /api/heartbeat/runs with agentId → 201
+	runBody, _ := json.Marshal(map[string]string{
+		"agentId": agentID,
+	})
+	resp, err := http.Post(srv.URL+"/api/heartbeat/runs", "application/json", bytes.NewReader(runBody))
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/heartbeat/runs status = %d, want 201", resp.StatusCode)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	runID, _ := created["id"].(string)
+	if runID == "" {
+		t.Fatalf("expected id in POST response, got %v", created)
+	}
+	status, _ := created["status"].(string)
+	if status != "success" {
+		t.Errorf("expected status=success, got %q", status)
+	}
+
+	// Verify the full loop: heartbeat run creates a comment on the issue
+	// GET /api/issues/{id}/comments to verify stub adapter posted a comment
+	respComments, err := http.Get(srv.URL + "/api/issues/" + issueID + "/comments")
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s/comments after heartbeat: %v", issueID, err)
+	}
+	defer respComments.Body.Close()
+	if respComments.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/issues/%s/comments after heartbeat status = %d, want 200", issueID, respComments.StatusCode)
+	}
+
+	var commentsResp map[string]any
+	if err := json.NewDecoder(respComments.Body).Decode(&commentsResp); err != nil {
+		t.Fatalf("decoding comments response: %v", err)
+	}
+	commentItems, _ := commentsResp["items"].([]any)
+	if len(commentItems) == 0 {
+		t.Errorf("expected at least one comment from stub adapter, got %d comments", len(commentItems))
+	} else {
+		// Verify the comment body contains the stub adapter's message
+		commentMap, ok := commentItems[0].(map[string]any)
+		if !ok {
+			t.Errorf("expected comment to be map, got %T", commentItems[0])
+		} else {
+			body, _ := commentMap["body"].(string)
+			if body == "" {
+				t.Errorf("expected comment body to be non-empty, got %q", body)
+			}
+		}
+	}
+
+	// POST /api/heartbeat/runs without agentId → 422
+	badBody, _ := json.Marshal(map[string]string{})
+	resp2, err := http.Post(srv.URL+"/api/heartbeat/runs", "application/json", bytes.NewReader(badBody))
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs (bad): %v", err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST /api/heartbeat/runs (bad) status = %d, want 422", resp2.StatusCode)
+	}
+
+	// GET /api/heartbeat/runs?agentId=... → 200 with list
+	resp3, err := http.Get(srv.URL + "/api/heartbeat/runs?agentId=" + agentID)
+	if err != nil {
+		t.Fatalf("GET /api/heartbeat/runs: %v", err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/heartbeat/runs status = %d, want 200", resp3.StatusCode)
+	}
+
+	var list map[string]any
+	if err := json.NewDecoder(resp3.Body).Decode(&list); err != nil {
+		t.Fatalf("decoding list response: %v", err)
+	}
+	items, _ := list["items"].([]any)
+	if len(items) != 1 {
+		t.Errorf("list items len = %d, want 1", len(items))
+	}
+
+	// GET /api/heartbeat/runs without agentId → 400
+	resp4, err := http.Get(srv.URL + "/api/heartbeat/runs")
+	if err != nil {
+		t.Fatalf("GET /api/heartbeat/runs (no agentId): %v", err)
+	}
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusBadRequest {
+		t.Errorf("GET /api/heartbeat/runs (no agentId) status = %d, want 400", resp4.StatusCode)
+	}
+
+	// POST /api/heartbeat/runs with non-existent agent → 404
+	notFoundBody, _ := json.Marshal(map[string]string{
+		"agentId": "nonexistent-agent-id",
+	})
+	resp5, err := http.Post(srv.URL+"/api/heartbeat/runs", "application/json", bytes.NewReader(notFoundBody))
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs (not found): %v", err)
+	}
+	resp5.Body.Close()
+	if resp5.StatusCode != http.StatusNotFound {
+		t.Errorf("POST /api/heartbeat/runs (not found) status = %d, want 404", resp5.StatusCode)
+	}
+}
