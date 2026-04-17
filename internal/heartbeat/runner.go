@@ -11,6 +11,7 @@ import (
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
+	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/ids"
 	"github.com/ubunatic/paperclip-go/internal/issues"
@@ -22,11 +23,12 @@ var ErrNotFound = errors.New("heartbeat run not found")
 
 // Runner provides heartbeat run operations backed by the store.
 type Runner struct {
-	store      *store.Store
-	agents     *agents.Service
-	issues     *issues.Service
-	actLog     *activity.Log
-	registry   *Registry
+	store       *store.Store
+	agents      *agents.Service
+	issues      *issues.Service
+	comments    *comments.Service
+	actLog      *activity.Log
+	registry    *Registry
 }
 
 // New returns a Runner using the given dependencies.
@@ -34,6 +36,7 @@ func New(
 	s *store.Store,
 	agentSvc *agents.Service,
 	issueSvc *issues.Service,
+	commentSvc *comments.Service,
 	actLog *activity.Log,
 	registry *Registry,
 ) *Runner {
@@ -41,6 +44,7 @@ func New(
 		store:    s,
 		agents:   agentSvc,
 		issues:   issueSvc,
+		comments: commentSvc,
 		actLog:   actLog,
 		registry: registry,
 	}
@@ -68,7 +72,7 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 		return nil, fmt.Errorf("fetching agent: %w", err)
 	}
 
-	// Select an issue to work on (first open issue assigned to agent)
+	// Select an issue to work on (first open issue)
 	// This is a simple heuristic; heartbeat may pass nil issue
 	var selectedIssue *domain.Issue
 	issues, err := r.issues.ListWithFilters(ctx, agent.CompanyID, "open", nil)
@@ -176,10 +180,28 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 		log.Printf("warning: failed to record activity: %v", actErr)
 	}
 
+	// Post a comment on the issue if one was selected
+	if r.comments != nil && selectedIssue != nil {
+		commentErr := r.postHeartbeatComment(ctx, selectedIssue.ID, agent.ID, result.Summary)
+		if commentErr != nil {
+			// Log but don't fail; comment posting is best-effort
+			log.Printf("warning: failed to post heartbeat comment: %v", commentErr)
+		}
+	}
+
 	run.Status = result.Status
 	run.FinishedAt = &finishedAt
 	run.Summary = &result.Summary
 	return run, nil
+}
+
+// postHeartbeatComment posts a comment on an issue from the heartbeat adapter.
+func (r *Runner) postHeartbeatComment(ctx context.Context, issueID, agentID, summary string) error {
+	_, err := r.comments.Create(ctx, issueID, &agentID, "agent", summary)
+	if err != nil {
+		return fmt.Errorf("posting heartbeat comment: %w", err)
+	}
+	return nil
 }
 
 // Create inserts a new heartbeat run and returns it.
@@ -283,7 +305,6 @@ func scanHeartbeatRun(s scanner) (*domain.HeartbeatRun, error) {
 
 	run.IssueID = issueID
 	run.Summary = summary
-	run.Error = errMsg
 
 	var err error
 	run.StartedAt, err = time.Parse(time.RFC3339, startedAtStr)

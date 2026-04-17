@@ -24,7 +24,7 @@ type RunContext struct {
 
 // RunResult holds the output from a successful heartbeat run.
 type RunResult struct {
-	Status    string
-	Summary   string
-	IssueID   *string
+	Status  string
+	Summary string
+	IssueID *string
 }

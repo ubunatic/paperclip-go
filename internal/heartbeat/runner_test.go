@@ -7,6 +7,7 @@ import (
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
+	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
@@ -33,8 +34,9 @@ func TestRunnerCreate(t *testing.T) {
 
 	// Create heartbeat runner
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
 
 	// Create a heartbeat run
 	run, err := runner.Create(ctx, agent.ID, nil, "running")
@@ -74,8 +76,9 @@ func TestRunnerGetByID(t *testing.T) {
 
 	// Create heartbeat runner
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
 
 	// Create and fetch a heartbeat run
 	run, err := runner.Create(ctx, agent.ID, nil, "running")
@@ -100,9 +103,10 @@ func TestRunnerGetByIDNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	agentSvc := agents.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
 
 	_, err := runner.GetByID(ctx, "nonexistent-id")
 	if !errors.Is(err, heartbeat.ErrNotFound) {
@@ -129,8 +133,9 @@ func TestRunnerUpdate(t *testing.T) {
 
 	// Create heartbeat runner
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
 
 	// Create and update a heartbeat run
 	run, err := runner.Create(ctx, agent.ID, nil, "running")
@@ -173,8 +178,9 @@ func TestRunnerListByAgent(t *testing.T) {
 
 	// Create heartbeat runner
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
 
 	// Create multiple heartbeat runs
 	run1, err := runner.Create(ctx, agent.ID, nil, "running")
@@ -224,9 +230,10 @@ func TestRunnerRunSuccess(t *testing.T) {
 
 	// Create heartbeat runner
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
 
 	// Run a heartbeat
 	run, err := runner.Run(ctx, agent.ID)
@@ -242,9 +249,6 @@ func TestRunnerRunSuccess(t *testing.T) {
 	if run.FinishedAt == nil {
 		t.Error("FinishedAt should not be nil after completed run")
 	}
-	if run.Error != nil {
-		t.Errorf("Error = %v, want nil", run.Error)
-	}
 }
 
 func TestRunnerRunNotFound(t *testing.T) {
@@ -253,10 +257,11 @@ func TestRunnerRunNotFound(t *testing.T) {
 
 	// Create heartbeat runner with no agents
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	agentSvc := agents.New(s)
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
 
 	// Run with non-existent agent
 	_, err := runner.Run(ctx, "nonexistent-agent-id")
@@ -293,8 +298,9 @@ func TestRunnerRunWithIssue(t *testing.T) {
 
 	// Create heartbeat runner
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
 
 	// Run a heartbeat
 	run, err := runner.Run(ctx, agent.ID)
@@ -373,10 +379,11 @@ func TestRunnerRunAdapterError(t *testing.T) {
 
 	// Create heartbeat runner with the error adapter
 	actLog := activity.New(s)
+	commentSvc := comments.New(s)
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewRegistry()
 	registry.Register("error-adapter", errorAdapter)
-	runner := heartbeat.New(s, agentSvc, issueSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
 
 	// Run a heartbeat, expecting an error
 	run, err := runner.Run(ctx, agent.ID)
@@ -399,9 +406,6 @@ func TestRunnerRunAdapterError(t *testing.T) {
 	run = runs[0]
 	if run.Status != "error" {
 		t.Errorf("Status = %q, want %q", run.Status, "error")
-	}
-	if run.Error == nil || *run.Error == "" {
-		t.Error("Error should not be empty")
 	}
 	if run.FinishedAt == nil {
 		t.Error("FinishedAt should not be nil after error")

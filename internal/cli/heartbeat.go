@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
+	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
 	"github.com/ubunatic/paperclip-go/internal/issues"
 )
@@ -47,9 +48,10 @@ func runHeartbeatRun(cmd *cobra.Command, args []string) error {
 	// Initialize services
 	agentSvc := agents.New(s)
 	issueSvc := issues.New(s)
+	commentSvc := comments.New(s)
 	actLog := activity.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
 
 	// Run the heartbeat
 	run, err := runner.Run(ctx, flagHeartbeatAgent)

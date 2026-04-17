@@ -39,7 +39,7 @@ func NewRouter(s *store.Store, skillsDir string) *chi.Mux {
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
-	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, activityLog, heartbeatRegistry)
+	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
 
 	// Load skills
 	skillsList, err := skills.Load(skillsDir)
