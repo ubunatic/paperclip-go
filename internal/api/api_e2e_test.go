@@ -526,6 +526,23 @@ func TestHeartbeatE2E(t *testing.T) {
 	respAgent.Body.Close()
 	agentID, _ := agent["id"].(string)
 
+	// Create an issue for the heartbeat to work on
+	issueBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue for Heartbeat",
+		"body":      "This issue will be worked on by heartbeat",
+	})
+	respIssue, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
+	var issue map[string]any
+	if err := json.NewDecoder(respIssue.Body).Decode(&issue); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	respIssue.Body.Close()
+	issueID, _ := issue["id"].(string)
+
 	// POST /api/heartbeat/runs with agentId → 201
 	runBody, _ := json.Marshal(map[string]string{
 		"agentId": agentID,
@@ -550,6 +567,37 @@ func TestHeartbeatE2E(t *testing.T) {
 	status, _ := created["status"].(string)
 	if status != "success" {
 		t.Errorf("expected status=success, got %q", status)
+	}
+
+	// Verify the full loop: heartbeat run creates a comment on the issue
+	// GET /api/issues/{id}/comments to verify stub adapter posted a comment
+	respComments, err := http.Get(srv.URL + "/api/issues/" + issueID + "/comments")
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s/comments after heartbeat: %v", issueID, err)
+	}
+	defer respComments.Body.Close()
+	if respComments.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/issues/%s/comments after heartbeat status = %d, want 200", issueID, respComments.StatusCode)
+	}
+
+	var commentsResp map[string]any
+	if err := json.NewDecoder(respComments.Body).Decode(&commentsResp); err != nil {
+		t.Fatalf("decoding comments response: %v", err)
+	}
+	commentItems, _ := commentsResp["items"].([]any)
+	if len(commentItems) == 0 {
+		t.Errorf("expected at least one comment from stub adapter, got %d comments", len(commentItems))
+	} else {
+		// Verify the comment body contains the stub adapter's message
+		commentMap, ok := commentItems[0].(map[string]any)
+		if !ok {
+			t.Errorf("expected comment to be map, got %T", commentItems[0])
+		} else {
+			body, _ := commentMap["body"].(string)
+			if body == "" {
+				t.Errorf("expected comment body to be non-empty, got %q", body)
+			}
+		}
 	}
 
 	// POST /api/heartbeat/runs without agentId → 422

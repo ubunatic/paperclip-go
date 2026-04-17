@@ -68,7 +68,7 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 		return nil, fmt.Errorf("fetching agent: %w", err)
 	}
 
-	// Select an issue to work on (first unassigned or open issue)
+	// Select an issue to work on (first open issue assigned to agent)
 	// This is a simple heuristic; heartbeat may pass nil issue
 	var selectedIssue *domain.Issue
 	issues, err := r.issues.ListWithFilters(ctx, agent.CompanyID, "open", nil)
@@ -114,6 +114,25 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 		adapter = r.registry.Get("stub")
 	}
 
+	// Check if adapter was found
+	if adapter == nil {
+		// Create run record with status="error"
+		finishedAt := time.Now().UTC().Truncate(time.Second)
+		finishedAtStr := finishedAt.Format(time.RFC3339)
+		errMsg := fmt.Sprintf("heartbeat adapter %q not found", adapterName)
+
+		_, err := r.store.DB.ExecContext(ctx,
+			`UPDATE heartbeat_runs SET status = 'error', finished_at = ?, error = ?
+			 WHERE id = ?`,
+			finishedAtStr, errMsg, run.ID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("updating heartbeat run with error: %w", err)
+		}
+
+		return nil, fmt.Errorf("heartbeat adapter %q not found", adapterName)
+	}
+
 	// Call the adapter's Run method
 	result, err := adapter.Run(ctx, agent, selectedIssue)
 	if err != nil {
@@ -154,7 +173,7 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 	)
 	if actErr != nil {
 		// Log but don't fail; activity recording is best-effort
-		log.Printf("warning: failed to record activity: %v\n", actErr)
+		log.Printf("warning: failed to record activity: %v", actErr)
 	}
 
 	run.Status = result.Status

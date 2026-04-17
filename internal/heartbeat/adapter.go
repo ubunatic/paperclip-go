@@ -33,7 +33,6 @@ func (a *StubAdapter) Run(ctx context.Context, agent *domain.Agent, issue *domai
 		Status:  "success",
 		Summary: summary,
 		IssueID: nil, // stub doesn't return an issue
-		Error:   nil,
 	}, nil
 }
 

@@ -27,5 +27,4 @@ type RunResult struct {
 	Status    string
 	Summary   string
 	IssueID   *string
-	Error     error
 }
