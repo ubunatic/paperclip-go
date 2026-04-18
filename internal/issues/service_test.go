@@ -330,6 +330,59 @@ func TestDeleteIssueNotFound(t *testing.T) {
 	}
 }
 
+func TestDeleteIssueWithComments(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Create a comment for this issue by directly inserting into the database
+	_, err = s.DB.ExecContext(ctx,
+		`INSERT INTO comments(id, issue_id, author_agent_id, author_kind, body, created_at)
+		 VALUES (?, ?, NULL, 'system', 'Test comment', ?)`,
+		"comment-1", issue.ID, "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("Create comment: %v", err)
+	}
+
+	// Delete the issue should succeed (comments cascade delete)
+	err = issueSvc.Delete(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Delete issue with comments: %v", err)
+	}
+
+	// Verify issue is gone
+	_, err = issueSvc.Get(ctx, issue.ID)
+	if !errors.Is(err, issues.ErrNotFound) {
+		t.Fatalf("Get after delete: expected ErrNotFound, got %v", err)
+	}
+
+	// Verify comment is also gone
+	var commentCount int
+	err = s.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM comments WHERE issue_id = ?`,
+		issue.ID,
+	).Scan(&commentCount)
+	if err != nil {
+		t.Fatalf("Querying comments: %v", err)
+	}
+	if commentCount != 0 {
+		t.Errorf("Expected 0 comments after delete, got %d", commentCount)
+	}
+}
+
 func TestDeleteIssueCheckedOut(t *testing.T) {
 	s := testutil.NewStore(t)
 	ctx := context.Background()

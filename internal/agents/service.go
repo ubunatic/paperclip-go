@@ -151,17 +151,17 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return fmt.Errorf("checking agent exists: %w", err)
 		}
 
-		// Check if agent has active checkouts (inside tx for atomicity with delete)
-		var count int
+		// Check if agent has any dependents: issues (assignee or checked_out), comments, or heartbeat runs
+		var assigneeCount, checkedOutCount, commentCount, heartbeatCount int
 		err = tx.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM issues WHERE checked_out_by = ? AND status = 'in_progress'`,
-			id,
-		).Scan(&count)
+			`SELECT (SELECT COUNT(*) FROM issues WHERE assignee_id = ?) as assignee_count, (SELECT COUNT(*) FROM issues WHERE checked_out_by = ?) as checked_out_count, (SELECT COUNT(*) FROM comments WHERE author_agent_id = ?) as comment_count, (SELECT COUNT(*) FROM heartbeat_runs WHERE agent_id = ?) as heartbeat_count`,
+			id, id, id, id,
+		).Scan(&assigneeCount, &checkedOutCount, &commentCount, &heartbeatCount)
 		if err != nil {
-			return fmt.Errorf("counting active checkouts: %w", err)
+			return fmt.Errorf("counting dependents: %w", err)
 		}
 
-		if count > 0 {
+		if assigneeCount > 0 || checkedOutCount > 0 || commentCount > 0 || heartbeatCount > 0 {
 			return ErrHasActiveCheckout
 		}
 

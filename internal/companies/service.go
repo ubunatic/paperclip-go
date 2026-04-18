@@ -122,17 +122,17 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return fmt.Errorf("checking company exists: %w", err)
 		}
 
-		// Check if company has any dependent agents or issues in a single query
-		var agentCount, issueCount int
+		// Check if company has any dependent agents, issues, or activity logs in a single query
+		var agentCount, issueCount, activityCount int
 		err = tx.QueryRowContext(ctx,
-			`SELECT (SELECT COUNT(*) FROM agents WHERE company_id = ?) as agent_count, (SELECT COUNT(*) FROM issues WHERE company_id = ?) as issue_count`,
-			id, id,
-		).Scan(&agentCount, &issueCount)
+			`SELECT (SELECT COUNT(*) FROM agents WHERE company_id = ?) as agent_count, (SELECT COUNT(*) FROM issues WHERE company_id = ?) as issue_count, (SELECT COUNT(*) FROM activity_log WHERE company_id = ?) as activity_count`,
+			id, id, id,
+		).Scan(&agentCount, &issueCount, &activityCount)
 		if err != nil {
 			return fmt.Errorf("counting dependents: %w", err)
 		}
 
-		if agentCount > 0 || issueCount > 0 {
+		if agentCount > 0 || issueCount > 0 || activityCount > 0 {
 			return ErrHasDependents
 		}
 

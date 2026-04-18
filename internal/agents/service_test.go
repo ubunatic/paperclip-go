@@ -231,6 +231,53 @@ func TestDeleteAgentNoCheckouts(t *testing.T) {
 	}
 }
 
+func TestDeleteAgentWithHeartbeatRuns(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company, agent, issue, and heartbeat run
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	agentSvc := agents.New(s)
+	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Create an issue
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Create a heartbeat run for this agent
+	_, err = s.DB.ExecContext(ctx,
+		`INSERT INTO heartbeat_runs(id, agent_id, issue_id, status, started_at)
+		 VALUES (?, ?, ?, 'running', ?)`,
+		"heartbeat-1", agent.ID, issue.ID, "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("Create heartbeat run: %v", err)
+	}
+
+	// Try to delete agent - should fail with ErrHasActiveCheckout
+	err = agentSvc.Delete(ctx, agent.ID)
+	if !errors.Is(err, agents.ErrHasActiveCheckout) {
+		t.Fatalf("Delete with heartbeat runs: expected ErrHasActiveCheckout, got %v", err)
+	}
+
+	// Verify agent still exists
+	_, err = agentSvc.Get(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Get after failed delete: %v", err)
+	}
+}
+
 func TestDeleteAgentHasActiveCheckout(t *testing.T) {
 	s := testutil.NewStore(t)
 	ctx := context.Background()

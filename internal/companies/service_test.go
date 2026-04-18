@@ -189,6 +189,39 @@ func TestCompanyCRUD(t *testing.T) {
 		}
 	})
 
+	t.Run("delete_with_activity", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "A test company")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// Create an activity log entry for this company
+		_, err = s.DB.ExecContext(ctx,
+			`INSERT INTO activity_log(id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at)
+			 VALUES (?, ?, 'system', 'system', 'created', 'company', ?, '{}', ?)`,
+			"activity-1", c.ID, c.ID, "2024-01-01T00:00:00Z",
+		)
+		if err != nil {
+			t.Fatalf("Create activity log: %v", err)
+		}
+
+		// Try to delete company - should fail with ErrHasDependents
+		err = svc.Delete(ctx, c.ID)
+		if !errors.Is(err, companies.ErrHasDependents) {
+			t.Fatalf("Delete with activity: expected ErrHasDependents, got %v", err)
+		}
+
+		// Verify company still exists
+		_, err = svc.Get(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("Get after failed delete: %v", err)
+		}
+	})
+
 	t.Run("delete_with_issues", func(t *testing.T) {
 		s := testutil.NewStore(t)
 		svc := companies.New(s)

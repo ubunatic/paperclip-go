@@ -286,6 +286,20 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 			return ErrCheckoutConflictDelete
 		}
 
+		// Check if issue has any heartbeat runs
+		var heartbeatCount int
+		err = tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM heartbeat_runs WHERE issue_id = ?`,
+			id,
+		).Scan(&heartbeatCount)
+		if err != nil {
+			return fmt.Errorf("counting heartbeat runs: %w", err)
+		}
+
+		if heartbeatCount > 0 {
+			return ErrCheckoutConflictDelete
+		}
+
 		// Delete all comments for this issue
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM comments WHERE issue_id = ?`,
