@@ -21,6 +21,7 @@ func Handler(issueSvc *isvc.Service, commentSvc *comments.Service) http.Handler 
 	r.Post("/", create(issueSvc))
 	r.Get("/{id}", get(issueSvc))
 	r.Patch("/{id}", update(issueSvc))
+	r.Delete("/{id}", delete(issueSvc))
 	r.Post("/{id}/checkout", checkout(issueSvc))
 	r.Post("/{id}/release", release(issueSvc))
 	r.Get("/{id}/comments", listComments(commentSvc))
@@ -201,6 +202,27 @@ func release(s *isvc.Service) http.HandlerFunc {
 			return
 		}
 		respond.JSON(w, http.StatusOK, map[string]string{"status": "released"})
+	}
+}
+
+func delete(s *isvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		err := s.Delete(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, isvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")
+				return
+			}
+			if errors.Is(err, isvc.ErrCheckoutConflictDelete) {
+				respond.Error(w, http.StatusConflict, "checkout_conflict", "cannot delete checked-out issue")
+				return
+			}
+			log.Printf("issues: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

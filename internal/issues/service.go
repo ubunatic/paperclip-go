@@ -22,6 +22,9 @@ var ErrCheckoutConflict = errors.New("issue already checked out")
 // ErrNotCheckedOut is returned when attempting to release an issue not held by the agent.
 var ErrNotCheckedOut = errors.New("issue not checked out by this agent")
 
+// ErrCheckoutConflictDelete is returned when attempting to delete a checked-out issue.
+var ErrCheckoutConflictDelete = errors.New("cannot delete checked-out issue")
+
 // Service provides issue CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -258,6 +261,73 @@ func (s *Service) Release(ctx context.Context, issueID, agentID string) error {
 
 	// Issue exists but not held by this agent
 	return ErrNotCheckedOut
+}
+
+// Delete deletes an issue and its associated comments in a transaction.
+// Returns ErrNotFound if the issue does not exist.
+// Returns ErrCheckoutConflictDelete if the issue is checked out.
+func (s *Service) Delete(ctx context.Context, id string) error {
+	// Delete in a transaction: check existence and checkout status atomically, then delete
+	return s.store.WithTx(ctx, func(tx *sql.Tx) error {
+		// Check if issue exists and is not checked out (inside transaction for atomicity)
+		var checkedOutBy sql.NullString
+		err := tx.QueryRowContext(ctx,
+			`SELECT checked_out_by FROM issues WHERE id = ?`,
+			id,
+		).Scan(&checkedOutBy)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("checking issue state: %w", err)
+		}
+
+		if checkedOutBy.Valid {
+			return ErrCheckoutConflictDelete
+		}
+
+		// Check if issue has any heartbeat runs
+		var heartbeatCount int
+		err = tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM heartbeat_runs WHERE issue_id = ?`,
+			id,
+		).Scan(&heartbeatCount)
+		if err != nil {
+			return fmt.Errorf("counting heartbeat runs: %w", err)
+		}
+
+		if heartbeatCount > 0 {
+			return ErrCheckoutConflictDelete
+		}
+
+		// Delete all comments for this issue
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM comments WHERE issue_id = ?`,
+			id,
+		); err != nil {
+			return fmt.Errorf("deleting comments: %w", err)
+		}
+
+		// Delete the issue
+		result, err := tx.ExecContext(ctx,
+			`DELETE FROM issues WHERE id = ?`,
+			id,
+		)
+		if err != nil {
+			return fmt.Errorf("deleting issue: %w", err)
+		}
+
+		// Verify deletion succeeded
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("getting rows affected: %w", err)
+		}
+		if rowsAffected != 1 {
+			return ErrNotFound
+		}
+
+		return nil
+	})
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.

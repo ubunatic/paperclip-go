@@ -18,6 +18,7 @@ func Handler(s *svc.Service) http.Handler {
 	r.Get("/", list(s))
 	r.Post("/", create(s))
 	r.Get("/{id}", get(s))
+	r.Delete("/{id}", delete(s))
 	return r
 }
 
@@ -73,5 +74,26 @@ func get(s *svc.Service) http.HandlerFunc {
 			return
 		}
 		respond.JSON(w, http.StatusOK, company)
+	}
+}
+
+func delete(s *svc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		err := s.Delete(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, svc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "company not found")
+				return
+			}
+			if errors.Is(err, svc.ErrHasDependents) {
+				respond.Error(w, http.StatusConflict, "has_dependents", "company has dependent agents or issues")
+				return
+			}
+			log.Printf("companies: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

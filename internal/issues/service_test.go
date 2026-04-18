@@ -288,3 +288,139 @@ func TestUpdate(t *testing.T) {
 		t.Errorf("AssigneeID after update = %v, want %q", updated.AssigneeID, agent.ID)
 	}
 }
+
+func TestDeleteIssue(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Delete the issue should succeed
+	err = issueSvc.Delete(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Delete issue: %v", err)
+	}
+
+	// Get should return ErrNotFound
+	_, err = issueSvc.Get(ctx, issue.ID)
+	if !errors.Is(err, issues.ErrNotFound) {
+		t.Fatalf("Get after delete: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteIssueNotFound(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	issueSvc := issues.New(s)
+	err := issueSvc.Delete(ctx, "nonexistent-id")
+	if !errors.Is(err, issues.ErrNotFound) {
+		t.Fatalf("Delete nonexistent: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteIssueWithComments(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Create a comment for this issue by directly inserting into the database
+	_, err = s.DB.ExecContext(ctx,
+		`INSERT INTO comments(id, issue_id, author_agent_id, author_kind, body, created_at)
+		 VALUES (?, ?, NULL, 'system', 'Test comment', ?)`,
+		"comment-1", issue.ID, "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("Create comment: %v", err)
+	}
+
+	// Delete the issue should succeed (comments cascade delete)
+	err = issueSvc.Delete(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Delete issue with comments: %v", err)
+	}
+
+	// Verify issue is gone
+	_, err = issueSvc.Get(ctx, issue.ID)
+	if !errors.Is(err, issues.ErrNotFound) {
+		t.Fatalf("Get after delete: expected ErrNotFound, got %v", err)
+	}
+
+	// Verify comment is also gone
+	var commentCount int
+	err = s.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM comments WHERE issue_id = ?`,
+		issue.ID,
+	).Scan(&commentCount)
+	if err != nil {
+		t.Fatalf("Querying comments: %v", err)
+	}
+	if commentCount != 0 {
+		t.Errorf("Expected 0 comments after delete, got %d", commentCount)
+	}
+}
+
+func TestDeleteIssueCheckedOut(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company, agent, and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	agentSvc := agents.New(s)
+	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Checkout the issue
+	err = issueSvc.Checkout(ctx, issue.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("Checkout: %v", err)
+	}
+
+	// Delete should fail with ErrCheckoutConflictDelete
+	err = issueSvc.Delete(ctx, issue.ID)
+	if !errors.Is(err, issues.ErrCheckoutConflictDelete) {
+		t.Fatalf("Delete checked-out: expected ErrCheckoutConflictDelete, got %v", err)
+	}
+
+	// Verify issue still exists
+	_, err = issueSvc.Get(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Get after failed delete: %v", err)
+	}
+}

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
@@ -120,6 +122,133 @@ func TestCompanyCRUD(t *testing.T) {
 		_, err = svc.Create(ctx, "Acme Dup", "acme", "")
 		if err == nil {
 			t.Fatal("expected error on duplicate shortname")
+		}
+	})
+
+	t.Run("delete", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "A test company")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// Delete the company should succeed
+		err = svc.Delete(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("Delete: %v", err)
+		}
+
+		// Get should return ErrNotFound
+		_, err = svc.Get(ctx, c.ID)
+		if !errors.Is(err, companies.ErrNotFound) {
+			t.Fatalf("Get after delete: expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("delete_not_found", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		err := svc.Delete(ctx, "nonexistent-id")
+		if !errors.Is(err, companies.ErrNotFound) {
+			t.Fatalf("Delete nonexistent: expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("delete_with_agents", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "A test company")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// Create an agent in this company
+		agentSvc := agents.New(s)
+		_, err = agentSvc.Create(ctx, c.ID, "alice", "Alice", "manager", nil, "stub")
+		if err != nil {
+			t.Fatalf("Create agent: %v", err)
+		}
+
+		// Try to delete company - should fail with ErrHasDependents
+		err = svc.Delete(ctx, c.ID)
+		if !errors.Is(err, companies.ErrHasDependents) {
+			t.Fatalf("Delete with agents: expected ErrHasDependents, got %v", err)
+		}
+
+		// Verify company still exists
+		_, err = svc.Get(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("Get after failed delete: %v", err)
+		}
+	})
+
+	t.Run("delete_with_activity", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "A test company")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// Create an activity log entry for this company
+		_, err = s.DB.ExecContext(ctx,
+			`INSERT INTO activity_log(id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at)
+			 VALUES (?, ?, 'system', 'system', 'created', 'company', ?, '{}', ?)`,
+			"activity-1", c.ID, c.ID, "2024-01-01T00:00:00Z",
+		)
+		if err != nil {
+			t.Fatalf("Create activity log: %v", err)
+		}
+
+		// Try to delete company - should fail with ErrHasDependents
+		err = svc.Delete(ctx, c.ID)
+		if !errors.Is(err, companies.ErrHasDependents) {
+			t.Fatalf("Delete with activity: expected ErrHasDependents, got %v", err)
+		}
+
+		// Verify company still exists
+		_, err = svc.Get(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("Get after failed delete: %v", err)
+		}
+	})
+
+	t.Run("delete_with_issues", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "A test company")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// Create an issue in this company
+		issueSvc := issues.New(s)
+		_, err = issueSvc.Create(ctx, c.ID, "Test Issue", "Body", nil)
+		if err != nil {
+			t.Fatalf("Create issue: %v", err)
+		}
+
+		// Try to delete company - should fail with ErrHasDependents
+		err = svc.Delete(ctx, c.ID)
+		if !errors.Is(err, companies.ErrHasDependents) {
+			t.Fatalf("Delete with issues: expected ErrHasDependents, got %v", err)
+		}
+
+		// Verify company still exists
+		_, err = svc.Get(ctx, c.ID)
+		if err != nil {
+			t.Fatalf("Get after failed delete: %v", err)
 		}
 	})
 }

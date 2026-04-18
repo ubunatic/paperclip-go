@@ -378,6 +378,18 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Fixed nil-dereference bug on f.Stat() error
    - Fixed test resource cleanup (explicit Close instead of defer in loop)
    - All tests passing: `go test ./...` ✓
+9. ✅ **DONE: Delete endpoints** — Safe delete operations with cascade rules for companies, agents, and issues.
+   - Implemented `Delete()` methods in companies, agents, and issues services with proper error handling
+   - Companies: rejects if has agents or issues (ErrHasDependents) → 409
+   - Agents: rejects if has active checkouts (ErrHasActiveCheckout) → 409
+   - Issues: rejects if checked_out, cascade-deletes comments → 409/204
+   - All delete operations are atomic: SELECT + DELETE wrapped in transactions via WithTx
+   - Added `DELETE /{id}` routes in all three API handlers with correct HTTP semantics: 204/404/409
+   - Added unit tests covering happy path, not-found (404), and blocking conditions (409)
+   - Added E2E tests verifying delete round-trips and conflict detection
+   - Code review: verified atomicity (TOCTOU race handled), check ordering (404 before 409), RowsAffected validation
+   - Optimization: collapsed two COUNT queries in companies.Delete into single query with subqueries
+   - All tests passing: `go test ./...` ✓
 
 ---
 
