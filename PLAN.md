@@ -366,7 +366,18 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Added E2E test `TestHeartbeatE2E()` in `internal/api/api_e2e_test.go` covering full loop
    - Code review: Fixed 3 critical issues (Registry race condition, nil service panic, Go convention violation)
    - All tests passing: `go test ./...` ✓
-8. **UI serving + stub endpoints** — serve `/ui/dist` if present, SPA fallback; stub endpoints for approvals/costs/goals/projects/routines/plugins so the UI (if used) does not 404.
+8. ✅ **DONE: UI serving + stub endpoints** — serve `/ui/dist` if present, SPA fallback; stub endpoints for approvals/costs/goals/projects/routines/plugins so the UI (if used) does not 404.
+   - Created `internal/ui/assets.go` with Handler(uiDir) supporting embedded landing page + dist directory serving + SPA fallback
+   - Created `internal/ui/landing.html` minimal embedded landing page
+   - Created `internal/ui/assets_test.go` with 5 comprehensive unit tests
+   - Created `internal/api/stubs/handler.go` with EmptyList() handler
+   - Registered 6 stub endpoints: /api/{approvals,costs,goals,projects,routines,plugins}
+   - Updated router.go to accept uiDir parameter and mount UI handler via r.NotFound()
+   - Updated serve.go and testutil/server.go to pass uiDir to NewRouter
+   - Added E2E tests: TestStubEndpointsE2E, TestUIServingE2E
+   - Fixed nil-dereference bug on f.Stat() error
+   - Fixed test resource cleanup (explicit Close instead of defer in loop)
+   - All tests passing: `go test ./...` ✓
 
 ---
 
