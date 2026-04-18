@@ -65,10 +65,20 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string) *chi.Mux {
 		// Stub endpoints
 		r.Get("/approvals", apistubs.EmptyList())
 		r.Get("/costs", apistubs.EmptyList())
+		r.Get("/secrets", apistubs.EmptyList())
+		r.Get("/adapters", apistubs.EmptyList())
+		r.Get("/company-skills", apistubs.EmptyList())
+		r.Get("/dashboard", apistubs.EmptyList())
 		r.Get("/goals", apistubs.EmptyList())
 		r.Get("/projects", apistubs.EmptyList())
 		r.Get("/routines", apistubs.EmptyList())
 		r.Get("/plugins", apistubs.EmptyList())
+		r.Get("/sidebar-badges", apistubs.EmptyList())
+		r.Get("/sidebar-preferences", apistubs.EmptyList())
+		r.Get("/inbox-dismissals", apistubs.EmptyList())
+		r.Get("/instance-settings", apistubs.EmptyList())
+		r.Get("/llms", apistubs.EmptyList())
+		r.Get("/access", apistubs.EmptyList())
 
 		// Return JSON 404 for undefined /api/* paths (not HTML)
 		r.NotFound(func(w http.ResponseWriter, r *http.Request) {

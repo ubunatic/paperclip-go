@@ -767,13 +767,13 @@ func TestUIServingE2E(t *testing.T) {
 		t.Fatalf("GET /api/health status = %d, want 200", resp3.StatusCode)
 	}
 
-	var health map[string]string
+	var health map[string]any
 	if err := json.NewDecoder(resp3.Body).Decode(&health); err != nil {
 		t.Fatalf("decoding /api/health response: %v", err)
 	}
 
 	if health["status"] != "ok" {
-		t.Errorf("GET /api/health status field = %s, want 'ok'", health["status"])
+		t.Errorf("GET /api/health status field = %v, want 'ok'", health["status"])
 	}
 }
 

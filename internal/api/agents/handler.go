@@ -20,6 +20,7 @@ func Handler(s *svc.Service) http.Handler {
 	r.Post("/", create(s))
 	r.Get("/me", getMe(s))
 	r.Get("/{id}", get(s))
+	r.Patch("/{id}", update(s))
 	r.Delete("/{id}", delete(s))
 	return r
 }
@@ -135,5 +136,36 @@ func delete(s *svc.Service) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func update(s *svc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
+		var body struct {
+			DisplayName *string `json:"displayName"`
+			Role        *string `json:"role"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+			return
+		}
+		// At least one field must be provided
+		if body.DisplayName == nil && body.Role == nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of displayName or role is required")
+			return
+		}
+		agent, err := s.Update(r.Context(), id, body.DisplayName, body.Role)
+		if err != nil {
+			if errors.Is(err, svc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
+				return
+			}
+			log.Printf("agents: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, agent)
 	}
 }
