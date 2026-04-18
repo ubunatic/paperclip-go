@@ -177,6 +177,37 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	})
 }
 
+// Update updates the displayName and/or role of an agent.
+func (s *Service) Update(ctx context.Context, id string, displayName, role *string) (*domain.Agent, error) {
+	now := time.Now().UTC().Truncate(time.Second)
+	ts := now.Format(time.RFC3339)
+
+	// Build the UPDATE query dynamically
+	query := `UPDATE agents SET updated_at = ?`
+	args := []interface{}{ts}
+
+	if displayName != nil {
+		query += `, display_name = ?`
+		args = append(args, *displayName)
+	}
+
+	if role != nil {
+		query += `, role = ?`
+		args = append(args, *role)
+	}
+
+	query += ` WHERE id = ?`
+	args = append(args, id)
+
+	_, err := s.store.DB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("updating agent: %w", err)
+	}
+
+	// Fetch and return the updated agent
+	return s.Get(ctx, id)
+}
+
 // scanner is satisfied by both *sql.Row and *sql.Rows.
 type scanner interface {
 	Scan(dest ...any) error
