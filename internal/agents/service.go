@@ -136,42 +136,45 @@ func (s *Service) GetByShortname(ctx context.Context, companyID, shortname strin
 // Returns ErrNotFound if the agent does not exist.
 // Returns ErrHasActiveCheckout if the agent has issues checked out with in_progress status.
 func (s *Service) Delete(ctx context.Context, id string) error {
-	// Check if agent has active checkouts
-	var count int
-	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM issues WHERE assignee_id = ? AND status = 'in_progress' AND checked_out_by IS NOT NULL`,
-		id,
-	).Scan(&count)
-	if err != nil {
-		return fmt.Errorf("counting active checkouts: %w", err)
-	}
-
-	if count > 0 {
-		return ErrHasActiveCheckout
-	}
-
-	// Check if agent exists
-	var exists sql.NullString
-	err = s.store.DB.QueryRowContext(ctx,
-		`SELECT id FROM agents WHERE id = ? LIMIT 1`,
-		id,
-	).Scan(&exists)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
+	// Wrap in transaction for consistency and atomicity
+	return s.store.WithTx(ctx, func(tx *sql.Tx) error {
+		// Check if agent exists first (404 before 409)
+		var exists sql.NullString
+		err := tx.QueryRowContext(ctx,
+			`SELECT id FROM agents WHERE id = ? LIMIT 1`,
+			id,
+		).Scan(&exists)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return fmt.Errorf("checking agent exists: %w", err)
 		}
-		return fmt.Errorf("checking agent exists: %w", err)
-	}
 
-	// Delete the agent
-	if _, err := s.store.DB.ExecContext(ctx,
-		`DELETE FROM agents WHERE id = ?`,
-		id,
-	); err != nil {
-		return fmt.Errorf("deleting agent: %w", err)
-	}
+		// Check if agent has active checkouts (inside tx for atomicity with delete)
+		var count int
+		err = tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM issues WHERE checked_out_by = ? AND status = 'in_progress'`,
+			id,
+		).Scan(&count)
+		if err != nil {
+			return fmt.Errorf("counting active checkouts: %w", err)
+		}
 
-	return nil
+		if count > 0 {
+			return ErrHasActiveCheckout
+		}
+
+		// Delete the agent
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM agents WHERE id = ?`,
+			id,
+		); err != nil {
+			return fmt.Errorf("deleting agent: %w", err)
+		}
+
+		return nil
+	})
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.

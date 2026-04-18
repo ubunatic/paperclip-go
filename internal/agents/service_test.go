@@ -207,7 +207,7 @@ func TestDeleteAgentNotFound(t *testing.T) {
 	}
 }
 
-func TestDeleteAgentWithActiveCheckout(t *testing.T) {
+func TestDeleteAgentNoCheckouts(t *testing.T) {
 	s := testutil.NewStore(t)
 	ctx := context.Background()
 
@@ -223,10 +223,6 @@ func TestDeleteAgentWithActiveCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
 	}
-
-	// Create an issue and check it out (this requires issues package)
-	// We'll test by directly checking that agent deletion works when no checkouts exist
-	// The active checkout test is better done in E2E tests
 
 	// Delete agent with no checkouts should succeed
 	err = agentSvc.Delete(ctx, agent.ID)

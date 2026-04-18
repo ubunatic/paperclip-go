@@ -268,6 +268,74 @@ func TestAgentsE2E(t *testing.T) {
 	if resp7.StatusCode != http.StatusNotFound {
 		t.Errorf("GET deleted agent status = %d, want 404", resp7.StatusCode)
 	}
+
+	// DELETE /api/agents/{id} with active checkout → 409
+	agent2Body, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "bob",
+		"displayName": "Bob",
+		"role":        "engineer",
+		"adapter":     "stub",
+	})
+	respAgent2, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agent2Body))
+	if err != nil {
+		t.Fatalf("POST /api/agents (agent2): %v", err)
+	}
+	var agent2 map[string]any
+	if err := json.NewDecoder(respAgent2.Body).Decode(&agent2); err != nil {
+		t.Fatalf("decoding agent2 response: %v", err)
+	}
+	respAgent2.Body.Close()
+	agent2ID, _ := agent2["id"].(string)
+
+	// Create an issue
+	issueBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue",
+		"body":      "This is a test issue",
+	})
+	respIssue, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
+	var issue map[string]any
+	if err := json.NewDecoder(respIssue.Body).Decode(&issue); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	respIssue.Body.Close()
+	issueID, _ := issue["id"].(string)
+
+	// Checkout the issue to agent2 (sets status='in_progress' and checked_out_by)
+	checkoutBody, _ := json.Marshal(map[string]string{"agentId": agent2ID})
+	respCheckout, err := http.Post(srv.URL+"/api/issues/"+issueID+"/checkout", "application/json", bytes.NewReader(checkoutBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/checkout: %v", issueID, err)
+	}
+	respCheckout.Body.Close()
+	if respCheckout.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/issues/%s/checkout status = %d, want 200", issueID, respCheckout.StatusCode)
+	}
+
+	// Try to delete agent2 with active checkout → should return 409
+	req3, _ := http.NewRequest("DELETE", srv.URL+"/api/agents/"+agent2ID, nil)
+	resp8, err := http.DefaultClient.Do(req3)
+	if err != nil {
+		t.Fatalf("DELETE /api/agents with checkout: %v", err)
+	}
+	resp8.Body.Close()
+	if resp8.StatusCode != http.StatusConflict {
+		t.Errorf("DELETE agent with checkout status = %d, want 409", resp8.StatusCode)
+	}
+
+	// Verify agent2 still exists
+	resp9, err := http.Get(srv.URL + "/api/agents/" + agent2ID)
+	if err != nil {
+		t.Fatalf("GET agent2 after failed delete: %v", err)
+	}
+	resp9.Body.Close()
+	if resp9.StatusCode != http.StatusOK {
+		t.Errorf("GET agent2 after failed delete status = %d, want 200", resp9.StatusCode)
+	}
 }
 
 func TestActivityE2E(t *testing.T) {
