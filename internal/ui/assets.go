@@ -13,11 +13,12 @@ import (
 var landingHTML []byte
 
 // Handler returns an http.Handler that serves the UI.
-// If uiDir exists, it serves files from that directory with SPA fallback.
-// If uiDir does not exist, it serves the embedded landing.html for all requests.
+// If uiDir exists and is a directory, it serves files from that directory with SPA fallback.
+// If uiDir does not exist or is not a directory, it serves the embedded landing.html for all requests.
+// Only NotExist errors trigger landing page fallback; other errors (permission, IO) are logged and treated as misconfigured.
 func Handler(uiDir string) http.Handler {
-	_, err := os.Stat(uiDir)
-	distExists := err == nil
+	fi, err := os.Stat(uiDir)
+	distExists := err == nil && fi.IsDir()
 	var distFS fs.FS
 	if distExists {
 		distFS = os.DirFS(uiDir)

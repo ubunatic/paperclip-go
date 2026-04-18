@@ -3,6 +3,7 @@ package api
 
 import (
 	"log"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -68,6 +69,13 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string) *chi.Mux {
 		r.Get("/projects", apistubs.EmptyList())
 		r.Get("/routines", apistubs.EmptyList())
 		r.Get("/plugins", apistubs.EmptyList())
+
+		// Return JSON 404 for undefined /api/* paths (not HTML)
+		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":{"code":"NOT_FOUND","message":"endpoint not found"}}`))
+		})
 	})
 
 	// UI handler (serves non-API routes and SPA fallback)
