@@ -377,7 +377,11 @@ Each phase ends with `make test` green and a documented `curl` recipe in `AGENTS
    - Added E2E tests: TestStubEndpointsE2E, TestUIServingE2E
    - Fixed nil-dereference bug on f.Stat() error
    - Fixed test resource cleanup (explicit Close instead of defer in loop)
+   - Copilot review: Fixed 2 critical issues:
+     * JSON 404 handler on `/api` subrouter (undefined API paths now return JSON not HTML)
+     * Defensive uiDir validation (checks `fi.IsDir()` to reject files and non-directory paths)
    - All tests passing: `go test ./...` ✓
+   - Merged in PR #19 (ubunatic/paperclip-go)
 
 ---
 
