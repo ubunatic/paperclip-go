@@ -3,6 +3,7 @@ package api
 
 import (
 	"log"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -15,6 +16,7 @@ import (
 	apiheartbeat "github.com/ubunatic/paperclip-go/internal/api/heartbeat"
 	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
 	apiskills "github.com/ubunatic/paperclip-go/internal/api/skills"
+	apistubs "github.com/ubunatic/paperclip-go/internal/api/stubs"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/domain"
@@ -22,10 +24,11 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/skills"
 	"github.com/ubunatic/paperclip-go/internal/store"
+	"github.com/ubunatic/paperclip-go/internal/ui"
 )
 
 // NewRouter creates and returns a chi router with all API routes and middleware.
-func NewRouter(s *store.Store, skillsDir string) *chi.Mux {
+func NewRouter(s *store.Store, skillsDir string, uiDir string) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -58,7 +61,25 @@ func NewRouter(s *store.Store, skillsDir string) *chi.Mux {
 		r.Mount("/heartbeat", apiheartbeat.Handler(heartbeatRunner))
 		// GET /skills is read-only; use Get, not Mount
 		r.Get("/skills", apiskills.Handler(skillsList))
+
+		// Stub endpoints
+		r.Get("/approvals", apistubs.EmptyList())
+		r.Get("/costs", apistubs.EmptyList())
+		r.Get("/goals", apistubs.EmptyList())
+		r.Get("/projects", apistubs.EmptyList())
+		r.Get("/routines", apistubs.EmptyList())
+		r.Get("/plugins", apistubs.EmptyList())
+
+		// Return JSON 404 for undefined /api/* paths (not HTML)
+		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":{"code":"NOT_FOUND","message":"endpoint not found"}}`))
+		})
 	})
+
+	// UI handler (serves non-API routes and SPA fallback)
+	r.NotFound(ui.Handler(uiDir).ServeHTTP)
 
 	return r
 }
