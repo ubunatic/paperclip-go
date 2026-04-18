@@ -118,9 +118,9 @@ Each phase has: one agent, one package (or small group), tests required, `make t
 **Files:** `internal/companies/service.go`, `internal/api/companies/handler.go`, `internal/companies/service_test.go`
 
 Tasks:
-- Add `Update(ctx, id, fields)` method to companies service (partial update, only non-zero fields applied).
-- Add `PATCH /{id}` route in companies handler: decode `{name?, description?}`, call service, return 200 + updated company.
-- Unit test: update name, update description, update both, 404 on missing id.
+- Add `Update(ctx, id, fields)` method to companies service using an explicit patch/fields type (for example, pointer fields such as `*string` for `name` and `description`) so the service can distinguish "not provided" from "provided as empty".
+- Add `PATCH /{id}` route in companies handler: decode into that patch type, call service, and apply only fields that are present; this must allow setting values to zero values such as clearing `description` to `""`; return 200 + updated company.
+- Unit test: update name, update description, update both, clear description to empty string, 404 on missing id.
 
 Acceptance: `curl -XPATCH localhost:3200/api/companies/$CID -d '{"name":"New"}' -H 'content-type:application/json'` → 200 with updated name.
 
@@ -297,10 +297,10 @@ Acceptance: with `ANTHROPIC_API_KEY` set, `paperclip-go heartbeat run --agent $A
 
 Tasks:
 - Migration: `secrets(id, company_id, name, value_encrypted TEXT, created_at, updated_at)`.  
-  For MVP, `value_encrypted` stores the value XOR-encrypted with a key derived from `config.SecretKey` (or plaintext if key not set, with a startup warning).
+  `value_encrypted` stores an authenticated-encryption payload (AES-GCM) using a key derived from `config.SecretKey` and a fresh random nonce per secret; store nonce+ciphertext+tag together (for example, base64-encoded). **Do not use XOR or plaintext fallback.** If `config.SecretKey` is not set or invalid, secrets write/update endpoints must fail closed and startup must emit a clear warning that secrets APIs are disabled until a key is configured.
 - CRUD: `GET /api/secrets?companyId=`, `POST /api/secrets`, `GET /api/secrets/{id}`, `PATCH /api/secrets/{id}`, `DELETE /api/secrets/{id}`.
 - `GET` responses **omit** the value field (return `{"id","name","createdAt"}`); `POST` response returns value once.
-- Unit tests: create, list (no values), get (no value), update, delete, 404.
+- Unit tests: create, list (no values), get (no value), update, delete, 404, encrypt/decrypt round-trip, tampered ciphertext rejection, and missing-key behavior (writes rejected; no plaintext persistence).
 
 Acceptance: `POST /api/secrets -d '{"companyId":"...","name":"OPENAI_KEY","value":"sk-..."}'` → 201; `GET /api/secrets` → list without values; old `/api/secrets` stub replaced.
 
@@ -324,7 +324,7 @@ Acceptance: `GET /api/instance-settings` returns `{"deployment_mode":"local_trus
 Tasks:
 - `paperclip-go env list` — calls `GET /api/secrets` and pretty-prints names.
 - `paperclip-go env set KEY VALUE --company <id>` — calls `POST /api/secrets`.
-- `paperclip-go env get KEY --company <id>` — calls `POST /api/secrets/{id}` (resolve by name first).
+- `paperclip-go env get KEY --company <id>` — calls `GET /api/secrets/{id}` (resolve by name first).
 - Uses `internal/cli/client.go` (remote HTTP) by default; `--db` flag for direct DB.
 
 Acceptance: `paperclip-go env set FOO bar --company acme` creates secret; `paperclip-go env list --company acme` shows `FOO`.
@@ -397,7 +397,7 @@ Tasks:
 - Add an in-process event bus (`Publish(topic, payload)` / `Subscribe(topic) <-chan Event`).
 - Publish events from companies/agents/issues/heartbeat services on create/update/delete.
 - `GET /api/ws` upgrades to WebSocket; client subscribes to a `companyId`; server fans out events.
-- Use stdlib `golang.org/x/net/websocket` or plain HTTP hijack.
+- Use an external WebSocket package (for example, `golang.org/x/net/websocket`) or implement the upgrade manually via plain HTTP hijack.
 - Unit tests: publish event → subscriber receives it; disconnect cleans up subscription.
 
 Acceptance: connect to `/api/ws?companyId=$CID`; create an issue via API → WS message arrives.
