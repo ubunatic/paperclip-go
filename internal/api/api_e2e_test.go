@@ -3,9 +3,11 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ubunatic/paperclip-go/internal/testutil"
@@ -484,6 +486,102 @@ func TestIssuesE2E(t *testing.T) {
 	resp10.Body.Close()
 	if resp10.StatusCode != http.StatusNotFound {
 		t.Errorf("GET /api/issues/nonexistent status = %d, want 404", resp10.StatusCode)
+	}
+}
+
+func TestStubEndpointsE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Test each stub endpoint
+	endpoints := []string{
+		"/api/approvals",
+		"/api/costs",
+		"/api/goals",
+		"/api/projects",
+		"/api/routines",
+		"/api/plugins",
+	}
+
+	for _, endpoint := range endpoints {
+		resp, err := http.Get(srv.URL + endpoint)
+		if err != nil {
+			t.Fatalf("GET %s: %v", endpoint, err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("GET %s status = %d, want 200", endpoint, resp.StatusCode)
+		}
+
+		var result map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding %s response: %v", endpoint, err)
+		}
+
+		items, ok := result["items"].([]any)
+		if !ok {
+			t.Errorf("GET %s: expected 'items' array, got %T", endpoint, result["items"])
+		}
+		if len(items) != 0 {
+			t.Errorf("GET %s: expected empty items array, got %d items", endpoint, len(items))
+		}
+		resp.Body.Close()
+	}
+}
+
+func TestUIServingE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// GET / → 200 with landing page HTML
+	resp, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET / status = %d, want 200", resp.StatusCode)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "text/html; charset=utf-8" {
+		t.Errorf("GET / Content-Type = %s, want 'text/html; charset=utf-8'", contentType)
+	}
+
+	var bodyStr strings.Builder
+	io.Copy(&bodyStr, resp.Body)
+	if !strings.Contains(bodyStr.String(), "paperclip-go") {
+		t.Errorf("GET / response doesn't contain 'paperclip-go'")
+	}
+
+	// GET /dashboard (non-existent route) → 200 (SPA fallback)
+	resp2, err := http.Get(srv.URL + "/dashboard")
+	if err != nil {
+		t.Fatalf("GET /dashboard: %v", err)
+	}
+	defer resp2.Body.Close()
+
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("GET /dashboard status = %d, want 200", resp2.StatusCode)
+	}
+
+	// GET /api/health → 200 (not intercepted by UI handler)
+	resp3, err := http.Get(srv.URL + "/api/health")
+	if err != nil {
+		t.Fatalf("GET /api/health: %v", err)
+	}
+	defer resp3.Body.Close()
+
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/health status = %d, want 200", resp3.StatusCode)
+	}
+
+	var health map[string]string
+	if err := json.NewDecoder(resp3.Body).Decode(&health); err != nil {
+		t.Fatalf("decoding /api/health response: %v", err)
+	}
+
+	if health["status"] != "ok" {
+		t.Errorf("GET /api/health status field = %s, want 'ok'", health["status"])
 	}
 }
 
