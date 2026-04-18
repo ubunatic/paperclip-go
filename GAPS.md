@@ -50,9 +50,9 @@ Go implements ~30 endpoints. TS implements ~270+.
 | `/api/instance-settings` | 5+ | 🟡 Stub | Added in fix |
 | `/api/llms` | 3+ | 🟡 Stub | Added in fix |
 | `/api/access` | 8+ | 🟡 Stub | Added in fix |
-| `/api/secrets` | 8+ | ❌ Missing | No handler; returns JSON 404 |
-| `/api/adapters` | 5+ | ❌ Missing | No handler |
-| `/api/company-skills` | 5+ | ❌ Missing | No handler |
+| `/api/secrets` | 8+ | 🟡 Stub | Added in fix |
+| `/api/adapters` | 5+ | 🟡 Stub | Added in fix |
+| `/api/company-skills` | 5+ | 🟡 Stub | Added in fix |
 | `/api/execution-workspaces` | 20+ | ❌ Missing | No handler |
 
 **Legend:** ✅ Implemented | ⚠️ Partial | 🟡 Stub (empty response) | ❌ Missing (404)
@@ -143,15 +143,11 @@ The Go `activity` handler silently returns empty results if `companyId` is omitt
 
 The TS health endpoint reads `serverVersion` from `server/src/version.ts` (populated at build time). The Go handler hardcodes `"dev"`. **Proposed fix**: inject version via `ldflags` at build time (`go build -ldflags "-X main.version=..."`).
 
-### 5.8 MINOR — Missing `PATCH /api/companies/{id}` endpoint
-
-Companies can only be created, read, and deleted. Updates to name/description require deleting and re-creating.
-
-### 5.9 MINOR — No `X-Request-Id` propagation in error logs
+### 5.8 MINOR — No `X-Request-Id` propagation in error logs
 
 The middleware adds a request ID but the handler error logs (`log.Printf`) don't include it. Should use structured slog with the request ID in context for traceability.
 
-### 5.10 MINOR — Stub endpoints return `{"items":[]}` for all requests regardless of method
+### 5.9 MINOR — Stub endpoints return `{"items":[]}` for all requests regardless of method
 
 TS stubs return correct structure per endpoint. The Go stubs only handle GET and only return the empty list shape. POST/PUT/PATCH/DELETE to stub routes will fall through to the JSON 404 handler.
 
