@@ -16,6 +16,9 @@ import (
 // ErrNotFound is returned when a requested company does not exist.
 var ErrNotFound = errors.New("company not found")
 
+// ErrHasDependents is returned when attempting to delete a company with agents or issues.
+var ErrHasDependents = errors.New("company has dependent agents or issues")
+
 // Service provides company CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -98,6 +101,62 @@ func (s *Service) GetByShortname(ctx context.Context, shortname string) (*domain
 		return nil, ErrNotFound
 	}
 	return c, err
+}
+
+// Delete deletes a company if it has no dependent agents or issues.
+// Returns ErrNotFound if the company does not exist.
+// Returns ErrHasDependents if the company has agents or issues.
+func (s *Service) Delete(ctx context.Context, id string) error {
+	// Check if company has agents
+	var agentCount int
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM agents WHERE company_id = ?`,
+		id,
+	).Scan(&agentCount)
+	if err != nil {
+		return fmt.Errorf("counting agents: %w", err)
+	}
+
+	if agentCount > 0 {
+		return ErrHasDependents
+	}
+
+	// Check if company has issues
+	var issueCount int
+	err = s.store.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM issues WHERE company_id = ?`,
+		id,
+	).Scan(&issueCount)
+	if err != nil {
+		return fmt.Errorf("counting issues: %w", err)
+	}
+
+	if issueCount > 0 {
+		return ErrHasDependents
+	}
+
+	// Check if company exists
+	var exists sql.NullString
+	err = s.store.DB.QueryRowContext(ctx,
+		`SELECT id FROM companies WHERE id = ? LIMIT 1`,
+		id,
+	).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("checking company exists: %w", err)
+	}
+
+	// Delete the company
+	if _, err := s.store.DB.ExecContext(ctx,
+		`DELETE FROM companies WHERE id = ?`,
+		id,
+	); err != nil {
+		return fmt.Errorf("deleting company: %w", err)
+	}
+
+	return nil
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.

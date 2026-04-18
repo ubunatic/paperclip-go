@@ -88,6 +88,68 @@ func TestCompaniesE2E(t *testing.T) {
 	if resp5.StatusCode != http.StatusNotFound {
 		t.Errorf("GET nonexistent status = %d, want 404", resp5.StatusCode)
 	}
+
+	// DELETE /api/companies/{id} with agents → 409
+	agentBody, _ := json.Marshal(map[string]any{
+		"companyId":   id,
+		"shortname":   "alice",
+		"displayName": "Alice",
+		"role":        "manager",
+		"adapter":     "stub",
+	})
+	respAgent, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agentBody))
+	if err != nil {
+		t.Fatalf("POST /api/agents: %v", err)
+	}
+	respAgent.Body.Close()
+
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/companies/"+id, nil)
+	resp6, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE /api/companies with agents: %v", err)
+	}
+	resp6.Body.Close()
+	if resp6.StatusCode != http.StatusConflict {
+		t.Errorf("DELETE with agents status = %d, want 409", resp6.StatusCode)
+	}
+
+	// Create a separate company with no dependents
+	body2, _ := json.Marshal(map[string]string{
+		"name":        "Empty Corp",
+		"shortname":   "empty",
+		"description": "Empty company",
+	})
+	resp7, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(body2))
+	if err != nil {
+		t.Fatalf("POST /api/companies (empty): %v", err)
+	}
+	var emptyCompany map[string]any
+	if err := json.NewDecoder(resp7.Body).Decode(&emptyCompany); err != nil {
+		t.Fatalf("decoding empty company: %v", err)
+	}
+	resp7.Body.Close()
+	emptyID, _ := emptyCompany["id"].(string)
+
+	// DELETE /api/companies/{id} (empty) → 204
+	req2, _ := http.NewRequest("DELETE", srv.URL+"/api/companies/"+emptyID, nil)
+	resp8, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("DELETE /api/companies (empty): %v", err)
+	}
+	resp8.Body.Close()
+	if resp8.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE empty company status = %d, want 204", resp8.StatusCode)
+	}
+
+	// Verify it's gone
+	resp9, err := http.Get(srv.URL + "/api/companies/" + emptyID)
+	if err != nil {
+		t.Fatalf("GET after delete: %v", err)
+	}
+	resp9.Body.Close()
+	if resp9.StatusCode != http.StatusNotFound {
+		t.Errorf("GET deleted company status = %d, want 404", resp9.StatusCode)
+	}
 }
 
 func TestAgentsE2E(t *testing.T) {
@@ -184,6 +246,27 @@ func TestAgentsE2E(t *testing.T) {
 	resp5.Body.Close()
 	if resp5.StatusCode != http.StatusBadRequest {
 		t.Errorf("GET /api/agents/me without header status = %d, want 400", resp5.StatusCode)
+	}
+
+	// DELETE /api/agents/{id} (no checkouts) → 204
+	req2, _ := http.NewRequest("DELETE", srv.URL+"/api/agents/"+agentID, nil)
+	resp6, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("DELETE /api/agents: %v", err)
+	}
+	resp6.Body.Close()
+	if resp6.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE agent status = %d, want 204", resp6.StatusCode)
+	}
+
+	// Verify it's gone
+	resp7, err := http.Get(srv.URL + "/api/agents/" + agentID)
+	if err != nil {
+		t.Fatalf("GET after delete: %v", err)
+	}
+	resp7.Body.Close()
+	if resp7.StatusCode != http.StatusNotFound {
+		t.Errorf("GET deleted agent status = %d, want 404", resp7.StatusCode)
 	}
 }
 
@@ -486,6 +569,47 @@ func TestIssuesE2E(t *testing.T) {
 	resp10.Body.Close()
 	if resp10.StatusCode != http.StatusNotFound {
 		t.Errorf("GET /api/issues/nonexistent status = %d, want 404", resp10.StatusCode)
+	}
+
+	// DELETE /api/issues/{id} while checked out → 409
+	// Issue is still checked out by agent, try to delete
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/issues/"+issueID, nil)
+	resp11, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE /api/issues while checked out: %v", err)
+	}
+	resp11.Body.Close()
+	if resp11.StatusCode != http.StatusConflict {
+		t.Errorf("DELETE while checked out status = %d, want 409", resp11.StatusCode)
+	}
+
+	// Release the issue first
+	releaseBody2, _ := json.Marshal(map[string]string{"agentId": agentID})
+	resp12, err := http.Post(srv.URL+"/api/issues/"+issueID+"/release", "application/json", bytes.NewReader(releaseBody2))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/release: %v", issueID, err)
+	}
+	resp12.Body.Close()
+
+	// DELETE /api/issues/{id} after release → 204
+	req2, _ := http.NewRequest("DELETE", srv.URL+"/api/issues/"+issueID, nil)
+	resp13, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("DELETE /api/issues after release: %v", err)
+	}
+	resp13.Body.Close()
+	if resp13.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE after release status = %d, want 204", resp13.StatusCode)
+	}
+
+	// Verify issue is gone
+	resp14, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET after delete: %v", err)
+	}
+	resp14.Body.Close()
+	if resp14.StatusCode != http.StatusNotFound {
+		t.Errorf("GET deleted issue status = %d, want 404", resp14.StatusCode)
 	}
 }
 

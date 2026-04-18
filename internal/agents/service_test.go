@@ -7,6 +7,7 @@ import (
 
 	"github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
@@ -164,3 +165,117 @@ func TestAgentUniqueConstraint(t *testing.T) {
 		t.Fatal("expected error on duplicate shortname within company")
 	}
 }
+
+func TestDeleteAgent(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agent
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := agents.New(s)
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Delete the agent should succeed
+	err = svc.Delete(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Delete agent: %v", err)
+	}
+
+	// Get should return ErrNotFound
+	_, err = svc.Get(ctx, agent.ID)
+	if !errors.Is(err, agents.ErrNotFound) {
+		t.Fatalf("Get after delete: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteAgentNotFound(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	svc := agents.New(s)
+	err := svc.Delete(ctx, "nonexistent-id")
+	if !errors.Is(err, agents.ErrNotFound) {
+		t.Fatalf("Delete nonexistent: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteAgentWithActiveCheckout(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agents
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	agentSvc := agents.New(s)
+	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Create an issue and check it out (this requires issues package)
+	// We'll test by directly checking that agent deletion works when no checkouts exist
+	// The active checkout test is better done in E2E tests
+
+	// Delete agent with no checkouts should succeed
+	err = agentSvc.Delete(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Delete agent with no checkouts: %v", err)
+	}
+}
+
+func TestDeleteAgentHasActiveCheckout(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company, agent, and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	agentSvc := agents.New(s)
+	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Create an issue assigned to the agent
+	issueSvc := issues.New(s)
+	agentIDPtr := &agent.ID
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", agentIDPtr)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Checkout the issue (sets in_progress status and checked_out_by)
+	err = issueSvc.Checkout(ctx, issue.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("Checkout: %v", err)
+	}
+
+	// Try to delete agent - should fail with ErrHasActiveCheckout
+	err = agentSvc.Delete(ctx, agent.ID)
+	if !errors.Is(err, agents.ErrHasActiveCheckout) {
+		t.Fatalf("Delete with active checkout: expected ErrHasActiveCheckout, got %v", err)
+	}
+
+	// Verify agent still exists
+	_, err = agentSvc.Get(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Get after failed delete: %v", err)
+	}
+}
+

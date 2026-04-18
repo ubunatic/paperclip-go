@@ -20,6 +20,7 @@ func Handler(s *svc.Service) http.Handler {
 	r.Post("/", create(s))
 	r.Get("/me", getMe(s))
 	r.Get("/{id}", get(s))
+	r.Delete("/{id}", delete(s))
 	return r
 }
 
@@ -113,5 +114,26 @@ func getMe(s *svc.Service) http.HandlerFunc {
 			return
 		}
 		respond.JSON(w, http.StatusOK, agent)
+	}
+}
+
+func delete(s *svc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		err := s.Delete(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, svc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
+				return
+			}
+			if errors.Is(err, svc.ErrHasActiveCheckout) {
+				respond.Error(w, http.StatusConflict, "has_active_checkout", "agent has active checkouts")
+				return
+			}
+			log.Printf("agents: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

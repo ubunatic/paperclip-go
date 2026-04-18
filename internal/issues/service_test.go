@@ -288,3 +288,86 @@ func TestUpdate(t *testing.T) {
 		t.Errorf("AssigneeID after update = %v, want %q", updated.AssigneeID, agent.ID)
 	}
 }
+
+func TestDeleteIssue(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Delete the issue should succeed
+	err = issueSvc.Delete(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Delete issue: %v", err)
+	}
+
+	// Get should return ErrNotFound
+	_, err = issueSvc.Get(ctx, issue.ID)
+	if !errors.Is(err, issues.ErrNotFound) {
+		t.Fatalf("Get after delete: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteIssueNotFound(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	issueSvc := issues.New(s)
+	err := issueSvc.Delete(ctx, "nonexistent-id")
+	if !errors.Is(err, issues.ErrNotFound) {
+		t.Fatalf("Delete nonexistent: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteIssueCheckedOut(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company, agent, and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	agentSvc := agents.New(s)
+	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Checkout the issue
+	err = issueSvc.Checkout(ctx, issue.ID, agent.ID)
+	if err != nil {
+		t.Fatalf("Checkout: %v", err)
+	}
+
+	// Delete should fail with ErrCheckoutConflictDelete
+	err = issueSvc.Delete(ctx, issue.ID)
+	if !errors.Is(err, issues.ErrCheckoutConflictDelete) {
+		t.Fatalf("Delete checked-out: expected ErrCheckoutConflictDelete, got %v", err)
+	}
+
+	// Verify issue still exists
+	_, err = issueSvc.Get(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Get after failed delete: %v", err)
+	}
+}

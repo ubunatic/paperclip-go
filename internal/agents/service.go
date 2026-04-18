@@ -16,6 +16,9 @@ import (
 // ErrNotFound is returned when a requested agent does not exist.
 var ErrNotFound = errors.New("agent not found")
 
+// ErrHasActiveCheckout is returned when attempting to delete an agent with active checkouts.
+var ErrHasActiveCheckout = errors.New("agent has active checkouts")
+
 // Service provides agent CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -127,6 +130,48 @@ func (s *Service) GetByShortname(ctx context.Context, companyID, shortname strin
 		return nil, ErrNotFound
 	}
 	return a, err
+}
+
+// Delete deletes an agent if it has no active checkouts.
+// Returns ErrNotFound if the agent does not exist.
+// Returns ErrHasActiveCheckout if the agent has issues checked out with in_progress status.
+func (s *Service) Delete(ctx context.Context, id string) error {
+	// Check if agent has active checkouts
+	var count int
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM issues WHERE assignee_id = ? AND status = 'in_progress' AND checked_out_by IS NOT NULL`,
+		id,
+	).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("counting active checkouts: %w", err)
+	}
+
+	if count > 0 {
+		return ErrHasActiveCheckout
+	}
+
+	// Check if agent exists
+	var exists sql.NullString
+	err = s.store.DB.QueryRowContext(ctx,
+		`SELECT id FROM agents WHERE id = ? LIMIT 1`,
+		id,
+	).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("checking agent exists: %w", err)
+	}
+
+	// Delete the agent
+	if _, err := s.store.DB.ExecContext(ctx,
+		`DELETE FROM agents WHERE id = ?`,
+		id,
+	); err != nil {
+		return fmt.Errorf("deleting agent: %w", err)
+	}
+
+	return nil
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.
