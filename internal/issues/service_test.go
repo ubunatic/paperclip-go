@@ -271,12 +271,12 @@ func TestUpdate(t *testing.T) {
 	}
 
 	// Update status
-	updated, err := issueSvc.Update(ctx, issue.ID, "closed", nil)
+	updated, err := issueSvc.Update(ctx, issue.ID, "done", nil)
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if updated.Status != "closed" {
-		t.Errorf("Status after update = %q, want %q", updated.Status, "closed")
+	if updated.Status != "done" {
+		t.Errorf("Status after update = %q, want %q", updated.Status, "done")
 	}
 
 	// Update assignee

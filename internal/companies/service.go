@@ -137,7 +137,19 @@ func (s *Service) Update(ctx context.Context, id string, name, description *stri
 		return nil, fmt.Errorf("getting rows affected for company update: %w", err)
 	}
 	if n == 0 {
-		return nil, ErrNotFound
+		// RowsAffected may be 0 for a no-op update in SQLite even when the row exists.
+		// Run a lightweight existence check to distinguish not-found from no-op.
+		var exists int
+		err := s.store.DB.QueryRowContext(ctx,
+			`SELECT 1 FROM companies WHERE id = ? LIMIT 1`,
+			id,
+		).Scan(&exists)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrNotFound
+			}
+			return nil, fmt.Errorf("checking company exists after update: %w", err)
+		}
 	}
 
 	// Fetch and return the updated company

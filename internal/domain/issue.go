@@ -22,7 +22,6 @@ type Issue struct {
 // validStatuses contains the allowed status values for issues.
 var validStatuses = map[string]bool{
 	"open":        true,
-	"closed":      true,
 	"in_progress": true,
 	"blocked":     true,
 	"done":        true,

@@ -42,7 +42,11 @@ func onboardRun() error {
 	// Prompt for name
 	fmt.Fprint(os.Stdout, "Company name: ")
 	if !scanner.Scan() {
-		return fmt.Errorf("failed to read company name")
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("failed to read company name: %w", err)
+		}
+		// EOF on required field
+		return fmt.Errorf("company name is required (stdin ended prematurely)")
 	}
 	name := strings.TrimSpace(scanner.Text())
 	if name == "" {
@@ -52,7 +56,11 @@ func onboardRun() error {
 	// Prompt for shortname
 	fmt.Fprint(os.Stdout, "Company shortname: ")
 	if !scanner.Scan() {
-		return fmt.Errorf("failed to read company shortname")
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("failed to read company shortname: %w", err)
+		}
+		// EOF on required field
+		return fmt.Errorf("company shortname is required (stdin ended prematurely)")
 	}
 	shortname := strings.TrimSpace(scanner.Text())
 	if shortname == "" {
