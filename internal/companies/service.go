@@ -103,6 +103,38 @@ func (s *Service) GetByShortname(ctx context.Context, shortname string) (*domain
 	return c, err
 }
 
+// Update updates name and/or description of a company.
+// Returns ErrNotFound if the company does not exist.
+func (s *Service) Update(ctx context.Context, id string, name, description *string) (*domain.Company, error) {
+	now := time.Now().UTC().Truncate(time.Second)
+	ts := now.Format(time.RFC3339)
+
+	// Build the UPDATE query dynamically
+	query := `UPDATE companies SET updated_at = ?`
+	args := []interface{}{ts}
+
+	if name != nil {
+		query += `, name = ?`
+		args = append(args, *name)
+	}
+
+	if description != nil {
+		query += `, description = ?`
+		args = append(args, *description)
+	}
+
+	query += ` WHERE id = ?`
+	args = append(args, id)
+
+	_, err := s.store.DB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("updating company: %w", err)
+	}
+
+	// Fetch and return the updated company
+	return s.Get(ctx, id)
+}
+
 // Delete deletes a company if it has no dependent agents or issues.
 // Returns ErrNotFound if the company does not exist.
 // Returns ErrHasDependents if the company has agents or issues.
