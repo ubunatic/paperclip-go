@@ -25,6 +25,9 @@ var ErrNotCheckedOut = errors.New("issue not checked out by this agent")
 // ErrCheckoutConflictDelete is returned when attempting to delete a checked-out issue.
 var ErrCheckoutConflictDelete = errors.New("cannot delete checked-out issue")
 
+// ErrInvalidStatus is returned when attempting to set an invalid status.
+var ErrInvalidStatus = errors.New("invalid status")
+
 // Service provides issue CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -39,12 +42,16 @@ func New(s *store.Store) *Service {
 func (s *Service) Create(ctx context.Context, companyID, title, body string, assigneeID *string) (*domain.Issue, error) {
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
+	status := "open"
+	if !domain.ValidStatuses[status] {
+		return nil, ErrInvalidStatus
+	}
 	i := &domain.Issue{
 		ID:         ids.NewUUID(),
 		CompanyID:  companyID,
 		Title:      title,
 		Body:       body,
-		Status:     "open",
+		Status:     status,
 		AssigneeID: assigneeID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
@@ -138,9 +145,15 @@ func (s *Service) ListWithFilters(ctx context.Context, companyID, status string,
 }
 
 // Update updates the status and/or assignee of an issue.
+// Returns ErrInvalidStatus if the status is not valid.
 func (s *Service) Update(ctx context.Context, id, status string, assigneeID *string) (*domain.Issue, error) {
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
+
+	// Validate status if provided
+	if status != "" && !domain.ValidStatuses[status] {
+		return nil, ErrInvalidStatus
+	}
 
 	// Build the UPDATE query dynamically
 	query := `UPDATE issues SET updated_at = ?`

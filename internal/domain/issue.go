@@ -18,3 +18,10 @@ type Issue struct {
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
 }
+
+// ValidStatuses contains the allowed status values for issues.
+var ValidStatuses = map[string]bool{
+	"open":        true,
+	"closed":      true,
+	"in_progress": true,
+}

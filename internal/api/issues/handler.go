@@ -131,6 +131,10 @@ func update(s *isvc.Service) http.HandlerFunc {
 				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")
 				return
 			}
+			if errors.Is(err, isvc.ErrInvalidStatus) {
+				respond.Error(w, http.StatusUnprocessableEntity, "invalid_status", "invalid status value")
+				return
+			}
 			log.Printf("issues: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return

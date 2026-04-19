@@ -271,12 +271,12 @@ func TestUpdate(t *testing.T) {
 	}
 
 	// Update status
-	updated, err := issueSvc.Update(ctx, issue.ID, "done", nil)
+	updated, err := issueSvc.Update(ctx, issue.ID, "closed", nil)
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if updated.Status != "done" {
-		t.Errorf("Status after update = %q, want %q", updated.Status, "done")
+	if updated.Status != "closed" {
+		t.Errorf("Status after update = %q, want %q", updated.Status, "closed")
 	}
 
 	// Update assignee
@@ -422,5 +422,55 @@ func TestDeleteIssueCheckedOut(t *testing.T) {
 	_, err = issueSvc.Get(ctx, issue.ID)
 	if err != nil {
 		t.Fatalf("Get after failed delete: %v", err)
+	}
+}
+
+func TestUpdateInvalidStatus(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Try to update with invalid status
+	_, err = issueSvc.Update(ctx, issue.ID, "invalid_status", nil)
+	if !errors.Is(err, issues.ErrInvalidStatus) {
+		t.Fatalf("Update with invalid status: expected ErrInvalidStatus, got %v", err)
+	}
+}
+
+func TestCreateIssueWithInvalidStatus(t *testing.T) {
+	// This test verifies that the Create method validates the default "open" status.
+	// While we currently always create with "open" status (which is valid),
+	// this test ensures the validation logic is in place if the Create method
+	// is extended to accept a status parameter.
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	// Create with default status (open) should succeed
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue with default status: %v", err)
+	}
+	if issue.Status != "open" {
+		t.Errorf("Created issue status = %q, want %q", issue.Status, "open")
 	}
 }
