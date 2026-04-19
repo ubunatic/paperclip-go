@@ -32,7 +32,7 @@ func Execute(version string) {
 // globalVersion holds the build version.
 var globalVersion = "dev"
 
-// GetVersion returns the current build version.
-func GetVersion() string {
+// getVersion returns the current build version.
+func getVersion() string {
 	return globalVersion
 }

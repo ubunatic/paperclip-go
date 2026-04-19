@@ -61,10 +61,15 @@ func onboardRun() error {
 
 	// Prompt for description (optional)
 	fmt.Fprint(os.Stdout, "Company description (optional): ")
+	description := ""
 	if !scanner.Scan() {
-		return fmt.Errorf("failed to read company description")
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("failed to read company description: %w", err)
+		}
+		// EOF on optional field is acceptable; description stays ""
+	} else {
+		description = strings.TrimSpace(scanner.Text())
 	}
-	description := strings.TrimSpace(scanner.Text())
 
 	// Create the company
 	company, err := svc.Create(ctx, name, shortname, description)

@@ -40,6 +40,12 @@ func list(s *isvc.Service) http.HandlerFunc {
 			return
 		}
 
+		// Validate status if provided
+		if status != "" && !domain.ValidStatuses[status] {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "invalid status value")
+			return
+		}
+
 		var items []*domain.Issue
 		var err error
 
@@ -132,7 +138,7 @@ func update(s *isvc.Service) http.HandlerFunc {
 				return
 			}
 			if errors.Is(err, isvc.ErrInvalidStatus) {
-				respond.Error(w, http.StatusUnprocessableEntity, "invalid_status", "invalid status value")
+				respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "invalid status value")
 				return
 			}
 			log.Printf("issues: error: %v", err)

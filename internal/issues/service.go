@@ -43,9 +43,6 @@ func (s *Service) Create(ctx context.Context, companyID, title, body string, ass
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	status := "open"
-	if !domain.ValidStatuses[status] {
-		return nil, ErrInvalidStatus
-	}
 	i := &domain.Issue{
 		ID:         ids.NewUUID(),
 		CompanyID:  companyID,

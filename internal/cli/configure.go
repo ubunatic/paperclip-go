@@ -19,12 +19,12 @@ var configureCmd = &cobra.Command{
 }
 
 func configureRun() error {
-	cfg, err := config.Load(config.DefaultPath())
+	path := config.DefaultPath()
+	cfg, err := config.Load(path)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	path := config.DefaultPath()
 	fmt.Fprintf(os.Stdout, "Configuration path: %s\n\n", path)
 
 	// Marshal and print the YAML

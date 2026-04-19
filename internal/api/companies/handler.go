@@ -95,6 +95,11 @@ func update(s *svc.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of name or description is required")
 			return
 		}
+		// Reject empty name
+		if body.Name != nil && *body.Name == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be empty")
+			return
+		}
 		company, err := s.Update(r.Context(), id, body.Name, body.Description)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {
