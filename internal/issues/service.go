@@ -148,7 +148,7 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 	ts := now.Format(time.RFC3339)
 
 	// Validate status if provided
-	if status != "" && !domain.ValidStatuses[status] {
+	if status != "" && !domain.IsValidIssueStatus(status) {
 		return nil, ErrInvalidStatus
 	}
 

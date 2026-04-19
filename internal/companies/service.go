@@ -19,9 +19,6 @@ var ErrNotFound = errors.New("company not found")
 // ErrHasDependents is returned when attempting to delete a company with agents or issues.
 var ErrHasDependents = errors.New("company has dependent agents or issues")
 
-// ErrDuplicateShortname is returned when a company with the given shortname already exists.
-var ErrDuplicateShortname = errors.New("company with this shortname already exists")
-
 // Service provides company CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -135,7 +132,10 @@ func (s *Service) Update(ctx context.Context, id string, name, description *stri
 	}
 
 	// Check if the company exists via RowsAffected
-	n, _ := result.RowsAffected()
+	n, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("getting rows affected for company update: %w", err)
+	}
 	if n == 0 {
 		return nil, ErrNotFound
 	}

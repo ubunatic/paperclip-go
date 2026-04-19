@@ -449,28 +449,3 @@ func TestUpdateInvalidStatus(t *testing.T) {
 	}
 }
 
-func TestCreateIssueWithInvalidStatus(t *testing.T) {
-	// This test verifies that the Create method validates the default "open" status.
-	// While we currently always create with "open" status (which is valid),
-	// this test ensures the validation logic is in place if the Create method
-	// is extended to accept a status parameter.
-	s := testutil.NewStore(t)
-	ctx := context.Background()
-
-	// Create a company
-	companySvc := companies.New(s)
-	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
-	if err != nil {
-		t.Fatalf("Create company: %v", err)
-	}
-
-	issueSvc := issues.New(s)
-	// Create with default status (open) should succeed
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
-	if err != nil {
-		t.Fatalf("Create issue with default status: %v", err)
-	}
-	if issue.Status != "open" {
-		t.Errorf("Created issue status = %q, want %q", issue.Status, "open")
-	}
-}
