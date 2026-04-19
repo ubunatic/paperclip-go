@@ -19,7 +19,12 @@ var configureCmd = &cobra.Command{
 }
 
 func configureRun() error {
-	path := config.DefaultPath()
+	// Resolve effective config path (respecting env var override)
+	path := os.Getenv("PAPERCLIP_GO_CONFIG")
+	if path == "" {
+		path = config.DefaultPath()
+	}
+
 	cfg, err := config.Load(path)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)

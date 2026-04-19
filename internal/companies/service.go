@@ -106,6 +106,11 @@ func (s *Service) GetByShortname(ctx context.Context, shortname string) (*domain
 // Update updates name and/or description of a company.
 // Returns ErrNotFound if the company does not exist.
 func (s *Service) Update(ctx context.Context, id string, name, description *string) (*domain.Company, error) {
+	// Validate that at least one field is being updated
+	if name == nil && description == nil {
+		return nil, fmt.Errorf("update requires at least one field to be provided")
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 

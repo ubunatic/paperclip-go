@@ -356,4 +356,21 @@ func TestCompanyCRUD(t *testing.T) {
 			t.Fatalf("expected ErrNotFound, got %v", err)
 		}
 	})
+
+	t.Run("update_no_fields", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "Original description")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// Try to update with both fields nil - should return validation error
+		_, err = svc.Update(ctx, c.ID, nil, nil)
+		if err == nil {
+			t.Fatal("expected error when updating with no fields provided")
+		}
+	})
 }

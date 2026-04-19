@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -17,11 +16,11 @@ var onboardCmd = &cobra.Command{
 	Short: "Interactively onboard a new company",
 	Long:  "Create a new company via interactive prompts, storing it in the configured database.",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return onboardRun()
+		return onboardRun(cmd)
 	},
 }
 
-func onboardRun() error {
+func onboardRun(cmd *cobra.Command) error {
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -33,7 +32,7 @@ func onboardRun() error {
 	}
 	defer s.Close()
 
-	ctx := context.Background()
+	ctx := cmd.Context()
 	svc := companies.New(s)
 
 	// Use bufio.Scanner for prompts
