@@ -251,4 +251,126 @@ func TestCompanyCRUD(t *testing.T) {
 			t.Fatalf("Get after failed delete: %v", err)
 		}
 	})
+
+	t.Run("update_name", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "Original description")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		newName := "Acme Inc"
+		updated, err := svc.Update(ctx, c.ID, &newName, nil)
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if updated.Name != newName {
+			t.Errorf("Updated.Name = %q, want %q", updated.Name, newName)
+		}
+		if updated.Description != "Original description" {
+			t.Errorf("Description should be unchanged, got %q", updated.Description)
+		}
+	})
+
+	t.Run("update_description", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "Original description")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		newDesc := "Updated description"
+		updated, err := svc.Update(ctx, c.ID, nil, &newDesc)
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if updated.Description != newDesc {
+			t.Errorf("Updated.Description = %q, want %q", updated.Description, newDesc)
+		}
+		if updated.Name != "Acme Corp" {
+			t.Errorf("Name should be unchanged, got %q", updated.Name)
+		}
+	})
+
+	t.Run("update_both", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "Original description")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		newName := "Acme Inc"
+		newDesc := "Updated description"
+		updated, err := svc.Update(ctx, c.ID, &newName, &newDesc)
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if updated.Name != newName {
+			t.Errorf("Updated.Name = %q, want %q", updated.Name, newName)
+		}
+		if updated.Description != newDesc {
+			t.Errorf("Updated.Description = %q, want %q", updated.Description, newDesc)
+		}
+	})
+
+	t.Run("update_clear_description", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "Original description")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		emptyDesc := ""
+		updated, err := svc.Update(ctx, c.ID, nil, &emptyDesc)
+		if err != nil {
+			t.Fatalf("Update: %v", err)
+		}
+		if updated.Description != "" {
+			t.Errorf("Updated.Description should be empty, got %q", updated.Description)
+		}
+		if updated.Name != "Acme Corp" {
+			t.Errorf("Name should be unchanged, got %q", updated.Name)
+		}
+	})
+
+	t.Run("update_not_found", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		newName := "New Name"
+		_, err := svc.Update(ctx, "nonexistent-id", &newName, nil)
+		if !errors.Is(err, companies.ErrNotFound) {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
+
+	t.Run("update_no_fields", func(t *testing.T) {
+		s := testutil.NewStore(t)
+		svc := companies.New(s)
+		ctx := context.Background()
+
+		c, err := svc.Create(ctx, "Acme Corp", "acme", "Original description")
+		if err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+
+		// Try to update with both fields nil - should return validation error
+		_, err = svc.Update(ctx, c.ID, nil, nil)
+		if err == nil {
+			t.Fatal("expected error when updating with no fields provided")
+		}
+	})
 }

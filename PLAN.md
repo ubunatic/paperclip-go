@@ -30,12 +30,12 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 |---|---|---|---|
 | `/api/health` | 1 | ✅ | — |
 | `/api/companies` CRUD | 4 | ✅ | — |
-| `PATCH /api/companies/{id}` | 1 | 🔲 | A1 |
+| `PATCH /api/companies/{id}` | 1 | ✅ | A1 |
 | `/api/agents` CRUD + me + patch | 6 | ✅ | — |
 | Agent lifecycle (pause/resume/terminate) | 3 | 🔲 | B1 |
 | Agent configuration field | 1 | 🔲 | B2 |
 | `/api/issues` CRUD + checkout/release | 9 | ✅ | — |
-| Issue status enum validation | 1 | 🔲 | A2 |
+| Issue status enum validation | 1 | ✅ | A2 |
 | Issue labels | 5+ | 🔲 | C1 |
 | Issue documents / work-products | 5+ | 🔲 | C2 |
 | Issue read / archive state | 2 | 🔲 | C3 |
@@ -66,8 +66,8 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | agent create/list | ✅ | ✅ | — |
 | issue create/list/get | ✅ | ✅ | — |
 | heartbeat run | ✅ | ✅ | — |
-| `configure` | ✅ | 🔲 | A3 |
-| `onboard` (interactive setup) | ✅ | 🔲 | A3 |
+| `configure` | ✅ | ✅ | A3 |
+| `onboard` (interactive setup) | ✅ | ✅ | A3 |
 | `env list/set/get` | ✅ | 🔲 | F3 |
 | `db:backup` | ✅ | 🔲 | F4 |
 | `approval list/get` | ✅ | 🔲 | G1 |
@@ -99,7 +99,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | Stub adapter | ✅ | ✅ | — |
 | Mock adapter (test-only) | — | 🔲 | E2 |
 | `claude_local` adapter | ✅ | 🔲 | E3 |
-| Build version via ldflags | ✅ | 🔲 | A4 |
+| Build version via ldflags | ✅ | ✅ | A4 |
 
 ---
 

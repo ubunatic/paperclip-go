@@ -3,6 +3,9 @@ package main
 
 import "github.com/ubunatic/paperclip-go/internal/cli"
 
+// Version is the build version, set via ldflags during build.
+var Version = "dev"
+
 func main() {
-	cli.Execute()
+	cli.Execute(Version)
 }

@@ -424,3 +424,28 @@ func TestDeleteIssueCheckedOut(t *testing.T) {
 		t.Fatalf("Get after failed delete: %v", err)
 	}
 }
+
+func TestUpdateInvalidStatus(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Try to update with invalid status
+	_, err = issueSvc.Update(ctx, issue.ID, "invalid_status", nil)
+	if !errors.Is(err, issues.ErrInvalidStatus) {
+		t.Fatalf("Update with invalid status: expected ErrInvalidStatus, got %v", err)
+	}
+}
+

@@ -36,7 +36,7 @@ func serveRun() error {
 	}
 	defer s.Close()
 
-	router := api.NewRouter(s, cfg.SkillsDir, cfg.UIDir)
+	router := api.NewRouter(s, cfg.SkillsDir, cfg.UIDir, getVersion())
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
 		Handler: router,

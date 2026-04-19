@@ -18,6 +18,7 @@ func Handler(s *svc.Service) http.Handler {
 	r.Get("/", list(s))
 	r.Post("/", create(s))
 	r.Get("/{id}", get(s))
+	r.Patch("/{id}", update(s))
 	r.Delete("/{id}", delete(s))
 	return r
 }
@@ -64,6 +65,42 @@ func get(s *svc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		company, err := s.Get(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, svc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "company not found")
+				return
+			}
+			log.Printf("companies: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, company)
+	}
+}
+
+func update(s *svc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
+		var body struct {
+			Name        *string `json:"name"`
+			Description *string `json:"description"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+			return
+		}
+		// At least one field must be provided
+		if body.Name == nil && body.Description == nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of name or description is required")
+			return
+		}
+		// Reject empty name
+		if body.Name != nil && *body.Name == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be empty")
+			return
+		}
+		company, err := s.Update(r.Context(), id, body.Name, body.Description)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "company not found")

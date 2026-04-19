@@ -28,7 +28,7 @@ import (
 )
 
 // NewRouter creates and returns a chi router with all API routes and middleware.
-func NewRouter(s *store.Store, skillsDir string, uiDir string) *chi.Mux {
+func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -53,7 +53,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string) *chi.Mux {
 
 	// /api routes
 	r.Route("/api", func(r chi.Router) {
-		r.Get("/health", health.Handler)
+		r.Get("/health", health.Handler(version))
 		r.Mount("/companies", apicompanies.Handler(companySvc))
 		r.Mount("/agents", apiagents.Handler(agentSvc))
 		r.Mount("/activity", apiactivity.Handler(activityLog))

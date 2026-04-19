@@ -18,3 +18,17 @@ type Issue struct {
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
 }
+
+// validStatuses contains the allowed status values for issues.
+var validStatuses = map[string]bool{
+	"open":        true,
+	"in_progress": true,
+	"blocked":     true,
+	"done":        true,
+	"cancelled":   true,
+}
+
+// IsValidIssueStatus reports whether status is an allowed issue status.
+func IsValidIssueStatus(status string) bool {
+	return validStatuses[status]
+}

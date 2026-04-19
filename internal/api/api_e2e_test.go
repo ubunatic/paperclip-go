@@ -150,6 +150,56 @@ func TestCompaniesE2E(t *testing.T) {
 	if resp9.StatusCode != http.StatusNotFound {
 		t.Errorf("GET deleted company status = %d, want 404", resp9.StatusCode)
 	}
+
+	// PATCH /api/companies/{id} → 200
+	patchBody, _ := json.Marshal(map[string]string{
+		"name": "Acme Corp Updated",
+	})
+	reqPatch, _ := http.NewRequest("PATCH", srv.URL+"/api/companies/"+id, bytes.NewReader(patchBody))
+	reqPatch.Header.Set("Content-Type", "application/json")
+	resp10, err := http.DefaultClient.Do(reqPatch)
+	if err != nil {
+		t.Fatalf("PATCH /api/companies/%s: %v", id, err)
+	}
+	defer resp10.Body.Close()
+	if resp10.StatusCode != http.StatusOK {
+		t.Errorf("PATCH /api/companies/%s status = %d, want 200", id, resp10.StatusCode)
+	}
+	var updated map[string]any
+	if err := json.NewDecoder(resp10.Body).Decode(&updated); err != nil {
+		t.Fatalf("decoding PATCH response: %v", err)
+	}
+	updatedName, _ := updated["name"].(string)
+	if updatedName != "Acme Corp Updated" {
+		t.Errorf("PATCH company name = %q, want 'Acme Corp Updated'", updatedName)
+	}
+
+	// PATCH /api/companies/{id} with empty name → 422
+	badPatchBody, _ := json.Marshal(map[string]string{
+		"name": "",
+	})
+	reqPatchBad, _ := http.NewRequest("PATCH", srv.URL+"/api/companies/"+id, bytes.NewReader(badPatchBody))
+	reqPatchBad.Header.Set("Content-Type", "application/json")
+	resp11, err := http.DefaultClient.Do(reqPatchBad)
+	if err != nil {
+		t.Fatalf("PATCH /api/companies/%s (empty name): %v", id, err)
+	}
+	resp11.Body.Close()
+	if resp11.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("PATCH with empty name status = %d, want 422", resp11.StatusCode)
+	}
+
+	// PATCH /api/companies/nonexistent → 404
+	reqPatchNotFound, _ := http.NewRequest("PATCH", srv.URL+"/api/companies/nonexistent-id", bytes.NewReader(patchBody))
+	reqPatchNotFound.Header.Set("Content-Type", "application/json")
+	resp12, err := http.DefaultClient.Do(reqPatchNotFound)
+	if err != nil {
+		t.Fatalf("PATCH /api/companies/nonexistent-id: %v", err)
+	}
+	resp12.Body.Close()
+	if resp12.StatusCode != http.StatusNotFound {
+		t.Errorf("PATCH nonexistent company status = %d, want 404", resp12.StatusCode)
+	}
 }
 
 func TestAgentsE2E(t *testing.T) {
