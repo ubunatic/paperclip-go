@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
@@ -991,5 +993,227 @@ func TestHeartbeatE2E(t *testing.T) {
 	resp5.Body.Close()
 	if resp5.StatusCode != http.StatusNotFound {
 		t.Errorf("POST /api/heartbeat/runs (not found) status = %d, want 404", resp5.StatusCode)
+	}
+}
+
+func TestAgentLifecycleE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Create a company first
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	respCompany.Body.Close()
+	companyID, _ := company["id"].(string)
+
+	// Create an agent
+	agentBody, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "alice",
+		"displayName": "Alice",
+		"role":        "manager",
+		"adapter":     "stub",
+	})
+	respAgent, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agentBody))
+	if err != nil {
+		t.Fatalf("POST /api/agents: %v", err)
+	}
+	var created map[string]any
+	if err := json.NewDecoder(respAgent.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	respAgent.Body.Close()
+	agentID, _ := created["id"].(string)
+
+	// Check initial state is idle
+	runtimeState, _ := created["runtimeState"].(string)
+	if runtimeState != "idle" {
+		t.Errorf("initial runtimeState = %q, want %q", runtimeState, "idle")
+	}
+
+	// Pause the agent → 200
+	req, _ := http.NewRequest("POST", srv.URL+"/api/agents/"+agentID+"/pause", nil)
+	respPause, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/agents/%s/pause: %v", agentID, err)
+	}
+	var paused map[string]any
+	if err := json.NewDecoder(respPause.Body).Decode(&paused); err != nil {
+		t.Fatalf("decoding pause response: %v", err)
+	}
+	respPause.Body.Close()
+	if respPause.StatusCode != http.StatusOK {
+		t.Errorf("pause status = %d, want 200", respPause.StatusCode)
+	}
+	pausedState, _ := paused["runtimeState"].(string)
+	if pausedState != "paused" {
+		t.Errorf("after pause runtimeState = %q, want %q", pausedState, "paused")
+	}
+
+	// Resume the agent → 200
+	reqResume, _ := http.NewRequest("POST", srv.URL+"/api/agents/"+agentID+"/resume", nil)
+	respResume, err := http.DefaultClient.Do(reqResume)
+	if err != nil {
+		t.Fatalf("POST /api/agents/%s/resume: %v", agentID, err)
+	}
+	var resumed map[string]any
+	if err := json.NewDecoder(respResume.Body).Decode(&resumed); err != nil {
+		t.Fatalf("decoding resume response: %v", err)
+	}
+	respResume.Body.Close()
+	if respResume.StatusCode != http.StatusOK {
+		t.Errorf("resume status = %d, want 200", respResume.StatusCode)
+	}
+	resumedState, _ := resumed["runtimeState"].(string)
+	if resumedState != "running" {
+		t.Errorf("after resume runtimeState = %q, want %q", resumedState, "running")
+	}
+
+	// Terminate the agent → 200
+	reqTerminate, _ := http.NewRequest("POST", srv.URL+"/api/agents/"+agentID+"/terminate", nil)
+	respTerminate, err := http.DefaultClient.Do(reqTerminate)
+	if err != nil {
+		t.Fatalf("POST /api/agents/%s/terminate: %v", agentID, err)
+	}
+	var terminated map[string]any
+	if err := json.NewDecoder(respTerminate.Body).Decode(&terminated); err != nil {
+		t.Fatalf("decoding terminate response: %v", err)
+	}
+	respTerminate.Body.Close()
+	if respTerminate.StatusCode != http.StatusOK {
+		t.Errorf("terminate status = %d, want 200", respTerminate.StatusCode)
+	}
+	terminatedState, _ := terminated["runtimeState"].(string)
+	if terminatedState != "terminated" {
+		t.Errorf("after terminate runtimeState = %q, want %q", terminatedState, "terminated")
+	}
+
+	// Try to terminate again → 422 (invalid transition)
+	reqTerminate2, _ := http.NewRequest("POST", srv.URL+"/api/agents/"+agentID+"/terminate", nil)
+	respTerminate2, err := http.DefaultClient.Do(reqTerminate2)
+	if err != nil {
+		t.Fatalf("POST /api/agents/%s/terminate (2nd): %v", agentID, err)
+	}
+	respTerminate2.Body.Close()
+	if respTerminate2.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("2nd terminate status = %d, want 422", respTerminate2.StatusCode)
+	}
+
+	// PATCH to update runtime state via Update handler
+	agent3Body, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "bob",
+		"displayName": "Bob",
+		"role":        "engineer",
+		"adapter":     "stub",
+	})
+	respAgent3, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agent3Body))
+	if err != nil {
+		t.Fatalf("POST /api/agents (agent3): %v", err)
+	}
+	var created3 map[string]any
+	if err := json.NewDecoder(respAgent3.Body).Decode(&created3); err != nil {
+		t.Fatalf("decoding agent3 response: %v", err)
+	}
+	respAgent3.Body.Close()
+	agent3ID, _ := created3["id"].(string)
+
+	// PATCH with runtimeState update → 200
+	patchBody, _ := json.Marshal(map[string]string{
+		"runtimeState": "paused",
+	})
+	reqPatch, _ := http.NewRequest("PATCH", srv.URL+"/api/agents/"+agent3ID, bytes.NewReader(patchBody))
+	reqPatch.Header.Set("Content-Type", "application/json")
+	respPatch, err := http.DefaultClient.Do(reqPatch)
+	if err != nil {
+		t.Fatalf("PATCH /api/agents/%s: %v", agent3ID, err)
+	}
+	var patched map[string]any
+	if err := json.NewDecoder(respPatch.Body).Decode(&patched); err != nil {
+		t.Fatalf("decoding patch response: %v", err)
+	}
+	respPatch.Body.Close()
+	if respPatch.StatusCode != http.StatusOK {
+		t.Errorf("PATCH status = %d, want 200", respPatch.StatusCode)
+	}
+	patchedState, _ := patched["runtimeState"].(string)
+	if patchedState != "paused" {
+		t.Errorf("after PATCH runtimeState = %q, want %q", patchedState, "paused")
+	}
+
+	// PATCH with invalid runtimeState → 422
+	badPatchBody, _ := json.Marshal(map[string]string{
+		"runtimeState": "bogus",
+	})
+	reqBadPatch, _ := http.NewRequest("PATCH", srv.URL+"/api/agents/"+agent3ID, bytes.NewReader(badPatchBody))
+	reqBadPatch.Header.Set("Content-Type", "application/json")
+	respBadPatch, err := http.DefaultClient.Do(reqBadPatch)
+	if err != nil {
+		t.Fatalf("PATCH /api/agents/%s (bad): %v", agent3ID, err)
+	}
+	respBadPatch.Body.Close()
+	if respBadPatch.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("PATCH with bogus state status = %d, want 422", respBadPatch.StatusCode)
+	}
+
+	// Verify persistence: GET the agent and check state is still paused
+	respFetch, err := http.Get(srv.URL + "/api/agents/" + agent3ID)
+	if err != nil {
+		t.Fatalf("GET /api/agents/%s: %v", agent3ID, err)
+	}
+	var fetched map[string]any
+	if err := json.NewDecoder(respFetch.Body).Decode(&fetched); err != nil {
+		t.Fatalf("decoding fetched response: %v", err)
+	}
+	respFetch.Body.Close()
+	fetchedState, _ := fetched["runtimeState"].(string)
+	if fetchedState != "paused" {
+		t.Errorf("after fetch runtimeState = %q, want %q", fetchedState, "paused")
+	}
+
+	// Test 404 on nonexistent agent for pause/resume/terminate
+	nonexistentID := "nonexistent-" + uuid.New().String()
+
+	// Test pause on nonexistent agent
+	reqPauseNonexistent, _ := http.NewRequest("POST", fmt.Sprintf("%s/api/agents/%s/pause", srv.URL, nonexistentID), nil)
+	respPauseNonexistent, err := http.DefaultClient.Do(reqPauseNonexistent)
+	if err != nil {
+		t.Fatalf("pause nonexistent: %v", err)
+	}
+	respPauseNonexistent.Body.Close()
+	if respPauseNonexistent.StatusCode != http.StatusNotFound {
+		t.Errorf("pause nonexistent: expected 404, got %d", respPauseNonexistent.StatusCode)
+	}
+
+	// Test resume on nonexistent agent
+	reqResumeNonexistent, _ := http.NewRequest("POST", fmt.Sprintf("%s/api/agents/%s/resume", srv.URL, nonexistentID), nil)
+	respResumeNonexistent, err := http.DefaultClient.Do(reqResumeNonexistent)
+	if err != nil {
+		t.Fatalf("resume nonexistent: %v", err)
+	}
+	respResumeNonexistent.Body.Close()
+	if respResumeNonexistent.StatusCode != http.StatusNotFound {
+		t.Errorf("resume nonexistent: expected 404, got %d", respResumeNonexistent.StatusCode)
+	}
+
+	// Test terminate on nonexistent agent
+	reqTerminateNonexistent, _ := http.NewRequest("POST", fmt.Sprintf("%s/api/agents/%s/terminate", srv.URL, nonexistentID), nil)
+	respTerminateNonexistent, err := http.DefaultClient.Do(reqTerminateNonexistent)
+	if err != nil {
+		t.Fatalf("terminate nonexistent: %v", err)
+	}
+	respTerminateNonexistent.Body.Close()
+	if respTerminateNonexistent.StatusCode != http.StatusNotFound {
+		t.Errorf("terminate nonexistent: expected 404, got %d", respTerminateNonexistent.StatusCode)
 	}
 }

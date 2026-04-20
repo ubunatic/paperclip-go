@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/issues"
@@ -143,7 +144,7 @@ func TestCheckout(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -204,7 +205,7 @@ func TestRelease(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -258,7 +259,7 @@ func TestUpdate(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -394,7 +395,7 @@ func TestDeleteIssueCheckedOut(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)

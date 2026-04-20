@@ -46,10 +46,10 @@ func runHeartbeatRun(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
 
 	// Initialize services
-	agentSvc := agents.New(s)
+	actLog := activity.New(s)
+	agentSvc := agents.New(s, actLog)
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
-	actLog := activity.New(s)
 	registry := heartbeat.NewDefaultRegistry()
 	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
 

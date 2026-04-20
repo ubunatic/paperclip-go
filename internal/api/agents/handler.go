@@ -21,6 +21,9 @@ func Handler(s *svc.Service) http.Handler {
 	r.Get("/me", getMe(s))
 	r.Get("/{id}", get(s))
 	r.Patch("/{id}", update(s))
+	r.Post("/{id}/pause", pause(s))
+	r.Post("/{id}/resume", resume(s))
+	r.Post("/{id}/terminate", terminate(s))
 	r.Delete("/{id}", delete(s))
 	return r
 }
@@ -144,22 +147,90 @@ func update(s *svc.Service) http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
-			DisplayName *string `json:"displayName"`
-			Role        *string `json:"role"`
+			DisplayName  *string `json:"displayName"`
+			Role         *string `json:"role"`
+			RuntimeState *string `json:"runtimeState"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 			return
 		}
 		// At least one field must be provided
-		if body.DisplayName == nil && body.Role == nil {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of displayName or role is required")
+		if body.DisplayName == nil && body.Role == nil && body.RuntimeState == nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of displayName, role, or runtimeState is required")
 			return
 		}
-		agent, err := s.Update(r.Context(), id, body.DisplayName, body.Role)
+		agent, err := s.Update(r.Context(), id, body.DisplayName, body.Role, body.RuntimeState)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
+				return
+			}
+			if errors.Is(err, svc.ErrInvalidRuntimeState) {
+				respond.Error(w, http.StatusUnprocessableEntity, "invalid_runtime_state", "invalid runtime state")
+				return
+			}
+			log.Printf("agents: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, agent)
+	}
+}
+
+func pause(s *svc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		agent, err := s.Pause(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, svc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
+				return
+			}
+			if errors.Is(err, svc.ErrInvalidTransition) {
+				respond.Error(w, http.StatusUnprocessableEntity, "invalid_transition", "invalid state transition")
+				return
+			}
+			log.Printf("agents: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, agent)
+	}
+}
+
+func resume(s *svc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		agent, err := s.Resume(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, svc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
+				return
+			}
+			if errors.Is(err, svc.ErrInvalidTransition) {
+				respond.Error(w, http.StatusUnprocessableEntity, "invalid_transition", "invalid state transition")
+				return
+			}
+			log.Printf("agents: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, agent)
+	}
+}
+
+func terminate(s *svc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		agent, err := s.Terminate(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, svc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
+				return
+			}
+			if errors.Is(err, svc.ErrInvalidTransition) {
+				respond.Error(w, http.StatusUnprocessableEntity, "invalid_transition", "invalid state transition")
 				return
 			}
 			log.Printf("agents: error: %v", err)
