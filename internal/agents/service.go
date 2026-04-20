@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
@@ -218,21 +219,21 @@ func (s *Service) Update(ctx context.Context, id string, displayName, role, runt
 	query += ` WHERE id = ?`
 	args = append(args, id)
 
-	result, err := s.store.DB.ExecContext(ctx, query, args...)
+	_, err := s.store.DB.ExecContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("updating agent: %w", err)
 	}
 
-	n, err := result.RowsAffected()
+	// RowsAffected can be 0 for legitimate no-op updates (same values, truncated timestamps),
+	// so verify existence with a follow-up read instead of treating 0 as not found.
+	agent, err := s.Get(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("checking rows affected: %w", err)
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("fetching agent after update: %w", err)
 	}
-	if n == 0 {
-		return nil, ErrNotFound
-	}
-
-	// Fetch and return the updated agent
-	return s.Get(ctx, id)
+	return agent, nil
 }
 
 // Pause transitions an agent from idle or running to paused.
@@ -272,8 +273,8 @@ func (s *Service) Pause(ctx context.Context, agentID string) (*domain.Agent, err
 		"from": agent.RuntimeState,
 		"to":   "paused",
 	})
-	if err := s.log.Record(ctx, agent.CompanyID, "system", "", "pause", "agent", agentID, string(metaJSON)); err != nil {
-		fmt.Printf("activity log error: %v\n", err)
+	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "pause", "agent", agentID, string(metaJSON)); err != nil {
+		log.Printf("activity log error: %v\n", err)
 	}
 
 	// Fetch and return the updated agent
@@ -317,8 +318,8 @@ func (s *Service) Resume(ctx context.Context, agentID string) (*domain.Agent, er
 		"from": agent.RuntimeState,
 		"to":   "running",
 	})
-	if err := s.log.Record(ctx, agent.CompanyID, "system", "", "resume", "agent", agentID, string(metaJSON)); err != nil {
-		fmt.Printf("activity log error: %v\n", err)
+	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "resume", "agent", agentID, string(metaJSON)); err != nil {
+		log.Printf("activity log error: %v\n", err)
 	}
 
 	// Fetch and return the updated agent
@@ -362,8 +363,8 @@ func (s *Service) Terminate(ctx context.Context, agentID string) (*domain.Agent,
 		"from": agent.RuntimeState,
 		"to":   "terminated",
 	})
-	if err := s.log.Record(ctx, agent.CompanyID, "system", "", "terminate", "agent", agentID, string(metaJSON)); err != nil {
-		fmt.Printf("activity log error: %v\n", err)
+	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "terminate", "agent", agentID, string(metaJSON)); err != nil {
+		log.Printf("activity log error: %v\n", err)
 	}
 
 	// Fetch and return the updated agent
