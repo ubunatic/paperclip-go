@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/domain"
@@ -79,7 +80,7 @@ func runAgentCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 	a, err := svc.Create(ctx, companyID, flagAgentShortname, flagAgentDisplayName, flagAgentRole, nil, "stub")
 	if err != nil {
 		return err
@@ -97,7 +98,7 @@ func runAgentList(cmd *cobra.Command, args []string) error {
 	defer s.Close()
 
 	ctx := cmd.Context()
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 
 	var list []*domain.Agent
 	if flagAgentCompany != "" {

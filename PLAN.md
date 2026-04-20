@@ -32,7 +32,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/companies` CRUD | 4 | ✅ | — |
 | `PATCH /api/companies/{id}` | 1 | ✅ | A1 |
 | `/api/agents` CRUD + me + patch | 6 | ✅ | — |
-| Agent lifecycle (pause/resume/terminate) | 3 | 🔲 | B1 |
+| Agent lifecycle (pause/resume/terminate) | 3 | ✅ | B1 |
 | Agent configuration field | 1 | 🔲 | B2 |
 | `/api/issues` CRUD + checkout/release | 9 | ✅ | — |
 | Issue status enum validation | 1 | ✅ | A2 |
@@ -82,7 +82,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `issues.documents` / `work_products` | ✅ | 🔲 | C2 |
 | `issues.execution_policy` | ✅ | 🔲 | C2 |
 | `agents.configuration` (YAML/JSON) | ✅ | 🔲 | B2 |
-| `agents.runtime_state` | ✅ | 🔲 | B1 |
+| `agents.runtime_state` | ✅ | ✅ | B1 |
 | `secrets` table | ✅ | 🔲 | F1 |
 | `routines` table | ✅ | 🔲 | G2 |
 | `goals` / `projects` tables | ✅ | 🟡 | — (deferred) |

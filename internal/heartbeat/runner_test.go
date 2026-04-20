@@ -26,7 +26,7 @@ func TestRunnerCreate(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -68,7 +68,7 @@ func TestRunnerGetByID(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -104,7 +104,7 @@ func TestRunnerGetByIDNotFound(t *testing.T) {
 
 	actLog := activity.New(s)
 	commentSvc := comments.New(s)
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	registry := heartbeat.NewDefaultRegistry()
 	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
 
@@ -125,7 +125,7 @@ func TestRunnerUpdate(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -170,7 +170,7 @@ func TestRunnerListByAgent(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -222,7 +222,7 @@ func TestRunnerRunSuccess(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -258,7 +258,7 @@ func TestRunnerRunNotFound(t *testing.T) {
 	// Create heartbeat runner with no agents
 	actLog := activity.New(s)
 	commentSvc := comments.New(s)
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewDefaultRegistry()
 	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
@@ -284,7 +284,7 @@ func TestRunnerRunWithIssue(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -368,7 +368,7 @@ func TestRunnerRunAdapterError(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "error-adapter")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)

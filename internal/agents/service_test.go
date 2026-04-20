@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/issues"
@@ -23,7 +24,7 @@ func TestAgentCreate(t *testing.T) {
 	}
 
 	// Create an agent
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -49,6 +50,9 @@ func TestAgentCreate(t *testing.T) {
 	if agent.CreatedAt.IsZero() {
 		t.Error("CreatedAt should not be zero")
 	}
+	if agent.RuntimeState != "idle" {
+		t.Errorf("RuntimeState = %q, want %q", agent.RuntimeState, "idle")
+	}
 }
 
 func TestAgentGet(t *testing.T) {
@@ -62,7 +66,7 @@ func TestAgentGet(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -83,7 +87,7 @@ func TestAgentGet(t *testing.T) {
 
 func TestAgentGetNotFound(t *testing.T) {
 	s := testutil.NewStore(t)
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 	ctx := context.Background()
 
 	_, err := svc.Get(ctx, "nonexistent-id")
@@ -108,7 +112,7 @@ func TestAgentListByCompany(t *testing.T) {
 	}
 
 	// Create agents for both companies
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 	_, err = svc.Create(ctx, company1.ID, "alice", "Alice", "", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent 1: %v", err)
@@ -153,7 +157,7 @@ func TestAgentUniqueConstraint(t *testing.T) {
 	}
 
 	// Create first agent
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 	_, err = svc.Create(ctx, company.ID, "alice", "Alice", "", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent 1: %v", err)
@@ -177,7 +181,7 @@ func TestDeleteAgent(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -200,7 +204,7 @@ func TestDeleteAgentNotFound(t *testing.T) {
 	s := testutil.NewStore(t)
 	ctx := context.Background()
 
-	svc := agents.New(s)
+	svc := agents.New(s, activity.New(s))
 	err := svc.Delete(ctx, "nonexistent-id")
 	if !errors.Is(err, agents.ErrNotFound) {
 		t.Fatalf("Delete nonexistent: expected ErrNotFound, got %v", err)
@@ -218,7 +222,7 @@ func TestDeleteAgentNoCheckouts(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -242,7 +246,7 @@ func TestDeleteAgentWithHeartbeatRuns(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -289,7 +293,7 @@ func TestDeleteAgentHasActiveCheckout(t *testing.T) {
 		t.Fatalf("Create company: %v", err)
 	}
 
-	agentSvc := agents.New(s)
+	agentSvc := agents.New(s, activity.New(s))
 	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "engineer", nil, "stub")
 	if err != nil {
 		t.Fatalf("Create agent: %v", err)
@@ -322,3 +326,304 @@ func TestDeleteAgentHasActiveCheckout(t *testing.T) {
 	}
 }
 
+func TestPauseAgent(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agent
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := agents.New(s, activity.New(s))
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Pause from idle state
+	paused, err := svc.Pause(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if paused.RuntimeState != "paused" {
+		t.Errorf("RuntimeState = %q, want %q", paused.RuntimeState, "paused")
+	}
+
+	// Verify persistence
+	fetched, err := svc.Get(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Get after pause: %v", err)
+	}
+	if fetched.RuntimeState != "paused" {
+		t.Errorf("Fetched RuntimeState = %q, want %q", fetched.RuntimeState, "paused")
+	}
+}
+
+func TestPauseFromRunning(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agent
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := agents.New(s, activity.New(s))
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Pause to set state to paused first
+	_, err = svc.Pause(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+
+	// Resume to set state to running
+	_, err = svc.Resume(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+
+	// Pause again from running state
+	paused, err := svc.Pause(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Pause from running: %v", err)
+	}
+	if paused.RuntimeState != "paused" {
+		t.Errorf("RuntimeState = %q, want %q", paused.RuntimeState, "paused")
+	}
+
+	// Verify persistence
+	fetched, err := svc.Get(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Get after pause: %v", err)
+	}
+	if fetched.RuntimeState != "paused" {
+		t.Errorf("Fetched RuntimeState = %q, want %q", fetched.RuntimeState, "paused")
+	}
+}
+
+func TestResumeAgent(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agent
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := agents.New(s, activity.New(s))
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Pause first
+	_, err = svc.Pause(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+
+	// Resume from paused state
+	resumed, err := svc.Resume(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if resumed.RuntimeState != "running" {
+		t.Errorf("RuntimeState = %q, want %q", resumed.RuntimeState, "running")
+	}
+
+	// Verify persistence
+	fetched, err := svc.Get(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Get after resume: %v", err)
+	}
+	if fetched.RuntimeState != "running" {
+		t.Errorf("Fetched RuntimeState = %q, want %q", fetched.RuntimeState, "running")
+	}
+}
+
+func TestTerminateAgent(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agent
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := agents.New(s, activity.New(s))
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Terminate from idle state
+	terminated, err := svc.Terminate(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Terminate: %v", err)
+	}
+	if terminated.RuntimeState != "terminated" {
+		t.Errorf("RuntimeState = %q, want %q", terminated.RuntimeState, "terminated")
+	}
+
+	// Verify persistence
+	fetched, err := svc.Get(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Get after terminate: %v", err)
+	}
+	if fetched.RuntimeState != "terminated" {
+		t.Errorf("Fetched RuntimeState = %q, want %q", fetched.RuntimeState, "terminated")
+	}
+}
+
+func TestInvalidStateTransitions(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agent
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := agents.New(s, activity.New(s))
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Pause first
+	_, err = svc.Pause(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+
+	// Try to pause again (already paused)
+	_, err = svc.Pause(ctx, agent.ID)
+	if !errors.Is(err, agents.ErrInvalidTransition) {
+		t.Errorf("Pause paused: expected ErrInvalidTransition, got %v", err)
+	}
+
+	// Resume back to running for terminate test
+	_, err = svc.Resume(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+
+	// Try to resume again (already running)
+	_, err = svc.Resume(ctx, agent.ID)
+	if !errors.Is(err, agents.ErrInvalidTransition) {
+		t.Errorf("Resume running: expected ErrInvalidTransition, got %v", err)
+	}
+
+	// Terminate
+	_, err = svc.Terminate(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Terminate: %v", err)
+	}
+
+	// Try to terminate again (already terminated)
+	_, err = svc.Terminate(ctx, agent.ID)
+	if !errors.Is(err, agents.ErrInvalidTransition) {
+		t.Errorf("Terminate terminated: expected ErrInvalidTransition, got %v", err)
+	}
+
+	// Try to pause terminated agent
+	_, err = svc.Pause(ctx, agent.ID)
+	if !errors.Is(err, agents.ErrInvalidTransition) {
+		t.Errorf("Pause terminated: expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestResumeOnIdleState(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agent (initially in idle state)
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := agents.New(s, activity.New(s))
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Try to resume on idle state (should fail)
+	_, err = svc.Resume(ctx, agent.ID)
+	if !errors.Is(err, agents.ErrInvalidTransition) {
+		t.Errorf("Resume on idle: expected ErrInvalidTransition, got %v", err)
+	}
+}
+
+func TestActivityLoggingOnTransition(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+	log := activity.New(s)
+
+	// Create company
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	// Create agent
+	svc := agents.New(s, log)
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Call Pause (should log the transition)
+	_, err = svc.Pause(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+
+	// Query activity_log and assert entry exists with action="pause", entity_kind="agent"
+	var count int
+	err = s.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM activity_log WHERE entity_id = ? AND entity_kind = 'agent' AND action = 'pause'`,
+		agent.ID,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("Query activity_log: %v", err)
+	}
+	if count == 0 {
+		t.Error("expected activity log entry for pause action, found none")
+	}
+
+	// Call Resume and verify log entry
+	_, err = svc.Resume(ctx, agent.ID)
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+
+	err = s.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM activity_log WHERE entity_id = ? AND entity_kind = 'agent' AND action = 'resume'`,
+		agent.ID,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("Query activity_log for resume: %v", err)
+	}
+	if count == 0 {
+		t.Error("expected activity log entry for resume action, found none")
+	}
+}

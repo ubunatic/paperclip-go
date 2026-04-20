@@ -37,8 +37,8 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 
 	// Services
 	companySvc := companies.New(s)
-	agentSvc := agents.New(s)
 	activityLog := activity.New(s)
+	agentSvc := agents.New(s, activityLog)
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
