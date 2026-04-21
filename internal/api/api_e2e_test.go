@@ -16,7 +16,7 @@ import (
 )
 
 func TestCompaniesE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t) // store managed by t.Cleanup
+	srv, _ := spawnTestServer(t) // store managed by t.Cleanup
 
 	// POST /api/companies → 201 + id
 	body, _ := json.Marshal(map[string]string{
@@ -205,7 +205,7 @@ func TestCompaniesE2E(t *testing.T) {
 }
 
 func TestAgentsE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, _ := spawnTestServer(t)
 
 	// Create a company first
 	companyBody, _ := json.Marshal(map[string]string{
@@ -391,7 +391,7 @@ func TestAgentsE2E(t *testing.T) {
 }
 
 func TestActivityE2E(t *testing.T) {
-	srv, store := testutil.SpawnTestServer(t)
+	srv, store := spawnTestServer(t)
 
 	// Create a company
 	companyBody, _ := json.Marshal(map[string]string{
@@ -473,7 +473,7 @@ This is a test skill for E2E testing.
 		t.Fatalf("writing SKILL.md: %v", err)
 	}
 
-	srv, _ := testutil.SpawnTestServerWithSkillsDir(t, tempdir)
+	srv, _ := spawnTestServerWithSkillsDir(t, tempdir)
 
 	// GET /api/skills → list
 	resp, err := http.Get(srv.URL + "/api/skills")
@@ -523,7 +523,7 @@ This is a test skill for E2E testing.
 }
 
 func TestIssuesE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, _ := spawnTestServer(t)
 
 	// Create a company first
 	companyBody, _ := json.Marshal(map[string]string{
@@ -734,7 +734,7 @@ func TestIssuesE2E(t *testing.T) {
 }
 
 func TestStubEndpointsE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, _ := spawnTestServer(t)
 
 	// Test each stub endpoint
 	endpoints := []string{
@@ -773,7 +773,7 @@ func TestStubEndpointsE2E(t *testing.T) {
 }
 
 func TestUIServingE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, _ := spawnTestServer(t)
 
 	// GET / → 200 with landing page HTML
 	resp, err := http.Get(srv.URL + "/")
@@ -830,7 +830,7 @@ func TestUIServingE2E(t *testing.T) {
 }
 
 func TestHeartbeatE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, _ := spawnTestServer(t)
 
 	// Create a company
 	companyBody, _ := json.Marshal(map[string]string{
@@ -997,7 +997,7 @@ func TestHeartbeatE2E(t *testing.T) {
 }
 
 func TestAgentLifecycleE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, _ := spawnTestServer(t)
 
 	// Create a company first
 	companyBody, _ := json.Marshal(map[string]string{
@@ -1219,7 +1219,7 @@ func TestAgentLifecycleE2E(t *testing.T) {
 }
 
 func TestAgentConfigurationE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, _ := spawnTestServer(t)
 
 	// Create a company
 	companyBody, _ := json.Marshal(map[string]string{
@@ -1356,4 +1356,173 @@ func TestAgentConfigurationE2E(t *testing.T) {
 	if respNonexistent.StatusCode != http.StatusNotFound {
 		t.Errorf("PATCH nonexistent status = %d, want 404", respNonexistent.StatusCode)
 	}
+}
+
+func TestLabelsE2E(t *testing.T) {
+	srv, _ := spawnTestServer(t)
+
+	// Create a company
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Tech Corp",
+		"shortname":   "tech",
+		"description": "Tech company for labels test",
+	})
+	respCompany, _ := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	var createdCompany map[string]any
+	json.NewDecoder(respCompany.Body).Decode(&createdCompany)
+	respCompany.Body.Close()
+	companyID, _ := createdCompany["id"].(string)
+
+	// Create labels
+	label1Body, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"name":      "bug",
+		"color":     "#FF0000",
+	})
+	respLabel1, _ := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(label1Body))
+	if respLabel1.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/labels status = %d, want 201", respLabel1.StatusCode)
+	}
+	var createdLabel1 map[string]any
+	json.NewDecoder(respLabel1.Body).Decode(&createdLabel1)
+	respLabel1.Body.Close()
+	label1ID, _ := createdLabel1["id"].(string)
+
+	label2Body, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"name":      "feature",
+		"color":     "#00FF00",
+	})
+	respLabel2, _ := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(label2Body))
+	var createdLabel2 map[string]any
+	json.NewDecoder(respLabel2.Body).Decode(&createdLabel2)
+	respLabel2.Body.Close()
+	label2ID, _ := createdLabel2["id"].(string)
+
+	// GET /api/labels → list labels
+	respLabelList, _ := http.Get(srv.URL + "/api/labels?companyId=" + companyID)
+	if respLabelList.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/labels status = %d, want 200", respLabelList.StatusCode)
+	}
+	var labelList map[string]any
+	json.NewDecoder(respLabelList.Body).Decode(&labelList)
+	respLabelList.Body.Close()
+	items, _ := labelList["items"].([]any)
+	if len(items) != 2 {
+		t.Errorf("label list len = %d, want 2", len(items))
+	}
+
+	// Create an issue
+	issueBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"title":     "Test issue",
+		"body":      "Test issue body",
+	})
+	respIssue, _ := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	var createdIssue map[string]any
+	json.NewDecoder(respIssue.Body).Decode(&createdIssue)
+	respIssue.Body.Close()
+	issueID, _ := createdIssue["id"].(string)
+
+	// Link label1 to issue
+	linkBody, _ := json.Marshal(map[string]string{
+		"labelId": label1ID,
+	})
+	respLink, _ := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(linkBody))
+	if respLink.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/issues/{id}/labels status = %d, want 200", respLink.StatusCode)
+	}
+	respLink.Body.Close()
+
+	// Link label2 to issue
+	link2Body, _ := json.Marshal(map[string]string{
+		"labelId": label2ID,
+	})
+	respLink2, _ := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(link2Body))
+	respLink2.Body.Close()
+
+	// GET /api/issues/{id} → check labels are returned
+	respGetIssue, _ := http.Get(srv.URL + "/api/issues/" + issueID)
+	if respGetIssue.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues/{id} status = %d, want 200", respGetIssue.StatusCode)
+	}
+	var fetchedIssue map[string]any
+	json.NewDecoder(respGetIssue.Body).Decode(&fetchedIssue)
+	respGetIssue.Body.Close()
+
+	issueLabels, _ := fetchedIssue["labels"].([]any)
+	if len(issueLabels) != 2 {
+		t.Errorf("issue labels len = %d, want 2", len(issueLabels))
+	}
+	if len(issueLabels) > 0 {
+		label1Data, _ := issueLabels[0].(map[string]any)
+		if label1Data["id"] != label1ID {
+			t.Errorf("first label id = %v, want %q", label1Data["id"], label1ID)
+		}
+	}
+
+	// Link label1 again (idempotent) → should still be 1 link
+	respLinkAgain, _ := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(linkBody))
+	respLinkAgain.Body.Close()
+	if respLinkAgain.StatusCode != http.StatusOK {
+		t.Fatalf("POST link again status = %d, want 200", respLinkAgain.StatusCode)
+	}
+
+	// Verify still 2 labels
+	respGetIssue2, _ := http.Get(srv.URL + "/api/issues/" + issueID)
+	var fetchedIssue2 map[string]any
+	json.NewDecoder(respGetIssue2.Body).Decode(&fetchedIssue2)
+	respGetIssue2.Body.Close()
+	issueLabels2, _ := fetchedIssue2["labels"].([]any)
+	if len(issueLabels2) != 2 {
+		t.Errorf("after duplicate link, issue labels len = %d, want 2", len(issueLabels2))
+	}
+
+	// DELETE /api/issues/{id}/labels/{labelId}
+	reqUnlink, _ := http.NewRequest("DELETE", srv.URL+"/api/issues/"+issueID+"/labels/"+label1ID, nil)
+	respUnlink, _ := http.DefaultClient.Do(reqUnlink)
+	if respUnlink.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE /api/issues/{id}/labels/{labelId} status = %d, want 204", respUnlink.StatusCode)
+	}
+	respUnlink.Body.Close()
+
+	// Verify label1 is removed
+	respGetIssue3, _ := http.Get(srv.URL + "/api/issues/" + issueID)
+	var fetchedIssue3 map[string]any
+	json.NewDecoder(respGetIssue3.Body).Decode(&fetchedIssue3)
+	respGetIssue3.Body.Close()
+	issueLabels3, _ := fetchedIssue3["labels"].([]any)
+	if len(issueLabels3) != 1 {
+		t.Errorf("after unlink, issue labels len = %d, want 1", len(issueLabels3))
+	}
+
+	// GET /api/labels/{id}
+	respGetLabel, _ := http.Get(srv.URL + "/api/labels/" + label1ID)
+	if respGetLabel.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/labels/{id} status = %d, want 200", respGetLabel.StatusCode)
+	}
+	var fetchedLabel map[string]any
+	json.NewDecoder(respGetLabel.Body).Decode(&fetchedLabel)
+	respGetLabel.Body.Close()
+	if fetchedLabel["id"] != label1ID {
+		t.Errorf("fetched label id = %v, want %q", fetchedLabel["id"], label1ID)
+	}
+	if fetchedLabel["name"] != "bug" {
+		t.Errorf("fetched label name = %v, want %q", fetchedLabel["name"], "bug")
+	}
+
+	// DELETE /api/labels/{id}
+	reqDeleteLabel, _ := http.NewRequest("DELETE", srv.URL+"/api/labels/"+label1ID, nil)
+	respDeleteLabel, _ := http.DefaultClient.Do(reqDeleteLabel)
+	if respDeleteLabel.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE /api/labels/{id} status = %d, want 204", respDeleteLabel.StatusCode)
+	}
+	respDeleteLabel.Body.Close()
+
+	// Verify label1 is deleted
+	respGetLabelAfterDelete, _ := http.Get(srv.URL + "/api/labels/" + label1ID)
+	if respGetLabelAfterDelete.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET deleted label status = %d, want 404", respGetLabelAfterDelete.StatusCode)
+	}
+	respGetLabelAfterDelete.Body.Close()
 }

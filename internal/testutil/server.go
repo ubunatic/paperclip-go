@@ -2,12 +2,13 @@
 package testutil
 
 import (
-	"net/http/httptest"
+	"context"
 	"path/filepath"
 	"testing"
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
-	"github.com/ubunatic/paperclip-go/internal/api"
+	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
 
@@ -24,29 +25,29 @@ func NewStore(t *testing.T) *store.Store {
 	return s
 }
 
-// SpawnTestServer starts a full httptest.Server backed by a temp SQLite store.
-// Both the server and the store are closed when t finishes.
-func SpawnTestServer(t *testing.T) (*httptest.Server, *store.Store) {
-	t.Helper()
-	s := NewStore(t)
-	skillsDir := filepath.Join(t.TempDir(), "skills")
-	router := api.NewRouter(s, skillsDir, "", "test")
-	srv := httptest.NewServer(router)
-	t.Cleanup(srv.Close)
-	return srv, s
-}
-
-// SpawnTestServerWithSkillsDir starts a full httptest.Server with a specific skills directory.
-func SpawnTestServerWithSkillsDir(t *testing.T, skillsDir string) (*httptest.Server, *store.Store) {
-	t.Helper()
-	s := NewStore(t)
-	router := api.NewRouter(s, skillsDir, "", "test")
-	srv := httptest.NewServer(router)
-	t.Cleanup(srv.Close)
-	return srv, s
-}
-
 // SpawnActivityLog returns a new activity Log using the given store.
 func SpawnActivityLog(s *store.Store) *activity.Log {
 	return activity.New(s)
+}
+
+// CreateTestCompany creates a test company and returns its ID.
+func CreateTestCompany(t *testing.T, s *store.Store) string {
+	t.Helper()
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(context.Background(), "Test Corp", "test-corp", "Test company")
+	if err != nil {
+		t.Fatalf("CreateTestCompany: %v", err)
+	}
+	return company.ID
+}
+
+// CreateTestIssue creates a test issue in a company and returns its ID.
+func CreateTestIssue(t *testing.T, s *store.Store, companyID string) string {
+	t.Helper()
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(context.Background(), companyID, "Test Issue", "Test body", nil)
+	if err != nil {
+		t.Fatalf("CreateTestIssue: %v", err)
+	}
+	return issue.ID
 }
