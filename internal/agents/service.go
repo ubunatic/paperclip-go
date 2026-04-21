@@ -205,7 +205,7 @@ func (s *Service) Update(ctx context.Context, id string, displayName, role, runt
 		// Fetch current agent inside transaction to merge configuration
 		var a domain.Agent
 		var createdAt, updatedAt string
-		var configJSON string
+		var configJSON sql.NullString
 		row := tx.QueryRowContext(ctx,
 			`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
 			 FROM agents WHERE id = ?`, id,
@@ -217,11 +217,11 @@ func (s *Service) Update(ctx context.Context, id string, displayName, role, runt
 			return err
 		}
 
-		// Parse existing configuration
+		// Parse existing configuration; treat NULL as empty config
 		a.Configuration = make(map[string]any)
-		if configJSON != "" {
-			if err := json.Unmarshal([]byte(configJSON), &a.Configuration); err != nil {
-				return fmt.Errorf("parsing configuration %q: %w", configJSON, err)
+		if configJSON.Valid && configJSON.String != "" {
+			if err := json.Unmarshal([]byte(configJSON.String), &a.Configuration); err != nil {
+				return fmt.Errorf("parsing configuration %q: %w", configJSON.String, err)
 			}
 		}
 
@@ -434,16 +434,16 @@ type scanner interface {
 func scanAgent(s scanner) (*domain.Agent, error) {
 	var a domain.Agent
 	var createdAt, updatedAt string
-	var configJSON string
+	var configJSON sql.NullString
 	if err := s.Scan(&a.ID, &a.CompanyID, &a.Shortname, &a.DisplayName, &a.Role, &a.ReportsTo, &a.Adapter, &a.RuntimeState, &configJSON, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
 
-	// Parse configuration JSON
+	// Parse configuration JSON; treat NULL as empty config
 	a.Configuration = make(map[string]any)
-	if configJSON != "" {
-		if err := json.Unmarshal([]byte(configJSON), &a.Configuration); err != nil {
-			return nil, fmt.Errorf("parsing configuration %q: %w", configJSON, err)
+	if configJSON.Valid && configJSON.String != "" {
+		if err := json.Unmarshal([]byte(configJSON.String), &a.Configuration); err != nil {
+			return nil, fmt.Errorf("parsing configuration %q: %w", configJSON.String, err)
 		}
 	}
 

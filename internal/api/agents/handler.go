@@ -165,14 +165,14 @@ func update(s *svc.Service) http.HandlerFunc {
 		// Parse configuration if provided
 		var configuration map[string]any
 		if body.Configuration != nil {
-			// Check if it's null
-			if string(body.Configuration) == "null" {
-				respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "configuration cannot be null")
-				return
-			}
 			// Unmarshal configuration
 			if err := json.Unmarshal(body.Configuration, &configuration); err != nil {
 				respond.Error(w, http.StatusBadRequest, "bad_request", "invalid configuration JSON")
+				return
+			}
+			// Check if it's null (after unmarshal, which properly handles whitespace)
+			if configuration == nil {
+				respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "configuration cannot be null")
 				return
 			}
 		}
