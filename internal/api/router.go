@@ -15,6 +15,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/api/health"
 	apiheartbeat "github.com/ubunatic/paperclip-go/internal/api/heartbeat"
 	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
+	apilabels "github.com/ubunatic/paperclip-go/internal/api/labels"
 	apiskills "github.com/ubunatic/paperclip-go/internal/api/skills"
 	apistubs "github.com/ubunatic/paperclip-go/internal/api/stubs"
 	"github.com/ubunatic/paperclip-go/internal/comments"
@@ -22,6 +23,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
 	"github.com/ubunatic/paperclip-go/internal/issues"
+	"github.com/ubunatic/paperclip-go/internal/labels"
 	"github.com/ubunatic/paperclip-go/internal/skills"
 	"github.com/ubunatic/paperclip-go/internal/store"
 	"github.com/ubunatic/paperclip-go/internal/ui"
@@ -41,6 +43,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 	agentSvc := agents.New(s, activityLog)
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
+	labelSvc := labels.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
 	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
 
@@ -57,7 +60,8 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 		r.Mount("/companies", apicompanies.Handler(companySvc))
 		r.Mount("/agents", apiagents.Handler(agentSvc))
 		r.Mount("/activity", apiactivity.Handler(activityLog))
-		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc))
+		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc, labelSvc))
+		r.Mount("/labels", apilabels.Handler(labelSvc))
 		r.Mount("/heartbeat", apiheartbeat.Handler(heartbeatRunner))
 		// GET /skills is read-only; use Get, not Mount
 		r.Get("/skills", apiskills.Handler(skillsList))

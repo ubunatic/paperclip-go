@@ -15,6 +15,7 @@ type Issue struct {
 	CheckedOutBy  *string    `json:"checkedOutBy"`
 	CheckedOutAt  *time.Time `json:"checkedOutAt"`
 	ParentIssueID *string    `json:"parentIssueId"`
+	Labels        []*Label   `json:"labels"`
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
 }
