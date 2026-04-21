@@ -44,21 +44,26 @@ func (s *Service) Create(ctx context.Context, companyID, shortname, displayName,
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	a := &domain.Agent{
-		ID:           ids.NewUUID(),
-		CompanyID:    companyID,
-		Shortname:    shortname,
-		DisplayName:  displayName,
-		Role:         role,
-		ReportsTo:    reportsTo,
-		Adapter:      adapter,
-		RuntimeState: "idle",
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:            ids.NewUUID(),
+		CompanyID:     companyID,
+		Shortname:     shortname,
+		DisplayName:   displayName,
+		Role:          role,
+		ReportsTo:     reportsTo,
+		Adapter:       adapter,
+		RuntimeState:  "idle",
+		Configuration: make(map[string]any),
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
-	_, err := s.store.DB.ExecContext(ctx,
-		`INSERT INTO agents(id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		a.ID, a.CompanyID, a.Shortname, a.DisplayName, a.Role, a.ReportsTo, a.Adapter, a.RuntimeState, ts, ts,
+	configJSON, err := json.Marshal(a.Configuration)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling configuration: %w", err)
+	}
+	_, err = s.store.DB.ExecContext(ctx,
+		`INSERT INTO agents(id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		a.ID, a.CompanyID, a.Shortname, a.DisplayName, a.Role, a.ReportsTo, a.Adapter, a.RuntimeState, string(configJSON), ts, ts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("inserting agent: %w", err)
@@ -69,7 +74,7 @@ func (s *Service) Create(ctx context.Context, companyID, shortname, displayName,
 // Get returns the agent with the given ID, or ErrNotFound if it doesn't exist.
 func (s *Service) Get(ctx context.Context, id string) (*domain.Agent, error) {
 	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, created_at, updated_at
+		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
 		 FROM agents WHERE id = ?`, id,
 	)
 	a, err := scanAgent(row)
@@ -82,7 +87,7 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Agent, error) {
 // List returns all agents ordered by creation time.
 func (s *Service) List(ctx context.Context) ([]*domain.Agent, error) {
 	rows, err := s.store.DB.QueryContext(ctx,
-		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, created_at, updated_at
+		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
 		 FROM agents ORDER BY created_at`,
 	)
 	if err != nil {
@@ -107,7 +112,7 @@ func (s *Service) List(ctx context.Context) ([]*domain.Agent, error) {
 // ListByCompany returns all agents for a given company, ordered by creation time.
 func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domain.Agent, error) {
 	rows, err := s.store.DB.QueryContext(ctx,
-		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, created_at, updated_at
+		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
 		 FROM agents WHERE company_id = ? ORDER BY created_at`,
 		companyID,
 	)
@@ -133,7 +138,7 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domai
 // GetByShortname returns the agent with the given company ID and shortname, or ErrNotFound if it doesn't exist.
 func (s *Service) GetByShortname(ctx context.Context, companyID, shortname string) (*domain.Agent, error) {
 	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, created_at, updated_at
+		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
 		 FROM agents WHERE company_id = ? AND shortname = ?`, companyID, shortname,
 	)
 	a, err := scanAgent(row)
@@ -188,52 +193,102 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	})
 }
 
-// Update updates the displayName, role, and/or runtimeState of an agent.
+// Update updates the displayName, role, runtimeState, and/or configuration of an agent.
+// Configuration is merge-patched: new keys are added, existing keys are updated.
 // NOTE: This is an admin override that bypasses the state machine validation.
-func (s *Service) Update(ctx context.Context, id string, displayName, role, runtimeState *string) (*domain.Agent, error) {
-	now := time.Now().UTC().Truncate(time.Second)
-	ts := now.Format(time.RFC3339)
+func (s *Service) Update(ctx context.Context, id string, displayName, role, runtimeState *string, configuration map[string]any) (*domain.Agent, error) {
+	var result *domain.Agent
+	err := s.store.WithTx(ctx, func(tx *sql.Tx) error {
+		now := time.Now().UTC().Truncate(time.Second)
+		ts := now.Format(time.RFC3339)
 
-	// Build the UPDATE query dynamically
-	query := `UPDATE agents SET updated_at = ?`
-	args := []interface{}{ts}
-
-	if displayName != nil {
-		query += `, display_name = ?`
-		args = append(args, *displayName)
-	}
-
-	if role != nil {
-		query += `, role = ?`
-		args = append(args, *role)
-	}
-
-	if runtimeState != nil {
-		if !domain.IsValidRuntimeState(*runtimeState) {
-			return nil, ErrInvalidRuntimeState
+		// Fetch current agent inside transaction to merge configuration
+		var a domain.Agent
+		var createdAt, updatedAt string
+		var configJSON string
+		row := tx.QueryRowContext(ctx,
+			`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
+			 FROM agents WHERE id = ?`, id,
+		)
+		if err := row.Scan(&a.ID, &a.CompanyID, &a.Shortname, &a.DisplayName, &a.Role, &a.ReportsTo, &a.Adapter, &a.RuntimeState, &configJSON, &createdAt, &updatedAt); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
 		}
-		query += `, runtime_state = ?`
-		args = append(args, *runtimeState)
-	}
 
-	query += ` WHERE id = ?`
-	args = append(args, id)
-
-	_, err := s.store.DB.ExecContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("updating agent: %w", err)
-	}
-
-	// RowsAffected can be 0 for legitimate no-op updates (same values, truncated timestamps),
-	// so verify existence with a follow-up read instead of treating 0 as not found.
-	agent, err := s.Get(ctx, id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, ErrNotFound
+		// Parse existing configuration
+		a.Configuration = make(map[string]any)
+		if configJSON != "" {
+			if err := json.Unmarshal([]byte(configJSON), &a.Configuration); err != nil {
+				return fmt.Errorf("parsing configuration %q: %w", configJSON, err)
+			}
 		}
-		return nil, fmt.Errorf("fetching agent after update: %w", err)
+
+		// Build the UPDATE query dynamically
+		query := `UPDATE agents SET updated_at = ?`
+		args := []interface{}{ts}
+
+		if displayName != nil {
+			query += `, display_name = ?`
+			args = append(args, *displayName)
+			a.DisplayName = *displayName
+		}
+
+		if role != nil {
+			query += `, role = ?`
+			args = append(args, *role)
+			a.Role = *role
+		}
+
+		if runtimeState != nil {
+			if !domain.IsValidRuntimeState(*runtimeState) {
+				return ErrInvalidRuntimeState
+			}
+			query += `, runtime_state = ?`
+			args = append(args, *runtimeState)
+			a.RuntimeState = *runtimeState
+		}
+
+		if configuration != nil {
+			// Merge new configuration into existing
+			for k, v := range configuration {
+				a.Configuration[k] = v
+			}
+
+			// Serialize merged configuration to JSON
+			mergedConfigJSON, err := json.Marshal(a.Configuration)
+			if err != nil {
+				return fmt.Errorf("marshaling configuration: %w", err)
+			}
+
+			query += `, configuration = ?`
+			args = append(args, string(mergedConfigJSON))
+		}
+
+		query += ` WHERE id = ?`
+		args = append(args, id)
+
+		_, err := tx.ExecContext(ctx, query, args...)
+		if err != nil {
+			return fmt.Errorf("updating agent: %w", err)
+		}
+
+		// Parse timestamps for result
+		createdTime, err := time.Parse(time.RFC3339, createdAt)
+		if err != nil {
+			return fmt.Errorf("parsing created_at %q: %w", createdAt, err)
+		}
+
+		a.CreatedAt = createdTime
+		a.UpdatedAt = now
+		result = &a
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return agent, nil
+	return result, nil
 }
 
 // Pause transitions an agent from idle or running to paused.
@@ -379,9 +434,19 @@ type scanner interface {
 func scanAgent(s scanner) (*domain.Agent, error) {
 	var a domain.Agent
 	var createdAt, updatedAt string
-	if err := s.Scan(&a.ID, &a.CompanyID, &a.Shortname, &a.DisplayName, &a.Role, &a.ReportsTo, &a.Adapter, &a.RuntimeState, &createdAt, &updatedAt); err != nil {
+	var configJSON string
+	if err := s.Scan(&a.ID, &a.CompanyID, &a.Shortname, &a.DisplayName, &a.Role, &a.ReportsTo, &a.Adapter, &a.RuntimeState, &configJSON, &createdAt, &updatedAt); err != nil {
 		return nil, err
 	}
+
+	// Parse configuration JSON
+	a.Configuration = make(map[string]any)
+	if configJSON != "" {
+		if err := json.Unmarshal([]byte(configJSON), &a.Configuration); err != nil {
+			return nil, fmt.Errorf("parsing configuration %q: %w", configJSON, err)
+		}
+	}
+
 	var err error
 	a.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
 	if err != nil {
