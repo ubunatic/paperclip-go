@@ -1217,3 +1217,143 @@ func TestAgentLifecycleE2E(t *testing.T) {
 		t.Errorf("terminate nonexistent: expected 404, got %d", respTerminateNonexistent.StatusCode)
 	}
 }
+
+func TestAgentConfigurationE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Create a company
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	respCompany.Body.Close()
+	companyID, _ := company["id"].(string)
+
+	// Create an agent
+	agentBody, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "alice",
+		"displayName": "Alice",
+		"role":        "manager",
+		"adapter":     "stub",
+	})
+	respAgent, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agentBody))
+	if err != nil {
+		t.Fatalf("POST /api/agents: %v", err)
+	}
+	var created map[string]any
+	if err := json.NewDecoder(respAgent.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	respAgent.Body.Close()
+	agentID, _ := created["id"].(string)
+
+	// Check initial configuration is empty
+	initialConfig, _ := created["configuration"].(map[string]any)
+	if initialConfig == nil || len(initialConfig) != 0 {
+		t.Errorf("initial configuration = %v, want empty map", initialConfig)
+	}
+
+	// PATCH with configuration → 200
+	patchBody1, _ := json.Marshal(map[string]any{
+		"configuration": map[string]any{
+			"model": "claude-opus-4",
+		},
+	})
+	reqPatch1, _ := http.NewRequest("PATCH", srv.URL+"/api/agents/"+agentID, bytes.NewReader(patchBody1))
+	reqPatch1.Header.Set("Content-Type", "application/json")
+	respPatch1, err := http.DefaultClient.Do(reqPatch1)
+	if err != nil {
+		t.Fatalf("PATCH /api/agents/%s: %v", agentID, err)
+	}
+	var patched1 map[string]any
+	if err := json.NewDecoder(respPatch1.Body).Decode(&patched1); err != nil {
+		t.Fatalf("decoding patch response: %v", err)
+	}
+	respPatch1.Body.Close()
+	if respPatch1.StatusCode != http.StatusOK {
+		t.Errorf("PATCH status = %d, want 200", respPatch1.StatusCode)
+	}
+
+	patchedConfig1, _ := patched1["configuration"].(map[string]any)
+	if patchedConfig1["model"] != "claude-opus-4" {
+		t.Errorf("configuration[model] = %v, want %q", patchedConfig1["model"], "claude-opus-4")
+	}
+
+	// GET to verify persistence
+	respGet1, err := http.Get(srv.URL + "/api/agents/" + agentID)
+	if err != nil {
+		t.Fatalf("GET /api/agents/%s: %v", agentID, err)
+	}
+	var fetched1 map[string]any
+	if err := json.NewDecoder(respGet1.Body).Decode(&fetched1); err != nil {
+		t.Fatalf("decoding GET response: %v", err)
+	}
+	respGet1.Body.Close()
+
+	fetchedConfig1, _ := fetched1["configuration"].(map[string]any)
+	if fetchedConfig1["model"] != "claude-opus-4" {
+		t.Errorf("fetched configuration[model] = %v, want %q", fetchedConfig1["model"], "claude-opus-4")
+	}
+
+	// PATCH with merge: add temperature, preserve model
+	patchBody2, _ := json.Marshal(map[string]any{
+		"configuration": map[string]any{
+			"temperature": 0.7,
+		},
+	})
+	reqPatch2, _ := http.NewRequest("PATCH", srv.URL+"/api/agents/"+agentID, bytes.NewReader(patchBody2))
+	reqPatch2.Header.Set("Content-Type", "application/json")
+	respPatch2, err := http.DefaultClient.Do(reqPatch2)
+	if err != nil {
+		t.Fatalf("PATCH merge /api/agents/%s: %v", agentID, err)
+	}
+	var patched2 map[string]any
+	if err := json.NewDecoder(respPatch2.Body).Decode(&patched2); err != nil {
+		t.Fatalf("decoding merge patch response: %v", err)
+	}
+	respPatch2.Body.Close()
+
+	patchedConfig2, _ := patched2["configuration"].(map[string]any)
+	if patchedConfig2["model"] != "claude-opus-4" {
+		t.Errorf("merged configuration[model] = %v, want %q (should be preserved)", patchedConfig2["model"], "claude-opus-4")
+	}
+	if patchedConfig2["temperature"] != float64(0.7) {
+		t.Errorf("merged configuration[temperature] = %v, want 0.7", patchedConfig2["temperature"])
+	}
+
+	// PATCH with empty body → 422
+	emptyPatchBody, _ := json.Marshal(map[string]any{})
+	reqEmptyPatch, _ := http.NewRequest("PATCH", srv.URL+"/api/agents/"+agentID, bytes.NewReader(emptyPatchBody))
+	reqEmptyPatch.Header.Set("Content-Type", "application/json")
+	respEmptyPatch, err := http.DefaultClient.Do(reqEmptyPatch)
+	if err != nil {
+		t.Fatalf("PATCH empty /api/agents/%s: %v", agentID, err)
+	}
+	respEmptyPatch.Body.Close()
+	if respEmptyPatch.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("empty PATCH status = %d, want 422", respEmptyPatch.StatusCode)
+	}
+
+	// PATCH nonexistent agent → 404
+	nonexistentID := "nonexistent-" + uuid.New().String()
+	reqNonexistent, _ := http.NewRequest("PATCH", srv.URL+"/api/agents/"+nonexistentID, bytes.NewReader(patchBody1))
+	reqNonexistent.Header.Set("Content-Type", "application/json")
+	respNonexistent, err := http.DefaultClient.Do(reqNonexistent)
+	if err != nil {
+		t.Fatalf("PATCH nonexistent /api/agents/%s: %v", nonexistentID, err)
+	}
+	respNonexistent.Body.Close()
+	if respNonexistent.StatusCode != http.StatusNotFound {
+		t.Errorf("PATCH nonexistent status = %d, want 404", respNonexistent.StatusCode)
+	}
+}

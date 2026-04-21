@@ -33,7 +33,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `PATCH /api/companies/{id}` | 1 | ✅ | A1 |
 | `/api/agents` CRUD + me + patch | 6 | ✅ | — |
 | Agent lifecycle (pause/resume/terminate) | 3 | ✅ | B1 |
-| Agent configuration field | 1 | 🔲 | B2 |
+| Agent configuration field | 1 | ✅ | B2 |
 | `/api/issues` CRUD + checkout/release | 9 | ✅ | — |
 | Issue status enum validation | 1 | ✅ | A2 |
 | Issue labels | 5+ | 🔲 | C1 |
@@ -81,7 +81,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `issues.labels` (junction table) | ✅ | 🔲 | C1 |
 | `issues.documents` / `work_products` | ✅ | 🔲 | C2 |
 | `issues.execution_policy` | ✅ | 🔲 | C2 |
-| `agents.configuration` (YAML/JSON) | ✅ | 🔲 | B2 |
+| `agents.configuration` (YAML/JSON) | ✅ | ✅ | B2 |
 | `agents.runtime_state` | ✅ | ✅ | B1 |
 | `secrets` table | ✅ | 🔲 | F1 |
 | `routines` table | ✅ | 🔲 | G2 |
@@ -177,17 +177,18 @@ Tasks:
 
 Acceptance: `POST /api/agents/$AID/pause` → 200 with `runtimeState: "paused"`.
 
-#### B2 — Agent `configuration` field
+#### B2 — Agent `configuration` field ✅
 
 **Files:** `internal/store/migrations/0003_agent_config.sql`, `internal/domain/agent.go`, `internal/agents/service.go`
 
-Tasks:
+Tasks: ✅ COMPLETE
 - Migration: `ALTER TABLE agents ADD COLUMN configuration TEXT DEFAULT '{}'` (stored as JSON string).
 - Add `Configuration map[string]any` (serialized to/from JSON) to `domain.Agent`.
 - `PATCH /api/agents/{id}` accepts `configuration` key; merge-patches existing config.
 - Unit tests: set config, retrieve config, partial update preserves existing keys.
+- E2E test added for configuration PATCH endpoint.
 
-Acceptance: `PATCH /api/agents/$AID -d '{"configuration":{"model":"claude-opus-4"}}'` → 200; `GET /api/agents/$AID` → config persisted.
+Acceptance: ✅ PATCH /api/agents/$AID -d '{"configuration":{"model":"claude-opus-4"}}' → 200; GET /api/agents/$AID → config persisted.
 
 ---
 

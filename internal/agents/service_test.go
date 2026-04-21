@@ -627,3 +627,58 @@ func TestActivityLoggingOnTransition(t *testing.T) {
 		t.Error("expected activity log entry for resume action, found none")
 	}
 }
+
+func TestAgentConfigurationNotAltered(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	// Create an agent
+	svc := agents.New(s, activity.New(s))
+	agent, err := svc.Create(ctx, company.ID, "alice", "Alice", "manager", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Update with initial configuration
+	config := map[string]any{"key1": "value1"}
+	updated, err := svc.Update(ctx, agent.ID, nil, nil, nil, config)
+	if err != nil {
+		t.Fatalf("Update with config: %v", err)
+	}
+	if updated.Configuration == nil || updated.Configuration["key1"] != "value1" {
+		t.Errorf("Configuration not set correctly: %v", updated.Configuration)
+	}
+
+	// Update only displayName, verify configuration unchanged
+	newDisplay := "Alice Updated"
+	updated2, err := svc.Update(ctx, agent.ID, &newDisplay, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Update displayName: %v", err)
+	}
+	if updated2.DisplayName != "Alice Updated" {
+		t.Errorf("DisplayName = %q, want %q", updated2.DisplayName, "Alice Updated")
+	}
+	if updated2.Configuration == nil || updated2.Configuration["key1"] != "value1" {
+		t.Errorf("Configuration was altered: %v", updated2.Configuration)
+	}
+}
+
+func TestAgentConfigurationUpdateNotFound(t *testing.T) {
+	s := testutil.NewStore(t)
+	svc := agents.New(s, activity.New(s))
+	ctx := context.Background()
+
+	// Try to update configuration for non-existent agent
+	config := map[string]any{"key1": "value1"}
+	_, err := svc.Update(ctx, "nonexistent-id", nil, nil, nil, config)
+	if !errors.Is(err, agents.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+}

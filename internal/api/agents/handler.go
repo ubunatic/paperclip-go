@@ -147,20 +147,37 @@ func update(s *svc.Service) http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
-			DisplayName  *string `json:"displayName"`
-			Role         *string `json:"role"`
-			RuntimeState *string `json:"runtimeState"`
+			DisplayName   *string         `json:"displayName"`
+			Role          *string         `json:"role"`
+			RuntimeState  *string         `json:"runtimeState"`
+			Configuration json.RawMessage `json:"configuration"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 			return
 		}
 		// At least one field must be provided
-		if body.DisplayName == nil && body.Role == nil && body.RuntimeState == nil {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of displayName, role, or runtimeState is required")
+		if body.DisplayName == nil && body.Role == nil && body.RuntimeState == nil && body.Configuration == nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of displayName, role, runtimeState, or configuration is required")
 			return
 		}
-		agent, err := s.Update(r.Context(), id, body.DisplayName, body.Role, body.RuntimeState)
+
+		// Parse configuration if provided
+		var configuration map[string]any
+		if body.Configuration != nil {
+			// Unmarshal configuration
+			if err := json.Unmarshal(body.Configuration, &configuration); err != nil {
+				respond.Error(w, http.StatusBadRequest, "bad_request", "invalid configuration JSON")
+				return
+			}
+			// Check if it's null (after unmarshal, which properly handles whitespace)
+			if configuration == nil {
+				respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "configuration cannot be null")
+				return
+			}
+		}
+
+		agent, err := s.Update(r.Context(), id, body.DisplayName, body.Role, body.RuntimeState, configuration)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
