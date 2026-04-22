@@ -186,6 +186,9 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 				if errors.Is(errIssue, sql.ErrNoRows) {
 					return ErrIssueNotFound
 				}
+				if errIssue != nil {
+					return fmt.Errorf("checking issue existence: %w", errIssue)
+				}
 				return ErrNotFound
 			}
 			return fmt.Errorf("linking label to issue: %w", err)

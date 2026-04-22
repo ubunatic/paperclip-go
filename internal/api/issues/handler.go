@@ -368,7 +368,7 @@ func removeLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 				respond.Error(w, http.StatusNotFound, "not_found", "label association not found")
 				return
 			}
-			log.Printf("labels: error unlinking from issue: %v", err)
+			log.Printf("issues: error unlinking from issue: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
