@@ -60,7 +60,7 @@ merge-upstream: ⚙️  ## Auto-merge upstream changes while preserving Go-speci
 	git checkout HEAD -- ${OURS}
 	@if git diff --cached --quiet; \
 	then echo "✅ Already in sync, nothing to commit."; \
-	else git commit -m "Sync upstream (preserving Go-specific core)" &&
-		 echo "✅ Upstream changes merged (Go-specific core preserved)."
+	else git commit -m "Sync upstream (preserving Go-specific core)" && \
+		 echo "✅ Upstream changes merged (Go-specific core preserved)." \
 		 echo "✅ Upstream changes merged (Go-specific core preserved)."; \
 	fi

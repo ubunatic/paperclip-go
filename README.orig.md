@@ -1,11 +1,3 @@
-> [!Warning]
-> This is an experimental fork!
-> 
-> Goals:
-> 1. Get rid of npm/TS/node.js
-> 2. Use Go std. lib where possible to have mininmal dependencies
-> 3. See how easy it is to let an agent refactor the project
-
 <p align="center">
   <img src="doc/assets/header.png" alt="Paperclip — runs your business" width="720" />
 </p>
@@ -264,10 +256,10 @@ See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full development guide.
 - ✅ Scheduled Routines
 - ✅ Better Budgeting
 - ✅ Agent Reviews and Approvals
-- ⚪ Multiple Human Users
+- ✅ Multiple Human Users
 - ⚪ Cloud / Sandbox agents (e.g. Cursor / e2b agents)
 - ⚪ Artifacts & Work Products
-- ⚪ Memory & Knowledge
+- ⚪ Memory / Knowledge
 - ⚪ Enforced Outcomes
 - ⚪ MAXIMIZER MODE
 - ⚪ Deep Planning
@@ -277,6 +269,8 @@ See [doc/DEVELOPING.md](doc/DEVELOPING.md) for the full development guide.
 - ⚪ CEO Chat
 - ⚪ Cloud deployments
 - ⚪ Desktop App
+
+This is the short roadmap preview. See the full roadmap in [ROADMAP.md](ROADMAP.md).
 
 <br/>
 
