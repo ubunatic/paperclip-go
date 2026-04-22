@@ -48,23 +48,12 @@ sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
 	$(MAKE) clean-wt WT=${WT}
 	@echo "✅ Upstream repository synced to upstream branch."
 
+OURS=README.md cmd internal Makefile go.*
 merge-upstream: ⚙️  ## Auto-merge upstream after sync-upstream
-	git fetch origin upstream
-	@echo "🛡️ Checking for uncommitted changes before merging..."
-	@git diff --quiet || { echo "❌ Uncommitted changes!. Please commit before merging."; exit 1; }
-	@echo "💾 Backed up README.md tmp/README.md to preserve changes."
-	@# git checkout -f upstream -- README.md .github/PULL_REQUEST_TEMPLATE.md
-	@echo "⛓️ Incompatible files are in upstream state."
-	@echo "☑️  Ready sync the rest without conflicts."
-	git merge upstream -m "Merge upstream into master" --no-ff --no-commit
-	@echo "✍️ Renaming incompatible files after merge..."
-	mv README.md README.orig.md
-	mv .github/PULL_REQUEST_TEMPLATE.md .github/PULL_REQUEST_TEMPLATE.disabled.md
-	git checkout --ours README.md .github/PULL_REQUEST_TEMPLATE.md
-
-bla:
-	@echo "☑️  Renamed incompatible files to avoid conflicts."
-	@# git add .
-	@echo "💾 Restored README.md from backup."
-	@# git commit -m "Merge upstream changes and resolve conflicts" -q
-	@echo "✅ Upstream merged into current branch"
+	git fetch upstream
+	git merge upstream --no-commit --no-ff || true
+	git checkout upstream -- README.md
+	git mv -f README.md README.orig.md
+	git rm -f .github/PULL_REQUEST_TEMPLATE.md 2>/dev/null || true
+	git checkout HEAD -- ${OURS}
+	git commit -m "Sync upstream (preserving Go-specific core)"
