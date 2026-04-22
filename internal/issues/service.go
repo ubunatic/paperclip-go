@@ -358,6 +358,8 @@ func scanIssue(s scanner) (*domain.Issue, error) {
 	i.AssigneeID = assigneeID
 	i.CheckedOutBy = checkedOutBy
 	i.ParentIssueID = parentIssueID
+	// Initialize Labels to empty slice to ensure it's never null in JSON
+	i.Labels = make([]*domain.Label, 0)
 
 	var err error
 	i.CreatedAt, err = time.Parse(time.RFC3339, createdAt)

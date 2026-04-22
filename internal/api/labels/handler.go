@@ -60,6 +60,10 @@ func create(s *lsvc.Service) http.HandlerFunc {
 		}
 		label, err := s.Create(r.Context(), body.CompanyID, body.Name, body.Color)
 		if err != nil {
+			if errors.Is(err, lsvc.ErrDuplicate) {
+				respond.Error(w, http.StatusConflict, "duplicate_error", "label with this name already exists for the company")
+				return
+			}
 			log.Printf("labels: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return

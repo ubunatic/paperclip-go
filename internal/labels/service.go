@@ -35,6 +35,15 @@ func New(s *store.Store) *Service {
 // Create inserts a new label and returns the created entity.
 // Returns ErrDuplicate if a label with the same name already exists for the company.
 func (s *Service) Create(ctx context.Context, companyID, name, color string) (*domain.Label, error) {
+	// Pre-flight check: ensure label doesn't already exist
+	existing, err := s.GetByNameAndCompany(ctx, companyID, name)
+	if err != nil {
+		return nil, fmt.Errorf("checking for duplicate label: %w", err)
+	}
+	if existing != nil {
+		return nil, ErrDuplicate
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	label := &domain.Label{
@@ -45,7 +54,7 @@ func (s *Service) Create(ctx context.Context, companyID, name, color string) (*d
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	_, err := s.store.DB.ExecContext(ctx,
+	_, err = s.store.DB.ExecContext(ctx,
 		`INSERT INTO labels(id, company_id, name, color, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		label.ID, label.CompanyID, label.Name, label.Color, ts, ts,
@@ -132,9 +141,15 @@ func (s *Service) GetByNameAndCompany(ctx context.Context, companyID, name strin
 
 // LinkToIssue adds a label to an issue (idempotent).
 // Returns ErrIssueNotFound if the issue does not exist.
+// Returns ErrNotFound if the label does not exist.
 func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) error {
 	// Verify the issue exists
 	if err := s.issueExists(ctx, issueID); err != nil {
+		return err
+	}
+
+	// Verify the label exists
+	if err := s.labelExists(ctx, labelID); err != nil {
 		return err
 	}
 
@@ -196,7 +211,7 @@ func (s *Service) GetLabelsForIssue(ctx context.Context, issueID string) ([]*dom
 
 // issueExists checks if an issue exists.
 func (s *Service) issueExists(ctx context.Context, issueID string) error {
-	var exists sql.NullString
+	var exists string
 	err := s.store.DB.QueryRowContext(ctx,
 		`SELECT id FROM issues WHERE id = ? LIMIT 1`,
 		issueID,
@@ -206,6 +221,22 @@ func (s *Service) issueExists(ctx context.Context, issueID string) error {
 			return ErrIssueNotFound
 		}
 		return fmt.Errorf("checking issue exists: %w", err)
+	}
+	return nil
+}
+
+// labelExists checks if a label exists.
+func (s *Service) labelExists(ctx context.Context, labelID string) error {
+	var exists string
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT id FROM labels WHERE id = ? LIMIT 1`,
+		labelID,
+	).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("checking label exists: %w", err)
 	}
 	return nil
 }

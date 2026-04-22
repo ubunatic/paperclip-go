@@ -328,6 +328,10 @@ func linkLabel(s *lsvc.Service) http.HandlerFunc {
 				respond.Error(w, http.StatusNotFound, "issue_not_found", "issue not found")
 				return
 			}
+			if errors.Is(err, lsvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "label_not_found", "label not found")
+				return
+			}
 			log.Printf("labels: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
