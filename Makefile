@@ -41,7 +41,12 @@ sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
 	git remote show | grep -q upstream || \
 	    git remote add upstream https://github.com/paperclipai/paperclip.git
 	git fetch upstream master
+	git fetch origin upstream
 	$(MAKE) wt WT=${WT}
+	if git show-ref --verify --quiet refs/heads/upstream; \
+	then git -C "${WT}" checkout -f -q upstream; \
+	else git -C "${WT}" checkout -f -q -b upstream origin/upstream; \
+	fi
 	git -C "${WT}" reset --hard upstream/master -q
 	git -C "${WT}" push origin HEAD:upstream --force -q
 	$(MAKE) clean-wt WT=${WT}
