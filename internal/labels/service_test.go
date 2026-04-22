@@ -189,7 +189,7 @@ func TestDeleteLabelNotFound(t *testing.T) {
 	}
 }
 
-func TestAddToIssue(t *testing.T) {
+func TestLinkToIssue(t *testing.T) {
 	s := newTestStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
@@ -220,21 +220,21 @@ func TestAddToIssue(t *testing.T) {
 		t.Fatalf("setup issue: %v", err)
 	}
 
-	err = svc.AddToIssue(ctx, "i1", label.ID)
+	err = svc.LinkToIssue(ctx, "i1", label.ID)
 	if err != nil {
-		t.Fatalf("AddToIssue: %v", err)
+		t.Fatalf("LinkToIssue: %v", err)
 	}
 
-	labels, err := svc.ListForIssue(ctx, "i1")
+	labels, err := svc.GetLabelsForIssue(ctx, "i1")
 	if err != nil {
-		t.Fatalf("ListForIssue: %v", err)
+		t.Fatalf("GetLabelsForIssue: %v", err)
 	}
 	if len(labels) != 1 {
-		t.Errorf("ListForIssue: got %d labels, want 1", len(labels))
+		t.Errorf("GetLabelsForIssue: got %d labels, want 1", len(labels))
 	}
 }
 
-func TestAddToIssueIdempotent(t *testing.T) {
+func TestLinkToIssueIdempotent(t *testing.T) {
 	s := newTestStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
@@ -266,26 +266,26 @@ func TestAddToIssueIdempotent(t *testing.T) {
 	}
 
 	// Add twice - should be idempotent
-	err = svc.AddToIssue(ctx, "i1", label.ID)
+	err = svc.LinkToIssue(ctx, "i1", label.ID)
 	if err != nil {
-		t.Fatalf("AddToIssue 1: %v", err)
+		t.Fatalf("LinkToIssue 1: %v", err)
 	}
 
-	err = svc.AddToIssue(ctx, "i1", label.ID)
+	err = svc.LinkToIssue(ctx, "i1", label.ID)
 	if err != nil {
-		t.Fatalf("AddToIssue 2: %v", err)
+		t.Fatalf("LinkToIssue 2: %v", err)
 	}
 
-	labels, err := svc.ListForIssue(ctx, "i1")
+	labels, err := svc.GetLabelsForIssue(ctx, "i1")
 	if err != nil {
-		t.Fatalf("ListForIssue: %v", err)
+		t.Fatalf("GetLabelsForIssue: %v", err)
 	}
 	if len(labels) != 1 {
-		t.Errorf("ListForIssue: got %d labels, want 1 (idempotent)", len(labels))
+		t.Errorf("GetLabelsForIssue: got %d labels, want 1 (idempotent)", len(labels))
 	}
 }
 
-func TestRemoveFromIssue(t *testing.T) {
+func TestUnlinkFromIssue(t *testing.T) {
 	s := newTestStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
@@ -317,33 +317,33 @@ func TestRemoveFromIssue(t *testing.T) {
 	}
 
 	// Add label, then remove it
-	err = svc.AddToIssue(ctx, "i1", label.ID)
+	err = svc.LinkToIssue(ctx, "i1", label.ID)
 	if err != nil {
-		t.Fatalf("AddToIssue: %v", err)
+		t.Fatalf("LinkToIssue: %v", err)
 	}
 
-	err = svc.RemoveFromIssue(ctx, "i1", label.ID)
+	err = svc.UnlinkFromIssue(ctx, "i1", label.ID)
 	if err != nil {
-		t.Fatalf("RemoveFromIssue: %v", err)
+		t.Fatalf("UnlinkFromIssue: %v", err)
 	}
 
-	labels, err := svc.ListForIssue(ctx, "i1")
+	labels, err := svc.GetLabelsForIssue(ctx, "i1")
 	if err != nil {
-		t.Fatalf("ListForIssue: %v", err)
+		t.Fatalf("GetLabelsForIssue: %v", err)
 	}
 	if len(labels) != 0 {
-		t.Errorf("ListForIssue: got %d labels, want 0", len(labels))
+		t.Errorf("GetLabelsForIssue: got %d labels, want 0", len(labels))
 	}
 }
 
-func TestRemoveFromIssueNotFound(t *testing.T) {
+func TestUnlinkFromIssueNotFound(t *testing.T) {
 	s := newTestStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 
-	err := svc.RemoveFromIssue(ctx, "i1", "label1")
+	err := svc.UnlinkFromIssue(ctx, "i1", "label1")
 	if err != labels.ErrNotFound {
-		t.Errorf("RemoveFromIssue: got %v, want ErrNotFound", err)
+		t.Errorf("UnlinkFromIssue: got %v, want ErrNotFound", err)
 	}
 }
 
@@ -379,18 +379,18 @@ func TestDeleteLabelCascadesIssueLabels(t *testing.T) {
 	}
 
 	// Add label to issue
-	err = svc.AddToIssue(ctx, "i1", label.ID)
+	err = svc.LinkToIssue(ctx, "i1", label.ID)
 	if err != nil {
-		t.Fatalf("AddToIssue: %v", err)
+		t.Fatalf("LinkToIssue: %v", err)
 	}
 
 	// Verify association exists
-	labels, err := svc.ListForIssue(ctx, "i1")
+	labels, err := svc.GetLabelsForIssue(ctx, "i1")
 	if err != nil {
-		t.Fatalf("ListForIssue before delete: %v", err)
+		t.Fatalf("GetLabelsForIssue before delete: %v", err)
 	}
 	if len(labels) != 1 {
-		t.Errorf("ListForIssue before delete: got %d, want 1", len(labels))
+		t.Errorf("GetLabelsForIssue before delete: got %d, want 1", len(labels))
 	}
 
 	// Delete label
@@ -400,11 +400,11 @@ func TestDeleteLabelCascadesIssueLabels(t *testing.T) {
 	}
 
 	// Verify association is gone (cascade delete)
-	labels, err = svc.ListForIssue(ctx, "i1")
+	labels, err = svc.GetLabelsForIssue(ctx, "i1")
 	if err != nil {
-		t.Fatalf("ListForIssue after delete: %v", err)
+		t.Fatalf("GetLabelsForIssue after delete: %v", err)
 	}
 	if len(labels) != 0 {
-		t.Errorf("ListForIssue after delete: got %d, want 0 (should be cascaded)", len(labels))
+		t.Errorf("GetLabelsForIssue after delete: got %d, want 0 (should be cascaded)", len(labels))
 	}
 }

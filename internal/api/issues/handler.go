@@ -120,7 +120,7 @@ func get(s *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 		}
 
 		// Load labels for this issue
-		labels, err := labelSvc.ListForIssue(r.Context(), id)
+		labels, err := labelSvc.GetLabelsForIssue(r.Context(), id)
 		if err != nil {
 			log.Printf("issues: error loading labels: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
@@ -375,9 +375,9 @@ func addLabel(issueSvc *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 			return
 		}
 
-		err = labelSvc.AddToIssue(r.Context(), issueID, body.LabelID)
+		err = labelSvc.LinkToIssue(r.Context(), issueID, body.LabelID)
 		if err != nil {
-			log.Printf("labels: error adding to issue: %v", err)
+			log.Printf("labels: error linking to issue: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
@@ -391,13 +391,13 @@ func removeLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 		issueID := chi.URLParam(r, "id")
 		labelID := chi.URLParam(r, "labelId")
 
-		err := labelSvc.RemoveFromIssue(r.Context(), issueID, labelID)
+		err := labelSvc.UnlinkFromIssue(r.Context(), issueID, labelID)
 		if err != nil {
 			if errors.Is(err, lsvc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "label association not found")
 				return
 			}
-			log.Printf("labels: error removing from issue: %v", err)
+			log.Printf("labels: error unlinking from issue: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}

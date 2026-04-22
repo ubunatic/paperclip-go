@@ -1530,8 +1530,7 @@ func TestLabelsE2E(t *testing.T) {
 
 	// 7. Add label to issue → 200
 	addLabelBody, _ := json.Marshal(map[string]string{
-		"labelId":   labelID,
-		"companyId": companyID,
+		"labelId": labelID,
 	})
 	respAddLabel, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(addLabelBody))
 	if err != nil {
@@ -1558,7 +1557,10 @@ func TestLabelsE2E(t *testing.T) {
 	}
 
 	// 9. Add same label again → 200 (idempotent)
-	respAddLabelAgain, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(addLabelBody))
+	addLabelBody2, _ := json.Marshal(map[string]string{
+		"labelId": labelID,
+	})
+	respAddLabelAgain, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(addLabelBody2))
 	if err != nil {
 		t.Fatalf("POST add same label again: %v", err)
 	}

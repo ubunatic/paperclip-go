@@ -20,6 +20,9 @@ var ErrNotFound = errors.New("label not found")
 // ErrDuplicate is returned when attempting to create a label with a duplicate name within a company.
 var ErrDuplicate = errors.New("label name already exists in this company")
 
+// ErrIssueNotFound is returned when a requested issue does not exist.
+var ErrIssueNotFound = errors.New("issue not found")
+
 // Service provides label CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -33,6 +36,15 @@ func New(s *store.Store) *Service {
 // Create inserts a new label and returns the created entity.
 // Returns ErrDuplicate if a label with the same name already exists for this company.
 func (s *Service) Create(ctx context.Context, companyID, name, color string) (*domain.Label, error) {
+	// Pre-flight check for duplicate
+	existing, err := s.GetByNameAndCompany(ctx, companyID, name)
+	if err != nil {
+		return nil, fmt.Errorf("checking for duplicate: %w", err)
+	}
+	if existing != nil {
+		return nil, ErrDuplicate
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	l := &domain.Label{
@@ -43,7 +55,7 @@ func (s *Service) Create(ctx context.Context, companyID, name, color string) (*d
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	_, err := s.store.DB.ExecContext(ctx,
+	_, err = s.store.DB.ExecContext(ctx,
 		`INSERT INTO labels(id, company_id, name, color, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		l.ID, l.CompanyID, l.Name, l.Color, ts, ts,
@@ -116,43 +128,67 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// AddToIssue associates a label with an issue (idempotent via INSERT OR IGNORE).
-// Returns nil if the association was created or already existed.
-func (s *Service) AddToIssue(ctx context.Context, issueID, labelID string) error {
+// LinkToIssue associates a label with an issue (idempotent via INSERT OR IGNORE).
+// Atomically verifies that both issue and label exist and belong to the same company.
+// Returns ErrIssueNotFound if the issue doesn't exist, ErrNotFound if the label doesn't exist.
+func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) error {
+	// Atomically verify both issue and label exist and belong to same company
+	var issueCompanyID, labelCompanyID string
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT i.company_id, l.company_id
+		 FROM issues i, labels l
+		 WHERE i.id = ? AND l.id = ?`,
+		issueID, labelID,
+	).Scan(&issueCompanyID, &labelCompanyID)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Determine which one doesn't exist
+			if errCheck := s.issueExists(ctx, issueID); errCheck != nil {
+				return ErrIssueNotFound
+			}
+			return ErrNotFound // label doesn't exist
+		}
+		return fmt.Errorf("verifying issue and label: %w", err)
+	}
+
+	// Verify same company
+	if issueCompanyID != labelCompanyID {
+		return fmt.Errorf("issue and label belong to different companies")
+	}
+
+	// INSERT OR IGNORE into issue_labels
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
-	_, err := s.store.DB.ExecContext(ctx,
+	_, err = s.store.DB.ExecContext(ctx,
 		`INSERT OR IGNORE INTO issue_labels(issue_id, label_id, created_at)
 		 VALUES (?, ?, ?)`,
 		issueID, labelID, ts,
 	)
-	if err != nil {
-		return fmt.Errorf("adding label to issue: %w", err)
-	}
-	return nil
+	return err
 }
 
-// RemoveFromIssue removes the association between a label and an issue.
+// UnlinkFromIssue removes the association between a label and an issue.
 // Returns ErrNotFound if the association does not exist.
-func (s *Service) RemoveFromIssue(ctx context.Context, issueID, labelID string) error {
+func (s *Service) UnlinkFromIssue(ctx context.Context, issueID, labelID string) error {
 	result, err := s.store.DB.ExecContext(ctx,
 		`DELETE FROM issue_labels WHERE issue_id = ? AND label_id = ?`, issueID, labelID,
 	)
 	if err != nil {
-		return fmt.Errorf("removing label from issue: %w", err)
+		return fmt.Errorf("deleting label from issue: %w", err)
 	}
-	rows, err := result.RowsAffected()
+	n, err := result.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("getting rows affected: %w", err)
+		return fmt.Errorf("checking rows affected: %w", err)
 	}
-	if rows == 0 {
-		return ErrNotFound
+	if n == 0 {
+		return ErrNotFound // label not attached to this issue
 	}
 	return nil
 }
 
-// ListForIssue returns all labels associated with the given issue.
-func (s *Service) ListForIssue(ctx context.Context, issueID string) ([]*domain.Label, error) {
+// GetLabelsForIssue returns all labels associated with the given issue.
+func (s *Service) GetLabelsForIssue(ctx context.Context, issueID string) ([]*domain.Label, error) {
 	rows, err := s.store.DB.QueryContext(ctx,
 		`SELECT l.id, l.company_id, l.name, l.color, l.created_at, l.updated_at
 		 FROM labels l
@@ -177,6 +213,45 @@ func (s *Service) ListForIssue(ctx context.Context, issueID string) ([]*domain.L
 		return nil, fmt.Errorf("iterating labels: %w", err)
 	}
 	return out, nil
+}
+
+// GetByNameAndCompany returns the label with the given name in the company, or nil if not found.
+// Used for pre-flight duplicate detection.
+func (s *Service) GetByNameAndCompany(ctx context.Context, companyID, name string) (*domain.Label, error) {
+	row := s.store.DB.QueryRowContext(ctx,
+		`SELECT id, company_id, name, color, created_at, updated_at
+		 FROM labels WHERE company_id = ? AND name = ?`,
+		companyID, name,
+	)
+	l, err := scanLabel(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil // not found, but not an error
+	}
+	return l, err
+}
+
+// issueExists checks if an issue exists.
+func (s *Service) issueExists(ctx context.Context, issueID string) error {
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT 1 FROM issues WHERE id = ? LIMIT 1`,
+		issueID,
+	).Scan(new(int))
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrIssueNotFound
+	}
+	return err
+}
+
+// labelExists checks if a label exists.
+func (s *Service) labelExists(ctx context.Context, labelID string) error {
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT 1 FROM labels WHERE id = ? LIMIT 1`,
+		labelID,
+	).Scan(new(int))
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.
