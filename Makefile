@@ -43,7 +43,7 @@ sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
 	git fetch upstream master
 	$(MAKE) wt WT=${WT}
 	git -C "${WT}" reset --hard upstream/master -q
-	git -C "${WT}" push origin upstream --force -q
+	git -C "${WT}" push origin HEAD:upstream --force -q
 	$(MAKE) clean-wt WT=${WT}
 	@echo "✅ Upstream repository synced to upstream branch."
 
@@ -58,5 +58,9 @@ merge-upstream: ⚙️  ## Auto-merge upstream changes while preserving Go-speci
 	git rm -f .github/PULL_REQUEST_TEMPLATE.md 2>/dev/null || true
 	@echo "⬇️ Preserving Go-specific core files..."
 	git checkout HEAD -- ${OURS}
-	git commit -m "Sync upstream (preserving Go-specific core)"
-	@echo "✅ Upstream changes merged (Go-specific core preserved)."
+	@if git diff --cached --quiet; \
+	then echo "✅ Already in sync, nothing to commit."; \
+	else git commit -m "Sync upstream (preserving Go-specific core)" && \
+		 echo "✅ Upstream changes merged (Go-specific core preserved)." \
+		 echo "✅ Upstream changes merged (Go-specific core preserved)."; \
+	fi
