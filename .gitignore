@@ -55,4 +55,6 @@ tests/release-smoke/playwright-report/
 # --- Go ---
 bin/
 *.exe
+paperclip-go
+paperclip-go.exe
 

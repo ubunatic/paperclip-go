@@ -74,6 +74,12 @@ func create(s *lsvc.Service) http.HandlerFunc {
 
 func get(s *lsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		companyID := r.URL.Query().Get("companyId")
+		if companyID == "" {
+			respond.Error(w, http.StatusBadRequest, "validation_error", "companyId is required")
+			return
+		}
+
 		id := chi.URLParam(r, "id")
 		label, err := s.Get(r.Context(), id)
 		if err != nil {
@@ -85,14 +91,46 @@ func get(s *lsvc.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
+
+		// Verify label belongs to the requested company
+		if label.CompanyID != companyID {
+			respond.Error(w, http.StatusForbidden, "forbidden", "label does not belong to this company")
+			return
+		}
+
 		respond.JSON(w, http.StatusOK, label)
 	}
 }
 
 func delete(s *lsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		companyID := r.URL.Query().Get("companyId")
+		if companyID == "" {
+			respond.Error(w, http.StatusBadRequest, "validation_error", "companyId is required")
+			return
+		}
+
 		id := chi.URLParam(r, "id")
-		err := s.Delete(r.Context(), id)
+
+		// First fetch the label to verify it belongs to this company
+		label, err := s.Get(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, lsvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "label not found")
+				return
+			}
+			log.Printf("labels: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+
+		// Verify label belongs to the requested company
+		if label.CompanyID != companyID {
+			respond.Error(w, http.StatusForbidden, "forbidden", "label does not belong to this company")
+			return
+		}
+
+		err = s.Delete(r.Context(), id)
 		if err != nil {
 			if errors.Is(err, lsvc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "label not found")

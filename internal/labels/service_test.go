@@ -1,15 +1,17 @@
-package labels
+package labels_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/ubunatic/paperclip-go/internal/labels"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
 func TestCreate(t *testing.T) {
 	store := testutil.NewStore(t)
-	svc := New(store)
+	svc := labels.New(store)
 
 	companyID := testutil.CreateTestCompany(t, store)
 
@@ -34,14 +36,14 @@ func TestCreate(t *testing.T) {
 
 	// Attempt duplicate creation → error
 	_, err = svc.Create(context.Background(), companyID, "bug", "#0000FF")
-	if err == nil {
-		t.Error("expected duplicate error")
+	if !errors.Is(err, labels.ErrDuplicate) {
+		t.Errorf("expected ErrDuplicate, got %v", err)
 	}
 }
 
 func TestGet(t *testing.T) {
 	store := testutil.NewStore(t)
-	svc := New(store)
+	svc := labels.New(store)
 
 	companyID := testutil.CreateTestCompany(t, store)
 
@@ -63,14 +65,14 @@ func TestGet(t *testing.T) {
 
 	// Get nonexistent → error
 	_, err = svc.Get(context.Background(), "nonexistent-id")
-	if err != ErrNotFound {
+	if !errors.Is(err, labels.ErrNotFound) {
 		t.Errorf("Get nonexistent: %v, want ErrNotFound", err)
 	}
 }
 
 func TestListByCompany(t *testing.T) {
 	store := testutil.NewStore(t)
-	svc := New(store)
+	svc := labels.New(store)
 
 	companyID := testutil.CreateTestCompany(t, store)
 
@@ -103,7 +105,7 @@ func TestListByCompany(t *testing.T) {
 
 func TestDelete(t *testing.T) {
 	store := testutil.NewStore(t)
-	svc := New(store)
+	svc := labels.New(store)
 
 	companyID := testutil.CreateTestCompany(t, store)
 
@@ -116,20 +118,20 @@ func TestDelete(t *testing.T) {
 
 	// Verify it's deleted
 	_, err = svc.Get(context.Background(), created.ID)
-	if err != ErrNotFound {
+	if !errors.Is(err, labels.ErrNotFound) {
 		t.Errorf("after delete, Get returned %v, want ErrNotFound", err)
 	}
 
 	// Delete nonexistent → error
 	err = svc.Delete(context.Background(), "nonexistent-id")
-	if err != ErrNotFound {
+	if !errors.Is(err, labels.ErrNotFound) {
 		t.Errorf("Delete nonexistent: %v, want ErrNotFound", err)
 	}
 }
 
 func TestGetByNameAndCompany(t *testing.T) {
 	store := testutil.NewStore(t)
-	svc := New(store)
+	svc := labels.New(store)
 
 	companyID := testutil.CreateTestCompany(t, store)
 
@@ -161,7 +163,7 @@ func TestGetByNameAndCompany(t *testing.T) {
 
 func TestLinkToIssue(t *testing.T) {
 	store := testutil.NewStore(t)
-	svc := New(store)
+	svc := labels.New(store)
 
 	companyID := testutil.CreateTestCompany(t, store)
 	issueID := testutil.CreateTestIssue(t, store, companyID)
@@ -183,14 +185,20 @@ func TestLinkToIssue(t *testing.T) {
 
 	// Link to nonexistent issue → error
 	err = svc.LinkToIssue(context.Background(), "nonexistent-issue", label.ID)
-	if err != ErrIssueNotFound {
+	if !errors.Is(err, labels.ErrIssueNotFound) {
 		t.Errorf("LinkToIssue nonexistent issue: %v, want ErrIssueNotFound", err)
+	}
+
+	// Link to nonexistent label → error
+	err = svc.LinkToIssue(context.Background(), issueID, "nonexistent-label")
+	if !errors.Is(err, labels.ErrNotFound) {
+		t.Errorf("LinkToIssue nonexistent label: %v, want ErrNotFound", err)
 	}
 }
 
 func TestUnlinkFromIssue(t *testing.T) {
 	store := testutil.NewStore(t)
-	svc := New(store)
+	svc := labels.New(store)
 
 	companyID := testutil.CreateTestCompany(t, store)
 	issueID := testutil.CreateTestIssue(t, store, companyID)
@@ -214,7 +222,7 @@ func TestUnlinkFromIssue(t *testing.T) {
 
 func TestGetLabelsForIssue(t *testing.T) {
 	store := testutil.NewStore(t)
-	svc := New(store)
+	svc := labels.New(store)
 
 	companyID := testutil.CreateTestCompany(t, store)
 	issueID := testutil.CreateTestIssue(t, store, companyID)

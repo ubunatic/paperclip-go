@@ -1367,9 +1367,14 @@ func TestLabelsE2E(t *testing.T) {
 		"shortname":   "tech",
 		"description": "Tech company for labels test",
 	})
-	respCompany, _ := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
 	var createdCompany map[string]any
-	json.NewDecoder(respCompany.Body).Decode(&createdCompany)
+	if err := json.NewDecoder(respCompany.Body).Decode(&createdCompany); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
 	respCompany.Body.Close()
 	companyID, _ := createdCompany["id"].(string)
 
@@ -1379,12 +1384,17 @@ func TestLabelsE2E(t *testing.T) {
 		"name":      "bug",
 		"color":     "#FF0000",
 	})
-	respLabel1, _ := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(label1Body))
+	respLabel1, err := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(label1Body))
+	if err != nil {
+		t.Fatalf("POST /api/labels: %v", err)
+	}
 	if respLabel1.StatusCode != http.StatusCreated {
 		t.Fatalf("POST /api/labels status = %d, want 201", respLabel1.StatusCode)
 	}
 	var createdLabel1 map[string]any
-	json.NewDecoder(respLabel1.Body).Decode(&createdLabel1)
+	if err := json.NewDecoder(respLabel1.Body).Decode(&createdLabel1); err != nil {
+		t.Fatalf("decoding label1 response: %v", err)
+	}
 	respLabel1.Body.Close()
 	label1ID, _ := createdLabel1["id"].(string)
 
@@ -1393,19 +1403,54 @@ func TestLabelsE2E(t *testing.T) {
 		"name":      "feature",
 		"color":     "#00FF00",
 	})
-	respLabel2, _ := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(label2Body))
+	respLabel2, err := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(label2Body))
+	if err != nil {
+		t.Fatalf("POST /api/labels (label2): %v", err)
+	}
 	var createdLabel2 map[string]any
-	json.NewDecoder(respLabel2.Body).Decode(&createdLabel2)
+	if err := json.NewDecoder(respLabel2.Body).Decode(&createdLabel2); err != nil {
+		t.Fatalf("decoding label2 response: %v", err)
+	}
 	respLabel2.Body.Close()
 	label2ID, _ := createdLabel2["id"].(string)
 
-	// GET /api/labels → list labels
-	respLabelList, _ := http.Get(srv.URL + "/api/labels?companyId=" + companyID)
+	// POST /api/labels with duplicate name → should return 409
+	duplicateBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"name":      "bug", // Same as label1
+		"color":     "#0000FF",
+	})
+	respDuplicate, err := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(duplicateBody))
+	if err != nil {
+		t.Fatalf("POST /api/labels (duplicate): %v", err)
+	}
+	respDuplicate.Body.Close()
+	if respDuplicate.StatusCode != http.StatusConflict {
+		t.Errorf("POST /api/labels duplicate name status = %d, want 409", respDuplicate.StatusCode)
+	}
+
+	// GET /api/labels without companyId → should return 400
+	respLabelListBad, err := http.Get(srv.URL + "/api/labels")
+	if err != nil {
+		t.Fatalf("GET /api/labels (no companyId): %v", err)
+	}
+	respLabelListBad.Body.Close()
+	if respLabelListBad.StatusCode != http.StatusBadRequest {
+		t.Errorf("GET /api/labels without companyId status = %d, want 400", respLabelListBad.StatusCode)
+	}
+
+	// GET /api/labels → list labels (labels are ordered alphabetically: bug, feature)
+	respLabelList, err := http.Get(srv.URL + "/api/labels?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/labels: %v", err)
+	}
 	if respLabelList.StatusCode != http.StatusOK {
 		t.Fatalf("GET /api/labels status = %d, want 200", respLabelList.StatusCode)
 	}
 	var labelList map[string]any
-	json.NewDecoder(respLabelList.Body).Decode(&labelList)
+	if err := json.NewDecoder(respLabelList.Body).Decode(&labelList); err != nil {
+		t.Fatalf("decoding label list: %v", err)
+	}
 	respLabelList.Body.Close()
 	items, _ := labelList["items"].([]any)
 	if len(items) != 2 {
@@ -1418,9 +1463,14 @@ func TestLabelsE2E(t *testing.T) {
 		"title":     "Test issue",
 		"body":      "Test issue body",
 	})
-	respIssue, _ := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	respIssue, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
 	var createdIssue map[string]any
-	json.NewDecoder(respIssue.Body).Decode(&createdIssue)
+	if err := json.NewDecoder(respIssue.Body).Decode(&createdIssue); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
 	respIssue.Body.Close()
 	issueID, _ := createdIssue["id"].(string)
 
@@ -1428,7 +1478,10 @@ func TestLabelsE2E(t *testing.T) {
 	linkBody, _ := json.Marshal(map[string]string{
 		"labelId": label1ID,
 	})
-	respLink, _ := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(linkBody))
+	respLink, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(linkBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/{id}/labels: %v", err)
+	}
 	if respLink.StatusCode != http.StatusOK {
 		t.Fatalf("POST /api/issues/{id}/labels status = %d, want 200", respLink.StatusCode)
 	}
@@ -1438,40 +1491,71 @@ func TestLabelsE2E(t *testing.T) {
 	link2Body, _ := json.Marshal(map[string]string{
 		"labelId": label2ID,
 	})
-	respLink2, _ := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(link2Body))
+	respLink2, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(link2Body))
+	if err != nil {
+		t.Fatalf("POST /api/issues/{id}/labels (label2): %v", err)
+	}
 	respLink2.Body.Close()
 
+	// POST /api/issues/{id}/labels with nonexistent labelId → should return 404
+	badLinkBody, _ := json.Marshal(map[string]string{
+		"labelId": "nonexistent-label-id",
+	})
+	respBadLink, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(badLinkBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/{id}/labels (nonexistent): %v", err)
+	}
+	respBadLink.Body.Close()
+	if respBadLink.StatusCode != http.StatusNotFound {
+		t.Errorf("POST /api/issues/{id}/labels with nonexistent labelId status = %d, want 404", respBadLink.StatusCode)
+	}
+
 	// GET /api/issues/{id} → check labels are returned
-	respGetIssue, _ := http.Get(srv.URL + "/api/issues/" + issueID)
+	respGetIssue, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/{id}: %v", err)
+	}
 	if respGetIssue.StatusCode != http.StatusOK {
 		t.Fatalf("GET /api/issues/{id} status = %d, want 200", respGetIssue.StatusCode)
 	}
 	var fetchedIssue map[string]any
-	json.NewDecoder(respGetIssue.Body).Decode(&fetchedIssue)
+	if err := json.NewDecoder(respGetIssue.Body).Decode(&fetchedIssue); err != nil {
+		t.Fatalf("decoding issue: %v", err)
+	}
 	respGetIssue.Body.Close()
 
 	issueLabels, _ := fetchedIssue["labels"].([]any)
 	if len(issueLabels) != 2 {
 		t.Errorf("issue labels len = %d, want 2", len(issueLabels))
 	}
+	// Labels are ordered alphabetically in DB query
 	if len(issueLabels) > 0 {
-		label1Data, _ := issueLabels[0].(map[string]any)
-		if label1Data["id"] != label1ID {
-			t.Errorf("first label id = %v, want %q", label1Data["id"], label1ID)
+		labelData, _ := issueLabels[0].(map[string]any)
+		// First label alphabetically should be "bug"
+		if labelName, ok := labelData["name"].(string); ok && labelName != "bug" {
+			t.Errorf("first label name = %q, want %q", labelName, "bug")
 		}
 	}
 
-	// Link label1 again (idempotent) → should still be 1 link
-	respLinkAgain, _ := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(linkBody))
+	// Link label1 again (idempotent) → should still be 2 labels
+	respLinkAgain, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(linkBody))
+	if err != nil {
+		t.Fatalf("POST link again: %v", err)
+	}
 	respLinkAgain.Body.Close()
 	if respLinkAgain.StatusCode != http.StatusOK {
 		t.Fatalf("POST link again status = %d, want 200", respLinkAgain.StatusCode)
 	}
 
 	// Verify still 2 labels
-	respGetIssue2, _ := http.Get(srv.URL + "/api/issues/" + issueID)
+	respGetIssue2, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues (2nd): %v", err)
+	}
 	var fetchedIssue2 map[string]any
-	json.NewDecoder(respGetIssue2.Body).Decode(&fetchedIssue2)
+	if err := json.NewDecoder(respGetIssue2.Body).Decode(&fetchedIssue2); err != nil {
+		t.Fatalf("decoding issue (2nd): %v", err)
+	}
 	respGetIssue2.Body.Close()
 	issueLabels2, _ := fetchedIssue2["labels"].([]any)
 	if len(issueLabels2) != 2 {
@@ -1480,29 +1564,42 @@ func TestLabelsE2E(t *testing.T) {
 
 	// DELETE /api/issues/{id}/labels/{labelId}
 	reqUnlink, _ := http.NewRequest("DELETE", srv.URL+"/api/issues/"+issueID+"/labels/"+label1ID, nil)
-	respUnlink, _ := http.DefaultClient.Do(reqUnlink)
+	respUnlink, err := http.DefaultClient.Do(reqUnlink)
+	if err != nil {
+		t.Fatalf("DELETE /api/issues/{id}/labels/{labelId}: %v", err)
+	}
 	if respUnlink.StatusCode != http.StatusNoContent {
 		t.Fatalf("DELETE /api/issues/{id}/labels/{labelId} status = %d, want 204", respUnlink.StatusCode)
 	}
 	respUnlink.Body.Close()
 
 	// Verify label1 is removed
-	respGetIssue3, _ := http.Get(srv.URL + "/api/issues/" + issueID)
+	respGetIssue3, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues (3rd): %v", err)
+	}
 	var fetchedIssue3 map[string]any
-	json.NewDecoder(respGetIssue3.Body).Decode(&fetchedIssue3)
+	if err := json.NewDecoder(respGetIssue3.Body).Decode(&fetchedIssue3); err != nil {
+		t.Fatalf("decoding issue (3rd): %v", err)
+	}
 	respGetIssue3.Body.Close()
 	issueLabels3, _ := fetchedIssue3["labels"].([]any)
 	if len(issueLabels3) != 1 {
 		t.Errorf("after unlink, issue labels len = %d, want 1", len(issueLabels3))
 	}
 
-	// GET /api/labels/{id}
-	respGetLabel, _ := http.Get(srv.URL + "/api/labels/" + label1ID)
+	// GET /api/labels/{id} with companyId
+	respGetLabel, err := http.Get(srv.URL + "/api/labels/" + label1ID + "?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/labels/{id}: %v", err)
+	}
 	if respGetLabel.StatusCode != http.StatusOK {
 		t.Fatalf("GET /api/labels/{id} status = %d, want 200", respGetLabel.StatusCode)
 	}
 	var fetchedLabel map[string]any
-	json.NewDecoder(respGetLabel.Body).Decode(&fetchedLabel)
+	if err := json.NewDecoder(respGetLabel.Body).Decode(&fetchedLabel); err != nil {
+		t.Fatalf("decoding label: %v", err)
+	}
 	respGetLabel.Body.Close()
 	if fetchedLabel["id"] != label1ID {
 		t.Errorf("fetched label id = %v, want %q", fetchedLabel["id"], label1ID)
@@ -1511,16 +1608,22 @@ func TestLabelsE2E(t *testing.T) {
 		t.Errorf("fetched label name = %v, want %q", fetchedLabel["name"], "bug")
 	}
 
-	// DELETE /api/labels/{id}
-	reqDeleteLabel, _ := http.NewRequest("DELETE", srv.URL+"/api/labels/"+label1ID, nil)
-	respDeleteLabel, _ := http.DefaultClient.Do(reqDeleteLabel)
+	// DELETE /api/labels/{id} with companyId
+	reqDeleteLabel, _ := http.NewRequest("DELETE", srv.URL+"/api/labels/"+label1ID+"?companyId="+companyID, nil)
+	respDeleteLabel, err := http.DefaultClient.Do(reqDeleteLabel)
+	if err != nil {
+		t.Fatalf("DELETE /api/labels/{id}: %v", err)
+	}
 	if respDeleteLabel.StatusCode != http.StatusNoContent {
 		t.Fatalf("DELETE /api/labels/{id} status = %d, want 204", respDeleteLabel.StatusCode)
 	}
 	respDeleteLabel.Body.Close()
 
 	// Verify label1 is deleted
-	respGetLabelAfterDelete, _ := http.Get(srv.URL + "/api/labels/" + label1ID)
+	respGetLabelAfterDelete, err := http.Get(srv.URL + "/api/labels/" + label1ID + "?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET deleted label: %v", err)
+	}
 	if respGetLabelAfterDelete.StatusCode != http.StatusNotFound {
 		t.Fatalf("GET deleted label status = %d, want 404", respGetLabelAfterDelete.StatusCode)
 	}
