@@ -259,6 +259,113 @@ func TestLinkToIssueIdempotent(t *testing.T) {
 	}
 }
 
+func TestLinkToIssueIssueNotFound(t *testing.T) {
+	s := testutil.NewStore(t)
+	svc := labels.New(s)
+	ctx := context.Background()
+
+	// Create company
+	_, err := s.DB.ExecContext(ctx,
+		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		"c1", "Test", "test", "desc", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("setup company: %v", err)
+	}
+
+	// Create label
+	label, err := svc.Create(ctx, "c1", "bug", "#ff0000")
+	if err != nil {
+		t.Fatalf("Create label: %v", err)
+	}
+
+	// Try to link to non-existent issue
+	err = svc.LinkToIssue(ctx, "nonexistent-issue", label.ID)
+	if err != labels.ErrIssueNotFound {
+		t.Errorf("LinkToIssue: got %v, want ErrIssueNotFound", err)
+	}
+}
+
+func TestLinkToIssueLabelNotFound(t *testing.T) {
+	s := testutil.NewStore(t)
+	svc := labels.New(s)
+	ctx := context.Background()
+
+	// Create company
+	_, err := s.DB.ExecContext(ctx,
+		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		"c1", "Test", "test", "desc", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("setup company: %v", err)
+	}
+
+	// Create issue
+	_, err = s.DB.ExecContext(ctx,
+		`INSERT INTO issues(id, company_id, title, body, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"i1", "c1", "Title", "Body", "open", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("setup issue: %v", err)
+	}
+
+	// Try to link to non-existent label
+	err = svc.LinkToIssue(ctx, "i1", "nonexistent-label")
+	if err != labels.ErrNotFound {
+		t.Errorf("LinkToIssue: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestLinkToIssueCompanyMismatch(t *testing.T) {
+	s := testutil.NewStore(t)
+	svc := labels.New(s)
+	ctx := context.Background()
+
+	// Create two companies
+	_, err := s.DB.ExecContext(ctx,
+		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		"c1", "Company1", "c1", "desc", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("setup company c1: %v", err)
+	}
+
+	_, err = s.DB.ExecContext(ctx,
+		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		"c2", "Company2", "c2", "desc", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("setup company c2: %v", err)
+	}
+
+	// Create label in c1
+	label, err := svc.Create(ctx, "c1", "bug", "#ff0000")
+	if err != nil {
+		t.Fatalf("Create label: %v", err)
+	}
+
+	// Create issue in c2
+	_, err = s.DB.ExecContext(ctx,
+		`INSERT INTO issues(id, company_id, title, body, status, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"i1", "c2", "Title", "Body", "open", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("setup issue: %v", err)
+	}
+
+	// Try to link label from c1 to issue in c2
+	err = svc.LinkToIssue(ctx, "i1", label.ID)
+	if err != labels.ErrCompanyMismatch {
+		t.Errorf("LinkToIssue: got %v, want ErrCompanyMismatch", err)
+	}
+}
+
 func TestUnlinkFromIssue(t *testing.T) {
 	s := testutil.NewStore(t)
 	svc := labels.New(s)
