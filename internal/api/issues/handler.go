@@ -11,21 +11,24 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	isvc "github.com/ubunatic/paperclip-go/internal/issues"
+	lsvc "github.com/ubunatic/paperclip-go/internal/labels"
 	"github.com/ubunatic/paperclip-go/internal/respond"
 )
 
 // Handler returns an http.Handler for the /api/issues sub-router.
-func Handler(issueSvc *isvc.Service, commentSvc *comments.Service) http.Handler {
+func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsvc.Service) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", list(issueSvc))
 	r.Post("/", create(issueSvc))
-	r.Get("/{id}", get(issueSvc))
+	r.Get("/{id}", get(issueSvc, labelSvc))
 	r.Patch("/{id}", update(issueSvc))
 	r.Delete("/{id}", delete(issueSvc))
 	r.Post("/{id}/checkout", checkout(issueSvc))
 	r.Post("/{id}/release", release(issueSvc))
 	r.Get("/{id}/comments", listComments(commentSvc))
 	r.Post("/{id}/comments", createComment(commentSvc))
+	r.Post("/{id}/labels", addLabel(labelSvc))
+	r.Delete("/{id}/labels/{labelId}", removeLabel(labelSvc))
 	return r
 }
 
@@ -102,7 +105,7 @@ func create(s *isvc.Service) http.HandlerFunc {
 	}
 }
 
-func get(s *isvc.Service) http.HandlerFunc {
+func get(s *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		issue, err := s.Get(r.Context(), id)
@@ -115,7 +118,37 @@ func get(s *isvc.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
-		respond.JSON(w, http.StatusOK, issue)
+
+		// Load labels for this issue
+		labels, err := labelSvc.ListForIssue(r.Context(), id)
+		if err != nil {
+			log.Printf("issues: error loading labels: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+
+		// Ensure labels is never nil, always return an array
+		if labels == nil {
+			labels = []*domain.Label{}
+		}
+
+		// Create envelope with labels
+		result := map[string]any{
+			"id":            issue.ID,
+			"companyId":     issue.CompanyID,
+			"title":         issue.Title,
+			"body":          issue.Body,
+			"status":        issue.Status,
+			"assigneeId":    issue.AssigneeID,
+			"checkedOutBy":  issue.CheckedOutBy,
+			"checkedOutAt":  issue.CheckedOutAt,
+			"parentIssueId": issue.ParentIssueID,
+			"createdAt":     issue.CreatedAt,
+			"updatedAt":     issue.UpdatedAt,
+			"labels":        labels,
+		}
+
+		respond.JSON(w, http.StatusOK, result)
 	}
 }
 
@@ -293,5 +326,65 @@ func createComment(s *comments.Service) http.HandlerFunc {
 			return
 		}
 		respond.JSON(w, http.StatusCreated, comment)
+	}
+}
+
+func addLabel(labelSvc *lsvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		issueID := chi.URLParam(r, "id")
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
+		var body struct {
+			LabelID   string `json:"labelId"`
+			CompanyID string `json:"companyId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+			return
+		}
+		if body.LabelID == "" || body.CompanyID == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "labelId and companyId are required")
+			return
+		}
+
+		// Verify label exists
+		_, err := labelSvc.Get(r.Context(), body.LabelID)
+		if err != nil {
+			if errors.Is(err, lsvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "label_not_found", "label not found")
+				return
+			}
+			log.Printf("labels: error getting label: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+
+		err = labelSvc.AddToIssue(r.Context(), issueID, body.LabelID, body.CompanyID)
+		if err != nil {
+			log.Printf("labels: error adding to issue: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+
+		respond.JSON(w, http.StatusOK, map[string]string{"status": "added"})
+	}
+}
+
+func removeLabel(labelSvc *lsvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		issueID := chi.URLParam(r, "id")
+		labelID := chi.URLParam(r, "labelId")
+
+		err := labelSvc.RemoveFromIssue(r.Context(), issueID, labelID)
+		if err != nil {
+			if errors.Is(err, lsvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "label association not found")
+				return
+			}
+			log.Printf("labels: error removing from issue: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
