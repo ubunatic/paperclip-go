@@ -10,6 +10,7 @@ import (
 
 	apilabels "github.com/ubunatic/paperclip-go/internal/api/labels"
 	"github.com/ubunatic/paperclip-go/internal/labels"
+	"github.com/ubunatic/paperclip-go/internal/store"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
