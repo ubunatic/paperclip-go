@@ -133,11 +133,6 @@ func get(s *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 			return
 		}
 
-		// Ensure labels is never nil, always return an array
-		if labels == nil {
-			labels = []*domain.Label{}
-		}
-
 		respond.JSON(w, http.StatusOK, IssueWithLabels{
 			Issue:  issue,
 			Labels: labels,
@@ -348,11 +343,11 @@ func addLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 			case errors.Is(err, lsvc.ErrNotFound):
 				respond.Error(w, http.StatusNotFound, "label_not_found", "label not found")
 				return
-			case err.Error() == "issue and label are in different companies":
+			case errors.Is(err, lsvc.ErrCompanyMismatch):
 				respond.Error(w, http.StatusConflict, "conflict", "issue and label are in different companies")
 				return
 			default:
-				log.Printf("labels: error linking to issue: %v", err)
+				log.Printf("issues: error linking label to issue: %v", err)
 				respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 				return
 			}

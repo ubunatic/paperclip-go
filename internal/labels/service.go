@@ -23,6 +23,15 @@ var ErrDuplicate = errors.New("label name already exists in this company")
 // ErrIssueNotFound is returned when a requested issue does not exist.
 var ErrIssueNotFound = errors.New("issue not found")
 
+// ErrCompanyMismatch is returned when issue and label belong to different companies.
+var ErrCompanyMismatch = errors.New("issue and label are in different companies")
+
+// SQLite extended error codes
+const (
+	sqliteConstraintUnique      = 2067
+	sqliteConstraintForeignKey  = 787
+)
+
 // Service provides label CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -53,7 +62,7 @@ func (s *Service) Create(ctx context.Context, companyID, name, color string) (*d
 	)
 	if err != nil {
 		var sqliteErr *sqlite.Error
-		if errors.As(err, &sqliteErr) && sqliteErr.Code() == 2067 { // SQLITE_CONSTRAINT (UNIQUE)
+		if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqliteConstraintUnique {
 			return nil, ErrDuplicate
 		}
 		return nil, fmt.Errorf("inserting label: %w", err)
@@ -154,7 +163,7 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 
 		// Verify same company
 		if issueCompanyID != labelCompanyID {
-			return fmt.Errorf("issue and label are in different companies")
+			return ErrCompanyMismatch
 		}
 
 		// INSERT OR IGNORE into issue_labels
@@ -167,7 +176,7 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 		)
 		if err != nil {
 			var sqliteErr *sqlite.Error
-			if errors.As(err, &sqliteErr) && sqliteErr.Code() == 787 { // SQLITE_CONSTRAINT_FOREIGNKEY
+			if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqliteConstraintForeignKey {
 				// FK constraint violation: one of the entities was deleted
 				var issueExists int
 				errIssue := tx.QueryRowContext(ctx,

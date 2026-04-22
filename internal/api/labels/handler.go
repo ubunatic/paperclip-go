@@ -8,7 +8,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/ubunatic/paperclip-go/internal/domain"
 	labelssvc "github.com/ubunatic/paperclip-go/internal/labels"
 	"github.com/ubunatic/paperclip-go/internal/respond"
 )
@@ -36,11 +35,6 @@ func list(svc *labelssvc.Service) http.HandlerFunc {
 			log.Printf("labels: error listing: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
-		}
-
-		// Ensure items is never nil, always return an array
-		if items == nil {
-			items = []*domain.Label{}
 		}
 
 		respond.JSON(w, http.StatusOK, map[string]any{"items": items})
