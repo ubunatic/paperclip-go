@@ -10,17 +10,12 @@ import (
 
 	apilabels "github.com/ubunatic/paperclip-go/internal/api/labels"
 	"github.com/ubunatic/paperclip-go/internal/labels"
-	"github.com/ubunatic/paperclip-go/internal/store"
+	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
 func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	s, err := store.Open(":memory:")
-	if err != nil {
-		t.Fatalf("newTestStore: %v", err)
-	}
-	t.Cleanup(func() { s.Close() })
-	return s
+	return testutil.NewStore(t)
 }
 
 func TestHandlerList_MissingCompanyID(t *testing.T) {

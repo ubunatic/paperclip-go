@@ -2,40 +2,26 @@ package labels_test
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
+	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/labels"
-	"github.com/ubunatic/paperclip-go/internal/store"
+	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
-func newTestStore(t *testing.T) *store.Store {
-	t.Helper()
-	dsn := filepath.Join(t.TempDir(), "test.db")
-	s, err := store.Open(dsn)
-	if err != nil {
-		t.Fatalf("newTestStore: %v", err)
-	}
-	t.Cleanup(func() { s.Close() })
-	return s
-}
-
 func TestCreateLabel(t *testing.T) {
-	s := newTestStore(t)
-	svc := labels.New(s)
+	s := testutil.NewStore(t)
+	companySvc := companies.New(s)
+	labelSvc := labels.New(s)
 	ctx := context.Background()
 
 	// Create a company first
-	_, err := s.DB.ExecContext(ctx,
-		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		"c1", "Test", "test", "desc", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
-	)
+	company, err := companySvc.Create(ctx, "Test", "test", "desc")
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 
-	label, err := svc.Create(ctx, "c1", "bug", "#ff0000")
+	label, err := labelSvc.Create(ctx, company.ID, "bug", "#ff0000")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -45,52 +31,44 @@ func TestCreateLabel(t *testing.T) {
 }
 
 func TestCreateLabelDuplicate(t *testing.T) {
-	s := newTestStore(t)
-	svc := labels.New(s)
+	s := testutil.NewStore(t)
+	companySvc := companies.New(s)
+	labelSvc := labels.New(s)
 	ctx := context.Background()
 
-	// Create a company first
-	_, err := s.DB.ExecContext(ctx,
-		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		"c1", "Test", "test", "desc", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
-	)
+	company, err := companySvc.Create(ctx, "Test", "test", "desc")
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 
-	_, err = svc.Create(ctx, "c1", "bug", "#ff0000")
+	_, err = labelSvc.Create(ctx, company.ID, "bug", "#ff0000")
 	if err != nil {
 		t.Fatalf("Create 1st: %v", err)
 	}
 
-	_, err = svc.Create(ctx, "c1", "bug", "#00ff00")
+	_, err = labelSvc.Create(ctx, company.ID, "bug", "#00ff00")
 	if err != labels.ErrDuplicate {
 		t.Errorf("Create 2nd: got %v, want ErrDuplicate", err)
 	}
 }
 
 func TestGetLabel(t *testing.T) {
-	s := newTestStore(t)
-	svc := labels.New(s)
+	s := testutil.NewStore(t)
+	companySvc := companies.New(s)
+	labelSvc := labels.New(s)
 	ctx := context.Background()
 
-	// Create a company first
-	_, err := s.DB.ExecContext(ctx,
-		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		"c1", "Test", "test", "desc", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
-	)
+	company, err := companySvc.Create(ctx, "Test", "test", "desc")
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 
-	created, err := svc.Create(ctx, "c1", "bug", "#ff0000")
+	created, err := labelSvc.Create(ctx, company.ID, "bug", "#ff0000")
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	got, err := svc.Get(ctx, created.ID)
+	got, err := labelSvc.Get(ctx, created.ID)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -100,7 +78,7 @@ func TestGetLabel(t *testing.T) {
 }
 
 func TestGetLabelNotFound(t *testing.T) {
-	s := newTestStore(t)
+	s := testutil.NewStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 
@@ -111,34 +89,30 @@ func TestGetLabelNotFound(t *testing.T) {
 }
 
 func TestListByCompany(t *testing.T) {
-	s := newTestStore(t)
-	svc := labels.New(s)
+	s := testutil.NewStore(t)
+	companySvc := companies.New(s)
+	labelSvc := labels.New(s)
 	ctx := context.Background()
 
-	// Create a company first
-	_, err := s.DB.ExecContext(ctx,
-		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		"c1", "Test", "test", "desc", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
-	)
+	company, err := companySvc.Create(ctx, "Test", "test", "desc")
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 
-	_, err = svc.Create(ctx, "c1", "bug", "#ff0000")
+	_, err = labelSvc.Create(ctx, company.ID, "bug", "#ff0000")
 	if err != nil {
 		t.Fatalf("Create 1: %v", err)
 	}
-	_, err = svc.Create(ctx, "c1", "feature", "#00ff00")
+	_, err = labelSvc.Create(ctx, company.ID, "feature", "#00ff00")
 	if err != nil {
 		t.Fatalf("Create 2: %v", err)
 	}
-	_, err = svc.Create(ctx, "c1", "docs", "#0000ff")
+	_, err = labelSvc.Create(ctx, company.ID, "docs", "#0000ff")
 	if err != nil {
 		t.Fatalf("Create 3: %v", err)
 	}
 
-	labels, err := svc.ListByCompany(ctx, "c1")
+	labels, err := labelSvc.ListByCompany(ctx, company.ID)
 	if err != nil {
 		t.Fatalf("ListByCompany: %v", err)
 	}
@@ -148,7 +122,7 @@ func TestListByCompany(t *testing.T) {
 }
 
 func TestDeleteLabel(t *testing.T) {
-	s := newTestStore(t)
+	s := testutil.NewStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 
@@ -179,7 +153,7 @@ func TestDeleteLabel(t *testing.T) {
 }
 
 func TestDeleteLabelNotFound(t *testing.T) {
-	s := newTestStore(t)
+	s := testutil.NewStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 
@@ -190,7 +164,7 @@ func TestDeleteLabelNotFound(t *testing.T) {
 }
 
 func TestLinkToIssue(t *testing.T) {
-	s := newTestStore(t)
+	s := testutil.NewStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 
@@ -235,7 +209,7 @@ func TestLinkToIssue(t *testing.T) {
 }
 
 func TestLinkToIssueIdempotent(t *testing.T) {
-	s := newTestStore(t)
+	s := testutil.NewStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 
@@ -286,7 +260,7 @@ func TestLinkToIssueIdempotent(t *testing.T) {
 }
 
 func TestUnlinkFromIssue(t *testing.T) {
-	s := newTestStore(t)
+	s := testutil.NewStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 
@@ -337,7 +311,7 @@ func TestUnlinkFromIssue(t *testing.T) {
 }
 
 func TestUnlinkFromIssueNotFound(t *testing.T) {
-	s := newTestStore(t)
+	s := testutil.NewStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 
@@ -348,7 +322,7 @@ func TestUnlinkFromIssueNotFound(t *testing.T) {
 }
 
 func TestDeleteLabelCascadesIssueLabels(t *testing.T) {
-	s := newTestStore(t)
+	s := testutil.NewStore(t)
 	svc := labels.New(s)
 	ctx := context.Background()
 

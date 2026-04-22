@@ -241,21 +241,6 @@ func (s *Service) GetLabelsForIssue(ctx context.Context, issueID string) ([]*dom
 	return out, nil
 }
 
-// GetByNameAndCompany returns the label with the given name in the company, or nil if not found.
-// Used for pre-flight duplicate detection.
-func (s *Service) GetByNameAndCompany(ctx context.Context, companyID, name string) (*domain.Label, error) {
-	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, name, color, created_at, updated_at
-		 FROM labels WHERE company_id = ? AND name = ?`,
-		companyID, name,
-	)
-	l, err := scanLabel(row)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil // not found, but not an error
-	}
-	return l, err
-}
-
 // issueExists checks if an issue exists.
 func (s *Service) issueExists(ctx context.Context, issueID string) error {
 	err := s.store.DB.QueryRowContext(ctx,

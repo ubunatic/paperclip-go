@@ -1436,11 +1436,15 @@ func TestLabelsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/companies: %v", err)
 	}
+	defer respCompany.Body.Close()
+	if respCompany.StatusCode < http.StatusOK || respCompany.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(respCompany.Body)
+		t.Fatalf("POST /api/companies returned %d: %s", respCompany.StatusCode, string(body))
+	}
 	var company map[string]any
 	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
 		t.Fatalf("decoding company response: %v", err)
 	}
-	respCompany.Body.Close()
 	companyID, _ := company["id"].(string)
 
 	// 2. Create label (bug, #ff0000)
