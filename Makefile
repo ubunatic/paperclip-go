@@ -36,7 +36,6 @@ clean-wt: ⚙️  ## Remove the worktree
 	git worktree remove -f "${WT}" 2>/dev/null || true
 	@echo "🧹 Worktree ${WT} cleaned up."
 
-sync-upstream: WB=upstream
 sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
 	@echo "🔄 Syncing upstream repository to upstream branch..."
 	git remote show | grep -q upstream || \
@@ -48,11 +47,11 @@ sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
 	$(MAKE) clean-wt WT=${WT}
 	@echo "✅ Upstream repository synced to upstream branch."
 
-OURS=README.md cmd internal Makefile go.*
-merge-upstream: ⚙️  ## Auto-merge upstream after sync-upstream
+OURS=README.md cmd internal Makefile go.mod go.sum
+merge-upstream: ⚙️  ## Auto-merge upstream changes while preserving Go-specific core files
 	@echo "🔄 Merging upstream changes (preserving Go-specific core files)..."
-	git fetch upstream
-	git merge upstream --no-commit --no-ff || true
+	git fetch origin upstream  # fetch upstream changes from our fork
+	git merge upstream --no-commit --no-ff || echo "⚠️ Merge conflicts detected (expected)"
 	git checkout upstream -- README.md
 	@echo "↪️ Re-apply Go-specific README.md changes..."
 	git mv -f README.md README.orig.md
