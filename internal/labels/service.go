@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/domain"
@@ -60,6 +61,10 @@ func (s *Service) Create(ctx context.Context, companyID, name, color string) (*d
 		label.ID, label.CompanyID, label.Name, label.Color, ts, ts,
 	)
 	if err != nil {
+		// Check if it's a UNIQUE constraint violation (can happen due to race condition)
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return nil, ErrDuplicate
+		}
 		return nil, fmt.Errorf("inserting label: %w", err)
 	}
 	return label, nil
@@ -140,17 +145,40 @@ func (s *Service) GetByNameAndCompany(ctx context.Context, companyID, name strin
 }
 
 // LinkToIssue adds a label to an issue (idempotent).
+// Verifies that the label and issue belong to the same company.
 // Returns ErrIssueNotFound if the issue does not exist.
-// Returns ErrNotFound if the label does not exist.
+// Returns ErrNotFound if the label does not exist or belongs to a different company.
 func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) error {
-	// Verify the issue exists
-	if err := s.issueExists(ctx, issueID); err != nil {
-		return err
+	// Verify both issue and label exist and belong to the same company
+	var issueCompanyID, labelCompanyID string
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT i.company_id, l.company_id
+		 FROM issues i, labels l
+		 WHERE i.id = ? AND l.id = ?`,
+		issueID, labelID,
+	).Scan(&issueCompanyID, &labelCompanyID)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Check which one doesn't exist
+			var exists string
+			if err := s.store.DB.QueryRowContext(ctx,
+				`SELECT id FROM issues WHERE id = ? LIMIT 1`,
+				issueID,
+			).Scan(&exists); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrIssueNotFound
+				}
+				return fmt.Errorf("checking issue exists: %w", err)
+			}
+			return ErrNotFound
+		}
+		return fmt.Errorf("checking issue and label: %w", err)
 	}
 
-	// Verify the label exists
-	if err := s.labelExists(ctx, labelID); err != nil {
-		return err
+	// Verify they belong to the same company
+	if issueCompanyID != labelCompanyID {
+		return ErrNotFound
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -158,7 +186,7 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 
 	// Insert with IGNORE or check for existing, then insert if not exists
 	// For SQLite, we use INSERT OR IGNORE
-	_, err := s.store.DB.ExecContext(ctx,
+	_, err = s.store.DB.ExecContext(ctx,
 		`INSERT OR IGNORE INTO issue_labels(issue_id, label_id, created_at)
 		 VALUES (?, ?, ?)`,
 		issueID, labelID, ts,

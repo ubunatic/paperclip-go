@@ -48,7 +48,10 @@ func TestGet(t *testing.T) {
 	companyID := testutil.CreateTestCompany(t, store)
 
 	// Create a label
-	created, _ := svc.Create(context.Background(), companyID, "feature", "#00FF00")
+	created, err := svc.Create(context.Background(), companyID, "feature", "#00FF00")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
 
 	// Get it back
 	retrieved, err := svc.Get(context.Background(), created.ID)
@@ -77,9 +80,18 @@ func TestListByCompany(t *testing.T) {
 	companyID := testutil.CreateTestCompany(t, store)
 
 	// Create multiple labels
-	svc.Create(context.Background(), companyID, "bug", "#FF0000")
-	svc.Create(context.Background(), companyID, "feature", "#00FF00")
-	svc.Create(context.Background(), companyID, "urgent", "#0000FF")
+	_, err := svc.Create(context.Background(), companyID, "bug", "#FF0000")
+	if err != nil {
+		t.Fatalf("Create bug: %v", err)
+	}
+	_, err = svc.Create(context.Background(), companyID, "feature", "#00FF00")
+	if err != nil {
+		t.Fatalf("Create feature: %v", err)
+	}
+	_, err = svc.Create(context.Background(), companyID, "urgent", "#0000FF")
+	if err != nil {
+		t.Fatalf("Create urgent: %v", err)
+	}
 
 	// List them
 	labels, err := svc.ListByCompany(context.Background(), companyID)
@@ -110,8 +122,11 @@ func TestDelete(t *testing.T) {
 	companyID := testutil.CreateTestCompany(t, store)
 
 	// Create and delete a label
-	created, _ := svc.Create(context.Background(), companyID, "temp", "#AAAAAA")
-	err := svc.Delete(context.Background(), created.ID)
+	created, err := svc.Create(context.Background(), companyID, "temp", "#AAAAAA")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	err = svc.Delete(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
@@ -136,7 +151,10 @@ func TestGetByNameAndCompany(t *testing.T) {
 	companyID := testutil.CreateTestCompany(t, store)
 
 	// Create a label
-	created, _ := svc.Create(context.Background(), companyID, "docs", "#999999")
+	created, err := svc.Create(context.Background(), companyID, "docs", "#999999")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
 
 	// Get it by name
 	retrieved, err := svc.GetByNameAndCompany(context.Background(), companyID, "docs")
@@ -169,10 +187,14 @@ func TestLinkToIssue(t *testing.T) {
 	issueID := testutil.CreateTestIssue(t, store, companyID)
 
 	// Create a label
-	label, _ := svc.Create(context.Background(), companyID, "critical", "#FF0000")
+	created, err := svc.Create(context.Background(), companyID, "critical", "#FF0000")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	label := created
 
 	// Link it to the issue
-	err := svc.LinkToIssue(context.Background(), issueID, label.ID)
+	err = svc.LinkToIssue(context.Background(), issueID, label.ID)
 	if err != nil {
 		t.Fatalf("LinkToIssue: %v", err)
 	}
@@ -194,6 +216,14 @@ func TestLinkToIssue(t *testing.T) {
 	if !errors.Is(err, labels.ErrNotFound) {
 		t.Errorf("LinkToIssue nonexistent label: %v, want ErrNotFound", err)
 	}
+
+	// Test cross-company linking vulnerability: try to link label from different company
+	otherCompanyID := testutil.CreateTestCompany(t, store)
+	otherIssueID := testutil.CreateTestIssue(t, store, otherCompanyID)
+	err = svc.LinkToIssue(context.Background(), otherIssueID, label.ID)
+	if !errors.Is(err, labels.ErrNotFound) {
+		t.Errorf("LinkToIssue cross-company: %v, want ErrNotFound", err)
+	}
 }
 
 func TestUnlinkFromIssue(t *testing.T) {
@@ -204,11 +234,17 @@ func TestUnlinkFromIssue(t *testing.T) {
 	issueID := testutil.CreateTestIssue(t, store, companyID)
 
 	// Create and link a label
-	label, _ := svc.Create(context.Background(), companyID, "high-priority", "#FF7700")
-	svc.LinkToIssue(context.Background(), issueID, label.ID)
+	label, err := svc.Create(context.Background(), companyID, "high-priority", "#FF7700")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	err = svc.LinkToIssue(context.Background(), issueID, label.ID)
+	if err != nil {
+		t.Fatalf("LinkToIssue: %v", err)
+	}
 
 	// Unlink it
-	err := svc.UnlinkFromIssue(context.Background(), issueID, label.ID)
+	err = svc.UnlinkFromIssue(context.Background(), issueID, label.ID)
 	if err != nil {
 		t.Fatalf("UnlinkFromIssue: %v", err)
 	}
@@ -228,13 +264,31 @@ func TestGetLabelsForIssue(t *testing.T) {
 	issueID := testutil.CreateTestIssue(t, store, companyID)
 
 	// Create and link multiple labels
-	label1, _ := svc.Create(context.Background(), companyID, "backend", "#0000FF")
-	label2, _ := svc.Create(context.Background(), companyID, "frontend", "#00FF00")
-	label3, _ := svc.Create(context.Background(), companyID, "urgent", "#FF0000")
+	label1, err := svc.Create(context.Background(), companyID, "backend", "#0000FF")
+	if err != nil {
+		t.Fatalf("Create label1: %v", err)
+	}
+	label2, err := svc.Create(context.Background(), companyID, "frontend", "#00FF00")
+	if err != nil {
+		t.Fatalf("Create label2: %v", err)
+	}
+	label3, err := svc.Create(context.Background(), companyID, "urgent", "#FF0000")
+	if err != nil {
+		t.Fatalf("Create label3: %v", err)
+	}
 
-	svc.LinkToIssue(context.Background(), issueID, label1.ID)
-	svc.LinkToIssue(context.Background(), issueID, label2.ID)
-	svc.LinkToIssue(context.Background(), issueID, label3.ID)
+	err = svc.LinkToIssue(context.Background(), issueID, label1.ID)
+	if err != nil {
+		t.Fatalf("LinkToIssue label1: %v", err)
+	}
+	err = svc.LinkToIssue(context.Background(), issueID, label2.ID)
+	if err != nil {
+		t.Fatalf("LinkToIssue label2: %v", err)
+	}
+	err = svc.LinkToIssue(context.Background(), issueID, label3.ID)
+	if err != nil {
+		t.Fatalf("LinkToIssue label3: %v", err)
+	}
 
 	// Get labels for issue
 	labels, err := svc.GetLabelsForIssue(context.Background(), issueID)

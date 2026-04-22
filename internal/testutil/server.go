@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/issues"
@@ -34,7 +35,9 @@ func SpawnActivityLog(s *store.Store) *activity.Log {
 func CreateTestCompany(t *testing.T, s *store.Store) string {
 	t.Helper()
 	companySvc := companies.New(s)
-	company, err := companySvc.Create(context.Background(), "Test Corp", "test-corp", "Test company")
+	// Use a unique shortname to avoid UNIQUE constraint violations in tests
+	shortname := "test-" + uuid.New().String()[:8]
+	company, err := companySvc.Create(context.Background(), "Test Corp", shortname, "Test company")
 	if err != nil {
 		t.Fatalf("CreateTestCompany: %v", err)
 	}
