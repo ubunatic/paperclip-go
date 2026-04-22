@@ -32,10 +32,10 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/companies` CRUD | 4 | ✅ | — |
 | `PATCH /api/companies/{id}` | 1 | ✅ | A1 |
 | `/api/agents` CRUD + me + patch | 6 | ✅ | — |
+| Issue status enum validation | 1 | ✅ | A2 |
 | Agent lifecycle (pause/resume/terminate) | 3 | ✅ | B1 |
 | Agent configuration field | 1 | ✅ | B2 |
 | `/api/issues` CRUD + checkout/release | 9 | ✅ | — |
-| Issue status enum validation | 1 | ✅ | A2 |
 | Issue labels | 5+ | 🔲 | C1 |
 | Issue documents / work-products | 5+ | 🔲 | C2 |
 | Issue read / archive state | 2 | 🔲 | C3 |
@@ -124,16 +124,16 @@ Tasks:
 
 Acceptance: `curl -XPATCH localhost:3200/api/companies/$CID -d '{"name":"New"}' -H 'content-type:application/json'` → 200 with updated name.
 
-#### A2 — Issue status enum validation
+#### A2 — Issue status enum validation ✅
 
 **Files:** `internal/issues/service.go`, `internal/domain/issue.go`
 
-Tasks:
-- Define `ValidStatuses` set in `domain/issue.go`.
-- In `issues.Service.Create` and `issues.Service.Update`, validate `status` field against the set; return `ErrInvalidStatus` (→ 422) for unknown values.
-- Unit test: valid status accepted, invalid status rejected with correct error.
+Tasks: ✅ COMPLETE
+- Define `ValidStatuses` set in `domain/issue.go` — ✅ Already existed
+- In `issues.Service.Create` and `issues.Service.Update`, validate `status` field against the set; return `ErrInvalidStatus` (→ 422) for unknown values — ✅ Update already validated, Create now validates
+- Unit test: valid status accepted, invalid status rejected with correct error — ✅ Added TestCreateValidStatus, TestCreateInvalidStatus
 
-Acceptance: `POST /api/issues` with `"status":"bogus"` → 422.
+Acceptance: ✅ `POST /api/issues` with `"status":"bogus"` → 422.
 
 #### A3 — `configure` + `onboard` CLI commands
 

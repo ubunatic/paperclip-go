@@ -39,10 +39,19 @@ func New(s *store.Store) *Service {
 }
 
 // Create inserts a new issue and returns the created entity.
-func (s *Service) Create(ctx context.Context, companyID, title, body string, assigneeID *string) (*domain.Issue, error) {
+func (s *Service) Create(ctx context.Context, companyID, title, body, status string, assigneeID *string) (*domain.Issue, error) {
+	// Default to "open" if status is empty
+	if status == "" {
+		status = "open"
+	}
+
+	// Validate status
+	if !domain.IsValidIssueStatus(status) {
+		return nil, ErrInvalidStatus
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
-	status := "open"
 	i := &domain.Issue{
 		ID:         ids.NewUUID(),
 		CompanyID:  companyID,

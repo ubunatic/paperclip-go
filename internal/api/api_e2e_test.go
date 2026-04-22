@@ -584,6 +584,10 @@ func TestIssuesE2E(t *testing.T) {
 	if issueID == "" {
 		t.Fatalf("expected id in POST response, got %v", created)
 	}
+	// Verify default status is "open" when not provided
+	if status, _ := created["status"].(string); status != "open" {
+		t.Errorf("POST /api/issues (no status) returned status = %q, want open", status)
+	}
 
 	// GET /api/issues/{id} → 200
 	resp2, err := http.Get(srv.URL + "/api/issues/" + issueID)
@@ -730,6 +734,67 @@ func TestIssuesE2E(t *testing.T) {
 	resp14.Body.Close()
 	if resp14.StatusCode != http.StatusNotFound {
 		t.Errorf("GET deleted issue status = %d, want 404", resp14.StatusCode)
+	}
+
+	// POST /api/issues with invalid status → 422
+	invalidStatusBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue with Invalid Status",
+		"body":      "This issue has an invalid status",
+		"status":    "bogus",
+	})
+	respInvalidStatus, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(invalidStatusBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues (invalid status): %v", err)
+	}
+	respInvalidStatus.Body.Close()
+	if respInvalidStatus.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST /api/issues (invalid status) status = %d, want 422", respInvalidStatus.StatusCode)
+	}
+
+	// POST /api/issues with explicit valid status "blocked" → 201 with status persisted
+	validStatusBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue with Blocked Status",
+		"body":      "This issue starts as blocked",
+		"status":    "blocked",
+	})
+	respValidStatus, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(validStatusBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues (valid status): %v", err)
+	}
+	defer respValidStatus.Body.Close()
+	if respValidStatus.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/issues (valid status) status = %d, want 201", respValidStatus.StatusCode)
+	}
+
+	var createdWithStatus map[string]any
+	if err := json.NewDecoder(respValidStatus.Body).Decode(&createdWithStatus); err != nil {
+		t.Fatalf("decoding POST (valid status) response: %v", err)
+	}
+	createdStatus, _ := createdWithStatus["status"].(string)
+	if createdStatus != "blocked" {
+		t.Errorf("POST /api/issues created issue status = %q, want %q", createdStatus, "blocked")
+	}
+
+	// Verify the status persisted by fetching the issue
+	createdIssueID, _ := createdWithStatus["id"].(string)
+	respFetchStatus, err := http.Get(srv.URL + "/api/issues/" + createdIssueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s: %v", createdIssueID, err)
+	}
+	defer respFetchStatus.Body.Close()
+	if respFetchStatus.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/issues/%s status = %d, want 200", createdIssueID, respFetchStatus.StatusCode)
+	}
+
+	var fetchedIssue map[string]any
+	if err := json.NewDecoder(respFetchStatus.Body).Decode(&fetchedIssue); err != nil {
+		t.Fatalf("decoding fetched issue: %v", err)
+	}
+	fetchedStatus, _ := fetchedIssue["status"].(string)
+	if fetchedStatus != "blocked" {
+		t.Errorf("fetched issue status = %q, want %q", fetchedStatus, "blocked")
 	}
 }
 

@@ -254,7 +254,7 @@ func TestDeleteAgentWithHeartbeatRuns(t *testing.T) {
 
 	// Create an issue
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestDeleteAgentHasActiveCheckout(t *testing.T) {
 	// Create an issue assigned to the agent
 	issueSvc := issues.New(s)
 	agentIDPtr := &agent.ID
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", agentIDPtr)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", agentIDPtr)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
