@@ -249,9 +249,11 @@ func (s *Service) UnlinkFromIssue(ctx context.Context, issueID, labelID string) 
 			return fmt.Errorf("verifying issue and label: %w", err)
 		}
 
-		// Verify same company
+		// Verify same company. For unlink operations, preserve the existing
+		// not-found behavior for callers that only special-case
+		// ErrAssociationNotFound.
 		if issueCompanyID != labelCompanyID {
-			return ErrCompanyMismatch
+			return ErrAssociationNotFound
 		}
 
 		// Delete the association

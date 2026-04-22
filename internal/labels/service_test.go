@@ -470,8 +470,8 @@ func TestUnlinkFromIssueWrongCompany(t *testing.T) {
 
 	// Try to unlink label from c1 to issue in c2
 	err = svc.UnlinkFromIssue(ctx, "i1", label.ID)
-	if err != labels.ErrCompanyMismatch {
-		t.Errorf("UnlinkFromIssue: got %v, want ErrCompanyMismatch", err)
+	if err != labels.ErrAssociationNotFound {
+		t.Errorf("UnlinkFromIssue: got %v, want ErrAssociationNotFound", err)
 	}
 }
 
