@@ -2,6 +2,7 @@
 
 .DEFAULT_GOAL := all
 
+SHELL   := bash
 BINARY  := paperclip-go
 CMD     := ./cmd/paperclip-go
 OUT     := ./bin/$(BINARY)
@@ -24,3 +25,39 @@ lint: ⚙️  ## Run linters
 
 clean: ⚙️  ## Clean up build artifacts
 	rm -rf bin/
+
+WT := .build/worktree-$(shell date +%s)
+wt: ⚙️ clean-wt  ## Create a worktree for the upstream branch
+	git worktree add "${WT}"
+	@echo "🛠️  Worktree created at ${WT}."
+
+clean-wt: ⚙️  ## Remove the worktree
+	git worktree prune -v
+	git worktree remove -f "${WT}" 2>/dev/null || true
+	@echo "🧹 Worktree ${WT} cleaned up."
+
+sync-upstream: WB=upstream
+sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
+	@echo "🔄 Syncing upstream repository to upstream branch..."
+	git remote show | grep -q upstream || \
+	    git remote add upstream https://github.com/paperclipai/paperclip.git
+	git fetch upstream master
+	$(MAKE) wt WT=${WT}
+	git -C "${WT}" reset --hard upstream/master -q
+	git -C "${WT}" push origin upstream --force -q
+	$(MAKE) clean-wt WT=${WT}
+	@echo "✅ Upstream repository synced to upstream branch."
+
+OURS=README.md cmd internal Makefile go.*
+merge-upstream: ⚙️  ## Auto-merge upstream after sync-upstream
+	@echo "🔄 Merging upstream changes (preserving Go-specific core files)..."
+	git fetch upstream
+	git merge upstream --no-commit --no-ff || true
+	git checkout upstream -- README.md
+	@echo "↪️ Re-apply Go-specific README.md changes..."
+	git mv -f README.md README.orig.md
+	git rm -f .github/PULL_REQUEST_TEMPLATE.md 2>/dev/null || true
+	@echo "⬇️ Preserving Go-specific core files..."
+	git checkout HEAD -- ${OURS}
+	git commit -m "Sync upstream (preserving Go-specific core)"
+	@echo "✅ Upstream changes merged (Go-specific core preserved)."
