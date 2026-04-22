@@ -50,10 +50,14 @@ sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
 
 OURS=README.md cmd internal Makefile go.*
 merge-upstream: ⚙️  ## Auto-merge upstream after sync-upstream
+	@echo "🔄 Merging upstream changes (preserving Go-specific core files)..."
 	git fetch upstream
 	git merge upstream --no-commit --no-ff || true
 	git checkout upstream -- README.md
+	@echo "↪️ Re-apply Go-specific README.md changes..."
 	git mv -f README.md README.orig.md
 	git rm -f .github/PULL_REQUEST_TEMPLATE.md 2>/dev/null || true
+	@echo "⬇️ Preserving Go-specific core files..."
 	git checkout HEAD -- ${OURS}
 	git commit -m "Sync upstream (preserving Go-specific core)"
+	@echo "✅ Upstream changes merged (Go-specific core preserved)."
