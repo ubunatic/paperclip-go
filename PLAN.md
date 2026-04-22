@@ -6,6 +6,22 @@
 
 ---
 
+## Status & Recent Review (2026-04-22)
+
+**Phases Completed:** A1-A4, B1-B2, C1 ✅
+
+**Recent Code Review Findings:**
+
+| Category | Status | Details |
+|----------|--------|---------|
+| Security | 🔧 Fixed | Cross-company label removal vulnerability patched; `UnlinkFromIssue()` now validates company ownership |
+| Code Quality | 🔧 Fixed | Unused error in config marshaling, implicit FK cascades now documented |
+| Parity | ✅ Verified | All response schemas match TS; JSON keys consistent (camelCase); no missing endpoints in A-C phases |
+| Testing | ⚠️ Debt | Handler packages lack unit tests; E2E coverage exists but focused on happy path |
+| Next Quick Wins | → C2/C3 | Documents/work-products and archive/read state require minimal effort; zero cross-tenant concerns |
+
+---
+
 ## Ground rules (unchanged from MVP)
 
 - **Do not modify** `server/`, `ui/`, `packages/`, `cli/`, `tests/`, `scripts/`,
@@ -459,3 +475,79 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 - Data sharing with the TS instance
 
 These remain deferred until there is a concrete need.
+
+---
+
+## Review Notes & Quality Debt (2026-04-22)
+
+### Fixed Issues
+
+1. **Security: Cross-Company Label Removal (CVE-like)**
+   - **Status**: ✅ FIXED
+   - **File**: `internal/labels/service.go`
+   - **Issue**: `UnlinkFromIssue()` lacked company validation; attacker with label+issue IDs could unlink labels across companies
+   - **Fix**: Added transaction with company match validation mirroring `LinkToIssue()`
+   - **Test**: Added `TestUnlinkFromIssueWrongCompany` to prevent regression
+
+2. **Code Quality: Unused Error Handling (3 instances)**
+   - **Status**: ✅ FIXED
+   - **Files**: `internal/agents/service.go` (Pause/Resume/Terminate methods)
+   - **Issue**: `json.Marshal()` errors silently ignored via `_` placeholder
+   - **Fix**: Replaced with explicit error returns: `if err != nil { return nil, fmt.Errorf("marshaling: %w", err) }`
+
+3. **Documentation: Implicit FK Cascade**
+   - **Status**: ✅ FIXED
+   - **File**: `internal/issues/service.go` Delete() method
+   - **Issue**: Labels deleted via DB FK cascade but not obvious from code
+   - **Fix**: Added explicit comment: `// Labels are cascade-deleted via issue_labels FK constraint`
+
+4. **Error Handling: FK Violation Context**
+   - **Status**: ✅ FIXED
+   - **File**: `internal/labels/service.go` LinkToIssue()
+   - **Issue**: FK violation handler returned generic error; couldn't distinguish "label gone" vs "issue gone"
+   - **Fix**: Enhanced to query both entities in transaction and return specific error type
+
+### Design Debt (Non-Critical)
+
+| Item | Impact | Recommendation |
+|------|--------|-----------------|
+| Missing handler unit tests | Medium | Add `internal/api/{agents,issues}/handler_test.go` covering error cases (404, 409, 422) |
+| No config schema validation | Low | Define allowed agent config keys; consider JSON schema in `Update()` |
+| Response shape validation | Low | Verify against TS schema; suggest adding `SchemaTest` in E2E |
+
+### Parity Status
+
+✅ **Verified:**
+- All response JSON uses camelCase (companyId, createdAt, etc.)
+- HTTP status codes align with TS (409 for conflicts, 422 for validation, 404 for missing)
+- No missing endpoints in Phases A-C
+- Error response shapes consistent
+
+🔲 **Not Checked (defer to Phase C2+):**
+- Pagination, filtering on large lists (Documents, Routines)
+- Batch operations
+- Soft-delete vs hard-delete semantics
+
+### Next Recommended Phases
+
+1. **C2 — Documents/Work-Products** (high value, low risk)
+   - Schema: Add `documents` and `work_products` JSON arrays to `issues` table
+   - No cross-tenant concerns; tests validate schema round-trip only
+   - ~1–2 hours
+
+2. **C3 — Archive/Read State** (enables soft-delete UX)
+   - Schema: Add `archived_at`, optionally `last_read_at` to `issues` table
+   - Impacts: `GET /api/issues` default filter, GET with `?includeArchived=true`
+   - ~1–2 hours
+
+3. **D1 — Activity POST + Issue-Scoped** (unblocks audit trail)
+   - Reuse existing `activity_log` table; add POST handler
+   - New route: `GET /api/issues/{id}/activity` scoped to that issue
+   - ~1 hour
+
+### Testing Notes
+
+- **Current**: All Go tests pass (26 label tests including new regression test)
+- **Build**: `make build && make test` ✅ green
+- **Gaps**: Handler packages (agents, issues, companies) lack unit tests; only E2E coverage exists
+- **Recommendation**: Consider adding `handler_test.go` per package in next phase for 404/409/422 error cases
