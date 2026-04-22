@@ -772,9 +772,9 @@ func TestIssuesE2E(t *testing.T) {
 	if err := json.NewDecoder(respValidStatus.Body).Decode(&createdWithStatus); err != nil {
 		t.Fatalf("decoding POST (valid status) response: %v", err)
 	}
-	issuedStatus, _ := createdWithStatus["status"].(string)
-	if issuedStatus != "blocked" {
-		t.Errorf("POST /api/issues created issue status = %q, want %q", issuedStatus, "blocked")
+	createdStatus, _ := createdWithStatus["status"].(string)
+	if createdStatus != "blocked" {
+		t.Errorf("POST /api/issues created issue status = %q, want %q", createdStatus, "blocked")
 	}
 
 	// Verify the status persisted by fetching the issue
