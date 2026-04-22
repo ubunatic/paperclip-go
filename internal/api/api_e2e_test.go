@@ -1562,11 +1562,15 @@ func TestLabelsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/issues/%s after add: %v", issueID, err)
 	}
+	defer respGetIssue2.Body.Close()
+	if respGetIssue2.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGetIssue2.Body)
+		t.Fatalf("GET /api/issues/%s after add status = %d, want 200; body = %s", issueID, respGetIssue2.StatusCode, string(body))
+	}
 	var issueGet2 map[string]any
 	if err := json.NewDecoder(respGetIssue2.Body).Decode(&issueGet2); err != nil {
 		t.Fatalf("decoding issue response: %v", err)
 	}
-	respGetIssue2.Body.Close()
 	labels2, _ := issueGet2["labels"].([]any)
 	if len(labels2) != 1 {
 		t.Errorf("labels after add len = %d, want 1", len(labels2))

@@ -26,6 +26,9 @@ var ErrIssueNotFound = errors.New("issue not found")
 // ErrCompanyMismatch is returned when issue and label belong to different companies.
 var ErrCompanyMismatch = errors.New("issue and label are in different companies")
 
+// ErrAssociationNotFound is returned when a label-issue association does not exist.
+var ErrAssociationNotFound = errors.New("label is not associated with this issue")
+
 // SQLite extended error codes (https://www.sqlite.org/rescode.html#extrc)
 // Used for translating constraint violations to domain-specific errors.
 const (
@@ -199,7 +202,7 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 }
 
 // UnlinkFromIssue removes the association between a label and an issue.
-// Returns ErrNotFound if the association does not exist.
+// Returns ErrAssociationNotFound if the association does not exist.
 func (s *Service) UnlinkFromIssue(ctx context.Context, issueID, labelID string) error {
 	result, err := s.store.DB.ExecContext(ctx,
 		`DELETE FROM issue_labels WHERE issue_id = ? AND label_id = ?`, issueID, labelID,
@@ -212,7 +215,7 @@ func (s *Service) UnlinkFromIssue(ctx context.Context, issueID, labelID string) 
 		return fmt.Errorf("checking rows affected: %w", err)
 	}
 	if n == 0 {
-		return ErrNotFound // label not attached to this issue
+		return ErrAssociationNotFound
 	}
 	return nil
 }

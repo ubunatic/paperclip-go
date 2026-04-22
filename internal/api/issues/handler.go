@@ -338,7 +338,7 @@ func addLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 		if err != nil {
 			switch {
 			case errors.Is(err, lsvc.ErrIssueNotFound):
-				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")
+				respond.Error(w, http.StatusNotFound, "issue_not_found", "issue not found")
 				return
 			case errors.Is(err, lsvc.ErrNotFound):
 				respond.Error(w, http.StatusNotFound, "label_not_found", "label not found")
@@ -364,7 +364,7 @@ func removeLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 
 		err := labelSvc.UnlinkFromIssue(r.Context(), issueID, labelID)
 		if err != nil {
-			if errors.Is(err, lsvc.ErrNotFound) {
+			if errors.Is(err, lsvc.ErrAssociationNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "label association not found")
 				return
 			}

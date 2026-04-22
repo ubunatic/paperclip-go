@@ -37,7 +37,9 @@ func TestHandlerList_MissingCompanyID(t *testing.T) {
 	}
 
 	var resp map[string]any
-	json.NewDecoder(w.Body).Decode(&resp)
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
 	errObj, ok := resp["error"].(map[string]any)
 	if !ok || errObj["code"] != "validation_error" {
 		t.Errorf("error code not validation_error: %v", resp)
@@ -112,7 +114,9 @@ func TestHandlerCreate_DuplicateLabel(t *testing.T) {
 	}
 
 	var resp map[string]any
-	json.NewDecoder(w.Body).Decode(&resp)
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
 	errObj, ok := resp["error"].(map[string]any)
 	if !ok || errObj["code"] != "duplicate_label" {
 		t.Errorf("error code not duplicate_label: %v", resp)

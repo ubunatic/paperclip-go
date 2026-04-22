@@ -316,8 +316,8 @@ func TestUnlinkFromIssueNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	err := svc.UnlinkFromIssue(ctx, "i1", "label1")
-	if err != labels.ErrNotFound {
-		t.Errorf("UnlinkFromIssue: got %v, want ErrNotFound", err)
+	if err != labels.ErrAssociationNotFound {
+		t.Errorf("UnlinkFromIssue: got %v, want ErrAssociationNotFound", err)
 	}
 }
 
