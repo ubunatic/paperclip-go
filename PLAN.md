@@ -36,7 +36,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | Agent configuration field | 1 | ✅ | B2 |
 | `/api/issues` CRUD + checkout/release | 9 | ✅ | — |
 | Issue status enum validation | 1 | ✅ | A2 |
-| Issue labels | 5+ | 🔲 | C1 |
+| Issue labels | 5+ | ✅ | C1 |
 | Issue documents / work-products | 5+ | 🔲 | C2 |
 | Issue read / archive state | 2 | 🔲 | C3 |
 | `/api/issues/{id}/comments` | 2 | ✅ | — |
@@ -78,7 +78,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 
 | Feature | TS | Go | Phase |
 |---|---|---|---|
-| `issues.labels` (junction table) | ✅ | 🔲 | C1 |
+| `issues.labels` (junction table) | ✅ | ✅ | C1 |
 | `issues.documents` / `work_products` | ✅ | 🔲 | C2 |
 | `issues.execution_policy` | ✅ | 🔲 | C2 |
 | `agents.configuration` (YAML/JSON) | ✅ | ✅ | B2 |
