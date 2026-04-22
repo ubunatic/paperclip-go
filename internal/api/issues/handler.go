@@ -15,8 +15,8 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/respond"
 )
 
-// IssueWithLabels is the response struct for issue GET, including associated labels.
-type IssueWithLabels struct {
+// issueWithLabels is the response struct for issue GET, including associated labels.
+type issueWithLabels struct {
 	*domain.Issue
 	Labels []*domain.Label `json:"labels"`
 }
@@ -133,7 +133,7 @@ func get(s *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 			return
 		}
 
-		respond.JSON(w, http.StatusOK, IssueWithLabels{
+		respond.JSON(w, http.StatusOK, issueWithLabels{
 			Issue:  issue,
 			Labels: labels,
 		})

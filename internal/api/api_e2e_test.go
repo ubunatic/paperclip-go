@@ -1642,8 +1642,7 @@ func TestLabelsE2E(t *testing.T) {
 
 	// 15. POST label to issue with nonexistent labelId → 404
 	badLabelAddBody, _ := json.Marshal(map[string]string{
-		"labelId":   "nonexistent-label-id",
-		"companyId": companyID,
+		"labelId": "nonexistent-label-id",
 	})
 	respBadLabelAdd, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(badLabelAddBody))
 	if err != nil {

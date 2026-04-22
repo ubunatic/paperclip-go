@@ -244,30 +244,6 @@ func (s *Service) GetLabelsForIssue(ctx context.Context, issueID string) ([]*dom
 	return out, nil
 }
 
-// issueExists checks if an issue exists.
-func (s *Service) issueExists(ctx context.Context, issueID string) error {
-	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT 1 FROM issues WHERE id = ? LIMIT 1`,
-		issueID,
-	).Scan(new(int))
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrIssueNotFound
-	}
-	return err
-}
-
-// labelExists checks if a label exists.
-func (s *Service) labelExists(ctx context.Context, labelID string) error {
-	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT 1 FROM labels WHERE id = ? LIMIT 1`,
-		labelID,
-	).Scan(new(int))
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrNotFound
-	}
-	return err
-}
-
 // scanner is satisfied by both *sql.Row and *sql.Rows.
 type scanner interface {
 	Scan(dest ...any) error
