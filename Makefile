@@ -49,6 +49,7 @@ sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
 	@echo "✅ Upstream repository synced to upstream branch."
 
 merge-upstream: ⚙️  ## Auto-merge upstream after sync-upstream
+	@rm -f README.fork.md  # Ensure no leftover backup files
 	git fetch origin upstream
 	@echo "🛡️ Checking for uncommitted changes before merging..."
 	@git diff --quiet || { echo "❌ Uncommitted changes!. Please commit before merging."; exit 1; }
