@@ -113,11 +113,11 @@ Each phase has: one agent, one package (or small group), tests required, `make t
 
 > Fixes and small additions that require no schema changes. Each sub-task can be done independently.
 
-#### A1 — `PATCH /api/companies/{id}`
+#### A1 — `PATCH /api/companies/{id}` ✅
 
 **Files:** `internal/companies/service.go`, `internal/api/companies/handler.go`, `internal/companies/service_test.go`
 
-Tasks:
+Tasks: ✅ COMPLETE
 - Add `Update(ctx, id, fields)` method to companies service using an explicit patch/fields type (for example, pointer fields such as `*string` for `name` and `description`) so the service can distinguish "not provided" from "provided as empty".
 - Add `PATCH /{id}` route in companies handler: decode into that patch type, call service, and apply only fields that are present; this must allow setting values to zero values such as clearing `description` to `""`; return 200 + updated company.
 - Unit test: update name, update description, update both, clear description to empty string, 404 on missing id.
@@ -135,22 +135,22 @@ Tasks: ✅ COMPLETE
 
 Acceptance: ✅ `POST /api/issues` with `"status":"bogus"` → 422.
 
-#### A3 — `configure` + `onboard` CLI commands
+#### A3 — `configure` + `onboard` CLI commands ✅
 
 **Files:** `internal/cli/configure.go`, `internal/cli/onboard.go`
 
-Tasks:
+Tasks: ✅ COMPLETE
 - `configure`: prints the active config path and YAML content (read-only view for MVP).
 - `onboard`: interactive prompts for `name`, `shortname`, calls `POST /api/companies`, prints the created company ID. If `--remote` not given, opens the DB directly.
 - Add both commands to `internal/cli/root.go`.
 
 Acceptance: `paperclip-go configure` prints config; `paperclip-go onboard` creates a company via prompts.
 
-#### A4 — Build version via ldflags
+#### A4 — Build version via ldflags ✅
 
 **Files:** `cmd/paperclip-go/main.go`, `internal/api/health/handler.go`, `Makefile`
 
-Tasks:
+Tasks: ✅ COMPLETE
 - Declare `var Version = "dev"` in `main.go`; pass to `cli.Execute(version)`.
 - Thread version string into health handler response.
 - In `Makefile`, add `-ldflags "-X main.Version=$(git describe --tags --always --dirty)"` to the `build` target.
@@ -164,11 +164,11 @@ Acceptance: `make build && ./bin/paperclip-go serve` → `GET /api/health` retur
 
 > Adds `runtime_state` and `configuration` fields to agents without breaking existing tests.
 
-#### B1 — Agent `runtime_state` field
+#### B1 — Agent `runtime_state` field ✅
 
 **Files:** `internal/store/migrations/0002_agent_runtime.sql`, `internal/domain/agent.go`, `internal/agents/service.go`, `internal/api/agents/handler.go`
 
-Tasks:
+Tasks: ✅ COMPLETE
 - Migration: `ALTER TABLE agents ADD COLUMN runtime_state TEXT DEFAULT 'idle'` (values: `idle|running|paused|terminated`).
 - Add `RuntimeState` to `domain.Agent`.
 - `PATCH /api/agents/{id}` already exists; extend to accept `runtimeState` field.
@@ -194,11 +194,11 @@ Acceptance: ✅ PATCH /api/agents/$AID -d '{"configuration":{"model":"claude-opu
 
 ### Phase C — Issue Enhancements
 
-#### C1 — Issue labels
+#### C1 — Issue labels ✅
 
-**Files:** `internal/store/migrations/0004_labels.sql`, `internal/domain/label.go`, `internal/issues/service.go`, `internal/api/issues/handler.go`
+**Files:** `internal/store/migrations/0004_labels.sql`, `internal/domain/label.go`, `internal/labels/service.go`, `internal/api/labels/handler.go`, `internal/api/issues/handler.go`
 
-Tasks:
+Tasks: ✅ COMPLETE
 - Migration: `labels(id, company_id, name, color)` and `issue_labels(issue_id, label_id)` junction.
 - `GET /api/issues/{id}` returns `labels []Label` in response.
 - `POST /api/issues/{id}/labels` adds a label by id.
