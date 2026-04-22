@@ -36,15 +36,6 @@ func New(s *store.Store) *Service {
 // Create inserts a new label and returns the created entity.
 // Returns ErrDuplicate if a label with the same name already exists for this company.
 func (s *Service) Create(ctx context.Context, companyID, name, color string) (*domain.Label, error) {
-	// Pre-flight check for duplicate
-	existing, err := s.GetByNameAndCompany(ctx, companyID, name)
-	if err != nil {
-		return nil, fmt.Errorf("checking for duplicate: %w", err)
-	}
-	if existing != nil {
-		return nil, ErrDuplicate
-	}
-
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	l := &domain.Label{
@@ -55,7 +46,7 @@ func (s *Service) Create(ctx context.Context, companyID, name, color string) (*d
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
-	_, err = s.store.DB.ExecContext(ctx,
+	_, err := s.store.DB.ExecContext(ctx,
 		`INSERT INTO labels(id, company_id, name, color, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?)`,
 		l.ID, l.CompanyID, l.Name, l.Color, ts, ts,
@@ -129,43 +120,69 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 }
 
 // LinkToIssue associates a label with an issue (idempotent via INSERT OR IGNORE).
-// Atomically verifies that both issue and label exist and belong to the same company.
+// Atomically verifies that both issue and label exist and belong to the same company within a transaction.
 // Returns ErrIssueNotFound if the issue doesn't exist, ErrNotFound if the label doesn't exist.
 func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) error {
-	// Atomically verify both issue and label exist and belong to same company
-	var issueCompanyID, labelCompanyID string
-	err := s.store.DB.QueryRowContext(ctx,
-		`SELECT i.company_id, l.company_id
-		 FROM issues i, labels l
-		 WHERE i.id = ? AND l.id = ?`,
-		issueID, labelID,
-	).Scan(&issueCompanyID, &labelCompanyID)
+	return s.store.WithTx(ctx, func(tx *sql.Tx) error {
+		// Verify both issue and label exist and belong to same company
+		var issueCompanyID, labelCompanyID string
+		err := tx.QueryRowContext(ctx,
+			`SELECT i.company_id, l.company_id
+			 FROM issues i, labels l
+			 WHERE i.id = ? AND l.id = ?`,
+			issueID, labelID,
+		).Scan(&issueCompanyID, &labelCompanyID)
 
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// Determine which one doesn't exist
-			if errCheck := s.issueExists(ctx, issueID); errCheck != nil {
-				return ErrIssueNotFound
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// Determine which one doesn't exist by querying within the transaction
+				var issueExists int
+				errIssue := tx.QueryRowContext(ctx,
+					`SELECT 1 FROM issues WHERE id = ? LIMIT 1`,
+					issueID,
+				).Scan(&issueExists)
+				if errors.Is(errIssue, sql.ErrNoRows) {
+					return ErrIssueNotFound
+				}
+				if errIssue != nil {
+					return fmt.Errorf("checking issue existence: %w", errIssue)
+				}
+				return ErrNotFound // label doesn't exist
 			}
-			return ErrNotFound // label doesn't exist
+			return fmt.Errorf("verifying issue and label: %w", err)
 		}
-		return fmt.Errorf("verifying issue and label: %w", err)
-	}
 
-	// Verify same company
-	if issueCompanyID != labelCompanyID {
-		return fmt.Errorf("issue and label belong to different companies")
-	}
+		// Verify same company
+		if issueCompanyID != labelCompanyID {
+			return fmt.Errorf("issue and label are in different companies")
+		}
 
-	// INSERT OR IGNORE into issue_labels
-	now := time.Now().UTC().Truncate(time.Second)
-	ts := now.Format(time.RFC3339)
-	_, err = s.store.DB.ExecContext(ctx,
-		`INSERT OR IGNORE INTO issue_labels(issue_id, label_id, created_at)
-		 VALUES (?, ?, ?)`,
-		issueID, labelID, ts,
-	)
-	return err
+		// INSERT OR IGNORE into issue_labels
+		now := time.Now().UTC().Truncate(time.Second)
+		ts := now.Format(time.RFC3339)
+		_, err = tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO issue_labels(issue_id, label_id, created_at)
+			 VALUES (?, ?, ?)`,
+			issueID, labelID, ts,
+		)
+		if err != nil {
+			var sqliteErr *sqlite.Error
+			if errors.As(err, &sqliteErr) && sqliteErr.Code() == 787 { // SQLITE_CONSTRAINT_FOREIGNKEY
+				// FK constraint violation: one of the entities was deleted
+				var issueExists int
+				errIssue := tx.QueryRowContext(ctx,
+					`SELECT 1 FROM issues WHERE id = ? LIMIT 1`,
+					issueID,
+				).Scan(&issueExists)
+				if errors.Is(errIssue, sql.ErrNoRows) {
+					return ErrIssueNotFound
+				}
+				return ErrNotFound
+			}
+			return fmt.Errorf("linking label to issue: %w", err)
+		}
+		return nil
+	})
 }
 
 // UnlinkFromIssue removes the association between a label and an issue.

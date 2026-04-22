@@ -15,6 +15,12 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/respond"
 )
 
+// IssueWithLabels is the response struct for issue GET, including associated labels.
+type IssueWithLabels struct {
+	*domain.Issue
+	Labels []*domain.Label `json:"labels"`
+}
+
 // Handler returns an http.Handler for the /api/issues sub-router.
 func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsvc.Service) http.Handler {
 	r := chi.NewRouter()
@@ -27,7 +33,7 @@ func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsv
 	r.Post("/{id}/release", release(issueSvc))
 	r.Get("/{id}/comments", listComments(commentSvc))
 	r.Post("/{id}/comments", createComment(commentSvc))
-	r.Post("/{id}/labels", addLabel(issueSvc, labelSvc))
+	r.Post("/{id}/labels", addLabel(labelSvc))
 	r.Delete("/{id}/labels/{labelId}", removeLabel(labelSvc))
 	return r
 }
@@ -132,23 +138,10 @@ func get(s *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 			labels = []*domain.Label{}
 		}
 
-		// Create envelope with labels
-		result := map[string]any{
-			"id":            issue.ID,
-			"companyId":     issue.CompanyID,
-			"title":         issue.Title,
-			"body":          issue.Body,
-			"status":        issue.Status,
-			"assigneeId":    issue.AssigneeID,
-			"checkedOutBy":  issue.CheckedOutBy,
-			"checkedOutAt":  issue.CheckedOutAt,
-			"parentIssueId": issue.ParentIssueID,
-			"createdAt":     issue.CreatedAt,
-			"updatedAt":     issue.UpdatedAt,
-			"labels":        labels,
-		}
-
-		respond.JSON(w, http.StatusOK, result)
+		respond.JSON(w, http.StatusOK, IssueWithLabels{
+			Issue:  issue,
+			Labels: labels,
+		})
 	}
 }
 
@@ -329,7 +322,7 @@ func createComment(s *comments.Service) http.HandlerFunc {
 	}
 }
 
-func addLabel(issueSvc *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
+func addLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
@@ -345,41 +338,24 @@ func addLabel(issueSvc *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 			return
 		}
 
-		// Verify issue exists and get its company_id
-		issue, err := issueSvc.Get(r.Context(), issueID)
+		// LinkToIssue validates issue/label existence and company match
+		err := labelSvc.LinkToIssue(r.Context(), issueID, body.LabelID)
 		if err != nil {
-			if errors.Is(err, isvc.ErrNotFound) {
+			switch {
+			case errors.Is(err, lsvc.ErrIssueNotFound):
 				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")
 				return
-			}
-			log.Printf("issues: error getting issue: %v", err)
-			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
-			return
-		}
-
-		// Verify label exists and get its company_id
-		label, err := labelSvc.Get(r.Context(), body.LabelID)
-		if err != nil {
-			if errors.Is(err, lsvc.ErrNotFound) {
+			case errors.Is(err, lsvc.ErrNotFound):
 				respond.Error(w, http.StatusNotFound, "label_not_found", "label not found")
 				return
+			case err.Error() == "issue and label are in different companies":
+				respond.Error(w, http.StatusConflict, "conflict", "issue and label are in different companies")
+				return
+			default:
+				log.Printf("labels: error linking to issue: %v", err)
+				respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+				return
 			}
-			log.Printf("labels: error getting label: %v", err)
-			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
-			return
-		}
-
-		// Verify issue and label are in the same company
-		if issue.CompanyID != label.CompanyID {
-			respond.Error(w, http.StatusConflict, "conflict", "issue and label are in different companies")
-			return
-		}
-
-		err = labelSvc.LinkToIssue(r.Context(), issueID, body.LabelID)
-		if err != nil {
-			log.Printf("labels: error linking to issue: %v", err)
-			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
-			return
 		}
 
 		respond.JSON(w, http.StatusOK, map[string]string{"status": "added"})
