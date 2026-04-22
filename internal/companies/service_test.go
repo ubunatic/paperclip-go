@@ -235,7 +235,7 @@ func TestCompanyCRUD(t *testing.T) {
 
 		// Create an issue in this company
 		issueSvc := issues.New(s)
-		_, err = issueSvc.Create(ctx, c.ID, "Test Issue", "Body", nil)
+		_, err = issueSvc.Create(ctx, c.ID, "Test Issue", "Body", "", nil)
 		if err != nil {
 			t.Fatalf("Create issue: %v", err)
 		}

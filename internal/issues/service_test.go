@@ -25,7 +25,7 @@ func TestCreateIssue(t *testing.T) {
 
 	// Create an issue
 	svc := issues.New(s)
-	issue, err := svc.Create(ctx, company.ID, "Test Issue", "This is a test issue", nil)
+	issue, err := svc.Create(ctx, company.ID, "Test Issue", "This is a test issue", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestGetIssue(t *testing.T) {
 	}
 
 	svc := issues.New(s)
-	issue, err := svc.Create(ctx, company.ID, "Test Issue", "Test body", nil)
+	issue, err := svc.Create(ctx, company.ID, "Test Issue", "Test body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -110,15 +110,15 @@ func TestListByCompany(t *testing.T) {
 
 	// Create 3 issues
 	svc := issues.New(s)
-	_, err = svc.Create(ctx, company.ID, "Issue 1", "Body 1", nil)
+	_, err = svc.Create(ctx, company.ID, "Issue 1", "Body 1", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue 1: %v", err)
 	}
-	_, err = svc.Create(ctx, company.ID, "Issue 2", "Body 2", nil)
+	_, err = svc.Create(ctx, company.ID, "Issue 2", "Body 2", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue 2: %v", err)
 	}
-	_, err = svc.Create(ctx, company.ID, "Issue 3", "Body 3", nil)
+	_, err = svc.Create(ctx, company.ID, "Issue 3", "Body 3", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue 3: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestCheckout(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestRelease(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestUpdate(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestDeleteIssue(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestDeleteIssueWithComments(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -402,7 +402,7 @@ func TestDeleteIssueCheckedOut(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -438,7 +438,7 @@ func TestUpdateInvalidStatus(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -447,6 +447,48 @@ func TestUpdateInvalidStatus(t *testing.T) {
 	_, err = issueSvc.Update(ctx, issue.ID, "invalid_status", nil)
 	if !errors.Is(err, issues.ErrInvalidStatus) {
 		t.Fatalf("Update with invalid status: expected ErrInvalidStatus, got %v", err)
+	}
+}
+
+func TestCreateValidStatus(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	// Create an issue with explicit valid status "blocked"
+	svc := issues.New(s)
+	issue, err := svc.Create(ctx, company.ID, "Test Issue", "Body", "blocked", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	if issue.Status != "blocked" {
+		t.Errorf("Status = %q, want %q", issue.Status, "blocked")
+	}
+}
+
+func TestCreateInvalidStatus(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	// Try to create an issue with invalid status "bogus"
+	svc := issues.New(s)
+	_, err = svc.Create(ctx, company.ID, "Test Issue", "Body", "bogus", nil)
+	if !errors.Is(err, issues.ErrInvalidStatus) {
+		t.Fatalf("Create with invalid status: expected ErrInvalidStatus, got %v", err)
 	}
 }
 

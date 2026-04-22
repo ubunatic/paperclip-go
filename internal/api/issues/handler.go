@@ -77,6 +77,7 @@ func create(s *isvc.Service) http.HandlerFunc {
 			CompanyID  string  `json:"companyId"`
 			Title      string  `json:"title"`
 			Body       string  `json:"body"`
+			Status     string  `json:"status"`
 			AssigneeID *string `json:"assigneeId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -87,8 +88,12 @@ func create(s *isvc.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId and title are required")
 			return
 		}
-		issue, err := s.Create(r.Context(), body.CompanyID, body.Title, body.Body, body.AssigneeID)
+		issue, err := s.Create(r.Context(), body.CompanyID, body.Title, body.Body, body.Status, body.AssigneeID)
 		if err != nil {
+			if errors.Is(err, isvc.ErrInvalidStatus) {
+				respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "invalid status value")
+				return
+			}
 			log.Printf("issues: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return

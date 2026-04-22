@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 
@@ -85,7 +86,7 @@ func runIssueCreate(cmd *cobra.Command, args []string) error {
 		assigneeID = &flagIssueAssignee
 	}
 
-	issue, err := svc.Create(ctx, companyID, flagIssueTitle, flagIssueBody, assigneeID)
+	issue, err := svc.Create(ctx, companyID, flagIssueTitle, flagIssueBody, "", assigneeID)
 	if err != nil {
 		return err
 	}
@@ -138,7 +139,7 @@ func runIssueGet(cmd *cobra.Command, args []string) error {
 
 	issue, err := svc.Get(ctx, flagIssueID)
 	if err != nil {
-		if err == issues.ErrNotFound {
+		if errors.Is(err, issues.ErrNotFound) {
 			return fmt.Errorf("issue %q not found", flagIssueID)
 		}
 		return err
