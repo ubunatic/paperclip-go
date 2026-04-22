@@ -1457,13 +1457,17 @@ func TestLabelsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/labels: %v", err)
 	}
-	var label map[string]any
-	if err := json.NewDecoder(respLabel.Body).Decode(&label); err != nil {
-		t.Fatalf("decoding label response: %v", err)
+	defer respLabel.Body.Close()
+	labelRespBody, err := io.ReadAll(respLabel.Body)
+	if err != nil {
+		t.Fatalf("reading label response: %v", err)
 	}
-	respLabel.Body.Close()
 	if respLabel.StatusCode != http.StatusCreated {
-		t.Fatalf("POST /api/labels status = %d, want 201", respLabel.StatusCode)
+		t.Fatalf("POST /api/labels status = %d, want 201; body = %s", respLabel.StatusCode, string(labelRespBody))
+	}
+	var label map[string]any
+	if err := json.Unmarshal(labelRespBody, &label); err != nil {
+		t.Fatalf("decoding label response: %v", err)
 	}
 	labelID, _ := label["id"].(string)
 
@@ -1510,11 +1514,15 @@ func TestLabelsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/issues: %v", err)
 	}
+	defer respIssue.Body.Close()
+	if respIssue.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(respIssue.Body)
+		t.Fatalf("POST /api/issues status = %d, want 201; body = %s", respIssue.StatusCode, string(body))
+	}
 	var issue map[string]any
 	if err := json.NewDecoder(respIssue.Body).Decode(&issue); err != nil {
 		t.Fatalf("decoding issue response: %v", err)
 	}
-	respIssue.Body.Close()
 	issueID, _ := issue["id"].(string)
 
 	// 6. Get issue → labels:[] (empty)
@@ -1522,11 +1530,15 @@ func TestLabelsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/issues/%s: %v", issueID, err)
 	}
+	defer respGetIssue.Body.Close()
+	if respGetIssue.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGetIssue.Body)
+		t.Fatalf("GET /api/issues/%s status = %d, want 200; body = %s", issueID, respGetIssue.StatusCode, string(body))
+	}
 	var issueGet map[string]any
 	if err := json.NewDecoder(respGetIssue.Body).Decode(&issueGet); err != nil {
 		t.Fatalf("decoding issue response: %v", err)
 	}
-	respGetIssue.Body.Close()
 	labels, _ := issueGet["labels"].([]any)
 	if len(labels) != 0 {
 		t.Errorf("initial labels len = %d, want 0", len(labels))

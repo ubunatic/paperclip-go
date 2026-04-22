@@ -1,3 +1,5 @@
+-- Labels are owned by companies and cascade delete when a company is deleted.
+-- This is intentional: if a company is deleted, all its labels should be removed as well.
 CREATE TABLE IF NOT EXISTS labels (
     id          TEXT PRIMARY KEY,
     company_id  TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,

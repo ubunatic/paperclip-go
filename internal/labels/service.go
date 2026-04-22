@@ -26,10 +26,11 @@ var ErrIssueNotFound = errors.New("issue not found")
 // ErrCompanyMismatch is returned when issue and label belong to different companies.
 var ErrCompanyMismatch = errors.New("issue and label are in different companies")
 
-// SQLite extended error codes
+// SQLite extended error codes (https://www.sqlite.org/rescode.html#extrc)
+// Used for translating constraint violations to domain-specific errors.
 const (
-	sqliteConstraintUnique      = 2067
-	sqliteConstraintForeignKey  = 787
+	sqliteConstraintUnique      = 2067 // SQLITE_CONSTRAINT_UNIQUE - primary key or unique constraint violation
+	sqliteConstraintForeignKey  = 787  // SQLITE_CONSTRAINT_FOREIGNKEY - foreign key constraint violation
 )
 
 // Service provides label CRUD backed by the store.
