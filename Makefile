@@ -36,7 +36,6 @@ clean-wt: ⚙️  ## Remove the worktree
 	git worktree remove -f "${WT}" 2>/dev/null || true
 	@echo "🧹 Worktree ${WT} cleaned up."
 
-sync-upstream: WB=upstream
 sync-upstream: ⚙️  ## Sync upstream repository to upstream branch
 	@echo "🔄 Syncing upstream repository to upstream branch..."
 	git remote show | grep -q upstream || \
