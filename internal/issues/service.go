@@ -328,6 +328,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 
 		// Delete the issue
+		// Labels are cascade-deleted via issue_labels FK constraint
 		result, err := tx.ExecContext(ctx,
 			`DELETE FROM issues WHERE id = ?`,
 			id,

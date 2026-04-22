@@ -182,6 +182,7 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 			var sqliteErr *sqlite.Error
 			if errors.As(err, &sqliteErr) && sqliteErr.Code() == sqliteConstraintForeignKey {
 				// FK constraint violation: one of the entities was deleted
+				// Query to distinguish between deleted issue vs deleted label
 				var issueExists int
 				errIssue := tx.QueryRowContext(ctx,
 					`SELECT 1 FROM issues WHERE id = ? LIMIT 1`,
@@ -193,7 +194,20 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 				if errIssue != nil {
 					return fmt.Errorf("checking issue existence: %w", errIssue)
 				}
-				return ErrNotFound
+				// Issue exists, so label must not exist
+				var labelExists int
+				errLabel := tx.QueryRowContext(ctx,
+					`SELECT 1 FROM labels WHERE id = ? LIMIT 1`,
+					labelID,
+				).Scan(&labelExists)
+				if errors.Is(errLabel, sql.ErrNoRows) {
+					return ErrNotFound
+				}
+				if errLabel != nil {
+					return fmt.Errorf("checking label existence: %w", errLabel)
+				}
+				// Both exist but FK failed for some other reason
+				return fmt.Errorf("linking label to issue: %w", err)
 			}
 			return fmt.Errorf("linking label to issue: %w", err)
 		}
@@ -202,22 +216,62 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 }
 
 // UnlinkFromIssue removes the association between a label and an issue.
+// Atomically verifies that both issue and label exist and belong to the same company.
 // Returns ErrAssociationNotFound if the association does not exist.
+// Returns ErrCompanyMismatch if issue and label belong to different companies.
 func (s *Service) UnlinkFromIssue(ctx context.Context, issueID, labelID string) error {
-	result, err := s.store.DB.ExecContext(ctx,
-		`DELETE FROM issue_labels WHERE issue_id = ? AND label_id = ?`, issueID, labelID,
-	)
-	if err != nil {
-		return fmt.Errorf("deleting label from issue: %w", err)
-	}
-	n, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("checking rows affected: %w", err)
-	}
-	if n == 0 {
-		return ErrAssociationNotFound
-	}
-	return nil
+	return s.store.WithTx(ctx, func(tx *sql.Tx) error {
+		// Verify both issue and label exist and belong to same company
+		var issueCompanyID, labelCompanyID string
+		err := tx.QueryRowContext(ctx,
+			`SELECT i.company_id, l.company_id
+			 FROM issues i, labels l
+			 WHERE i.id = ? AND l.id = ?`,
+			issueID, labelID,
+		).Scan(&issueCompanyID, &labelCompanyID)
+
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// Determine which one doesn't exist by querying within the transaction
+				var issueExists int
+				errIssue := tx.QueryRowContext(ctx,
+					`SELECT 1 FROM issues WHERE id = ? LIMIT 1`,
+					issueID,
+				).Scan(&issueExists)
+				if errors.Is(errIssue, sql.ErrNoRows) {
+					return ErrAssociationNotFound
+				}
+				if errIssue != nil {
+					return fmt.Errorf("checking issue existence: %w", errIssue)
+				}
+				return ErrAssociationNotFound // label doesn't exist
+			}
+			return fmt.Errorf("verifying issue and label: %w", err)
+		}
+
+		// Verify same company. For unlink operations, preserve the existing
+		// not-found behavior for callers that only special-case
+		// ErrAssociationNotFound.
+		if issueCompanyID != labelCompanyID {
+			return ErrAssociationNotFound
+		}
+
+		// Delete the association
+		result, err := tx.ExecContext(ctx,
+			`DELETE FROM issue_labels WHERE issue_id = ? AND label_id = ?`, issueID, labelID,
+		)
+		if err != nil {
+			return fmt.Errorf("deleting label from issue: %w", err)
+		}
+		n, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("checking rows affected: %w", err)
+		}
+		if n == 0 {
+			return ErrAssociationNotFound
+		}
+		return nil
+	})
 }
 
 // GetLabelsForIssue returns all labels associated with the given issue.

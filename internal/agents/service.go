@@ -324,10 +324,13 @@ func (s *Service) Pause(ctx context.Context, agentID string) (*domain.Agent, err
 	}
 
 	// Log the state transition
-	metaJSON, _ := json.Marshal(map[string]string{
+	metaJSON, err := json.Marshal(map[string]string{
 		"from": agent.RuntimeState,
 		"to":   "paused",
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshaling state transition metadata: %w", err)
+	}
 	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "pause", "agent", agentID, string(metaJSON)); err != nil {
 		log.Printf("activity log error: %v\n", err)
 	}
@@ -369,10 +372,13 @@ func (s *Service) Resume(ctx context.Context, agentID string) (*domain.Agent, er
 	}
 
 	// Log the state transition
-	metaJSON, _ := json.Marshal(map[string]string{
+	metaJSON, err := json.Marshal(map[string]string{
 		"from": agent.RuntimeState,
 		"to":   "running",
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshaling state transition metadata: %w", err)
+	}
 	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "resume", "agent", agentID, string(metaJSON)); err != nil {
 		log.Printf("activity log error: %v\n", err)
 	}
@@ -414,10 +420,13 @@ func (s *Service) Terminate(ctx context.Context, agentID string) (*domain.Agent,
 	}
 
 	// Log the state transition
-	metaJSON, _ := json.Marshal(map[string]string{
+	metaJSON, err := json.Marshal(map[string]string{
 		"from": agent.RuntimeState,
 		"to":   "terminated",
 	})
+	if err != nil {
+		return nil, fmt.Errorf("marshaling state transition metadata: %w", err)
+	}
 	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "terminate", "agent", agentID, string(metaJSON)); err != nil {
 		log.Printf("activity log error: %v\n", err)
 	}
