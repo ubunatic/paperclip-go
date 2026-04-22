@@ -1594,11 +1594,15 @@ func TestLabelsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/issues/%s after add again: %v", issueID, err)
 	}
+	defer respGetIssue3.Body.Close()
+	if respGetIssue3.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGetIssue3.Body)
+		t.Fatalf("GET /api/issues/%s after add again status = %d, want 200; body = %s", issueID, respGetIssue3.StatusCode, string(body))
+	}
 	var issueGet3 map[string]any
 	if err := json.NewDecoder(respGetIssue3.Body).Decode(&issueGet3); err != nil {
 		t.Fatalf("decoding issue response: %v", err)
 	}
-	respGetIssue3.Body.Close()
 	labels3, _ := issueGet3["labels"].([]any)
 	if len(labels3) != 1 {
 		t.Errorf("labels after add again len = %d, want 1 (no duplicate)", len(labels3))
@@ -1620,11 +1624,15 @@ func TestLabelsE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/issues/%s after remove: %v", issueID, err)
 	}
+	defer respGetIssue4.Body.Close()
+	if respGetIssue4.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGetIssue4.Body)
+		t.Fatalf("GET /api/issues/%s after remove status = %d, want 200; body = %s", issueID, respGetIssue4.StatusCode, string(body))
+	}
 	var issueGet4 map[string]any
 	if err := json.NewDecoder(respGetIssue4.Body).Decode(&issueGet4); err != nil {
 		t.Fatalf("decoding issue response: %v", err)
 	}
-	respGetIssue4.Body.Close()
 	labels4, _ := issueGet4["labels"].([]any)
 	if len(labels4) != 0 {
 		t.Errorf("labels after remove len = %d, want 0", len(labels4))
