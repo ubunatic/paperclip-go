@@ -1422,3 +1422,283 @@ func TestAgentConfigurationE2E(t *testing.T) {
 		t.Errorf("PATCH nonexistent status = %d, want 404", respNonexistent.StatusCode)
 	}
 }
+
+func TestLabelsE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// 1. Create company
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	defer respCompany.Body.Close()
+	if respCompany.StatusCode < http.StatusOK || respCompany.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(respCompany.Body)
+		t.Fatalf("POST /api/companies returned %d: %s", respCompany.StatusCode, string(body))
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	companyID, _ := company["id"].(string)
+
+	// 2. Create label (bug, #ff0000)
+	labelBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"name":      "bug",
+		"color":     "#ff0000",
+	})
+	respLabel, err := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(labelBody))
+	if err != nil {
+		t.Fatalf("POST /api/labels: %v", err)
+	}
+	defer respLabel.Body.Close()
+	labelRespBody, err := io.ReadAll(respLabel.Body)
+	if err != nil {
+		t.Fatalf("reading label response: %v", err)
+	}
+	if respLabel.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/labels status = %d, want 201; body = %s", respLabel.StatusCode, string(labelRespBody))
+	}
+	var label map[string]any
+	if err := json.Unmarshal(labelRespBody, &label); err != nil {
+		t.Fatalf("decoding label response: %v", err)
+	}
+	labelID, _ := label["id"].(string)
+
+	// 3. List labels → 1 item
+	respListLabels, err := http.Get(srv.URL + "/api/labels?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/labels: %v", err)
+	}
+	defer respListLabels.Body.Close()
+	if respListLabels.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/labels status = %d, want 200", respListLabels.StatusCode)
+	}
+	var labelsList map[string]any
+	if err := json.NewDecoder(respListLabels.Body).Decode(&labelsList); err != nil {
+		t.Fatalf("decoding labels list: %v", err)
+	}
+	labelItems, _ := labelsList["items"].([]any)
+	if len(labelItems) != 1 {
+		t.Errorf("labels list len = %d, want 1", len(labelItems))
+	}
+
+	// 4. Create duplicate label → 409
+	dupLabelBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"name":      "bug",
+		"color":     "#00ff00",
+	})
+	respDupLabel, err := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(dupLabelBody))
+	if err != nil {
+		t.Fatalf("POST duplicate label: %v", err)
+	}
+	respDupLabel.Body.Close()
+	if respDupLabel.StatusCode != http.StatusConflict {
+		t.Errorf("POST duplicate label status = %d, want 409", respDupLabel.StatusCode)
+	}
+
+	// 5. Create issue
+	issueBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue",
+		"body":      "This is a test issue",
+	})
+	respIssue, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
+	defer respIssue.Body.Close()
+	if respIssue.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(respIssue.Body)
+		t.Fatalf("POST /api/issues status = %d, want 201; body = %s", respIssue.StatusCode, string(body))
+	}
+	var issue map[string]any
+	if err := json.NewDecoder(respIssue.Body).Decode(&issue); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	issueID, _ := issue["id"].(string)
+
+	// 6. Get issue → labels:[] (empty)
+	respGetIssue, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s: %v", issueID, err)
+	}
+	defer respGetIssue.Body.Close()
+	if respGetIssue.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGetIssue.Body)
+		t.Fatalf("GET /api/issues/%s status = %d, want 200; body = %s", issueID, respGetIssue.StatusCode, string(body))
+	}
+	var issueGet map[string]any
+	if err := json.NewDecoder(respGetIssue.Body).Decode(&issueGet); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	labels, _ := issueGet["labels"].([]any)
+	if len(labels) != 0 {
+		t.Errorf("initial labels len = %d, want 0", len(labels))
+	}
+
+	// 7. Add label to issue → 200
+	addLabelBody, _ := json.Marshal(map[string]string{
+		"labelId": labelID,
+	})
+	respAddLabel, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(addLabelBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/labels: %v", issueID, err)
+	}
+	respAddLabel.Body.Close()
+	if respAddLabel.StatusCode != http.StatusOK {
+		t.Errorf("POST add label status = %d, want 200", respAddLabel.StatusCode)
+	}
+
+	// 8. Get issue → labels has 1 item
+	respGetIssue2, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s after add: %v", issueID, err)
+	}
+	defer respGetIssue2.Body.Close()
+	if respGetIssue2.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGetIssue2.Body)
+		t.Fatalf("GET /api/issues/%s after add status = %d, want 200; body = %s", issueID, respGetIssue2.StatusCode, string(body))
+	}
+	var issueGet2 map[string]any
+	if err := json.NewDecoder(respGetIssue2.Body).Decode(&issueGet2); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	labels2, _ := issueGet2["labels"].([]any)
+	if len(labels2) != 1 {
+		t.Errorf("labels after add len = %d, want 1", len(labels2))
+	}
+
+	// 9. Add same label again → 200 (idempotent)
+	addLabelBody2, _ := json.Marshal(map[string]string{
+		"labelId": labelID,
+	})
+	respAddLabelAgain, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(addLabelBody2))
+	if err != nil {
+		t.Fatalf("POST add same label again: %v", err)
+	}
+	respAddLabelAgain.Body.Close()
+	if respAddLabelAgain.StatusCode != http.StatusOK {
+		t.Errorf("POST add same label again status = %d, want 200", respAddLabelAgain.StatusCode)
+	}
+
+	// 10. Get issue → still 1 label (no duplicate)
+	respGetIssue3, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s after add again: %v", issueID, err)
+	}
+	defer respGetIssue3.Body.Close()
+	if respGetIssue3.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGetIssue3.Body)
+		t.Fatalf("GET /api/issues/%s after add again status = %d, want 200; body = %s", issueID, respGetIssue3.StatusCode, string(body))
+	}
+	var issueGet3 map[string]any
+	if err := json.NewDecoder(respGetIssue3.Body).Decode(&issueGet3); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	labels3, _ := issueGet3["labels"].([]any)
+	if len(labels3) != 1 {
+		t.Errorf("labels after add again len = %d, want 1 (no duplicate)", len(labels3))
+	}
+
+	// 11. Remove label → 204
+	reqRemoveLabel, _ := http.NewRequest("DELETE", srv.URL+"/api/issues/"+issueID+"/labels/"+labelID, nil)
+	respRemoveLabel, err := http.DefaultClient.Do(reqRemoveLabel)
+	if err != nil {
+		t.Fatalf("DELETE label from issue: %v", err)
+	}
+	respRemoveLabel.Body.Close()
+	if respRemoveLabel.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE remove label status = %d, want 204", respRemoveLabel.StatusCode)
+	}
+
+	// 12. Get issue → labels:[] again
+	respGetIssue4, err := http.Get(srv.URL + "/api/issues/" + issueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s after remove: %v", issueID, err)
+	}
+	defer respGetIssue4.Body.Close()
+	if respGetIssue4.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(respGetIssue4.Body)
+		t.Fatalf("GET /api/issues/%s after remove status = %d, want 200; body = %s", issueID, respGetIssue4.StatusCode, string(body))
+	}
+	var issueGet4 map[string]any
+	if err := json.NewDecoder(respGetIssue4.Body).Decode(&issueGet4); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	labels4, _ := issueGet4["labels"].([]any)
+	if len(labels4) != 0 {
+		t.Errorf("labels after remove len = %d, want 0", len(labels4))
+	}
+
+	// 13. Delete label → 204
+	reqDeleteLabel, _ := http.NewRequest("DELETE", srv.URL+"/api/labels/"+labelID, nil)
+	respDeleteLabel, err := http.DefaultClient.Do(reqDeleteLabel)
+	if err != nil {
+		t.Fatalf("DELETE label: %v", err)
+	}
+	respDeleteLabel.Body.Close()
+	if respDeleteLabel.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE label status = %d, want 204", respDeleteLabel.StatusCode)
+	}
+
+	// 14. List labels → empty
+	respListLabels2, err := http.Get(srv.URL + "/api/labels?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/labels after delete: %v", err)
+	}
+	defer respListLabels2.Body.Close()
+	var labelsList2 map[string]any
+	if err := json.NewDecoder(respListLabels2.Body).Decode(&labelsList2); err != nil {
+		t.Fatalf("decoding labels list: %v", err)
+	}
+	labelItems2, _ := labelsList2["items"].([]any)
+	if len(labelItems2) != 0 {
+		t.Errorf("labels list after delete len = %d, want 0", len(labelItems2))
+	}
+
+	// 15. POST label to issue with nonexistent labelId → 404
+	badLabelAddBody, _ := json.Marshal(map[string]string{
+		"labelId": "nonexistent-label-id",
+	})
+	respBadLabelAdd, err := http.Post(srv.URL+"/api/issues/"+issueID+"/labels", "application/json", bytes.NewReader(badLabelAddBody))
+	if err != nil {
+		t.Fatalf("POST with nonexistent label: %v", err)
+	}
+	respBadLabelAdd.Body.Close()
+	if respBadLabelAdd.StatusCode != http.StatusNotFound {
+		t.Errorf("POST with nonexistent label status = %d, want 404", respBadLabelAdd.StatusCode)
+	}
+
+	// 16. POST label with missing fields → 422
+	missingFieldsBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"name":      "feature",
+		// missing color
+	})
+	respMissingFields, err := http.Post(srv.URL+"/api/labels", "application/json", bytes.NewReader(missingFieldsBody))
+	if err != nil {
+		t.Fatalf("POST with missing fields: %v", err)
+	}
+	respMissingFields.Body.Close()
+	if respMissingFields.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST with missing fields status = %d, want 422", respMissingFields.StatusCode)
+	}
+
+	// 17. GET labels without companyId → 400
+	respBadListLabels, err := http.Get(srv.URL + "/api/labels")
+	if err != nil {
+		t.Fatalf("GET /api/labels without companyId: %v", err)
+	}
+	respBadListLabels.Body.Close()
+	if respBadListLabels.StatusCode != http.StatusBadRequest {
+		t.Errorf("GET /api/labels without companyId status = %d, want 400", respBadListLabels.StatusCode)
+	}
+}
