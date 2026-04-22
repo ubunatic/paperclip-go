@@ -6,12 +6,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/ids"
 	"github.com/ubunatic/paperclip-go/internal/store"
+	"modernc.org/sqlite"
 )
 
 // ErrNotFound is returned when a requested label does not exist.
@@ -49,7 +49,8 @@ func (s *Service) Create(ctx context.Context, companyID, name, color string) (*d
 		l.ID, l.CompanyID, l.Name, l.Color, ts, ts,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		var sqliteErr *sqlite.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.Code() == 2067 { // SQLITE_CONSTRAINT (UNIQUE)
 			return nil, ErrDuplicate
 		}
 		return nil, fmt.Errorf("inserting label: %w", err)
@@ -117,13 +118,13 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 // AddToIssue associates a label with an issue (idempotent via INSERT OR IGNORE).
 // Returns nil if the association was created or already existed.
-func (s *Service) AddToIssue(ctx context.Context, issueID, labelID, companyID string) error {
+func (s *Service) AddToIssue(ctx context.Context, issueID, labelID string) error {
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	_, err := s.store.DB.ExecContext(ctx,
-		`INSERT OR IGNORE INTO issue_labels(issue_id, label_id, company_id, created_at)
-		 VALUES (?, ?, ?, ?)`,
-		issueID, labelID, companyID, ts,
+		`INSERT OR IGNORE INTO issue_labels(issue_id, label_id, created_at)
+		 VALUES (?, ?, ?)`,
+		issueID, labelID, ts,
 	)
 	if err != nil {
 		return fmt.Errorf("adding label to issue: %w", err)

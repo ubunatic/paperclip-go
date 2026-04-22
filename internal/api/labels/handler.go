@@ -18,6 +18,7 @@ func Handler(svc *labelssvc.Service) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", list(svc))
 	r.Post("/", create(svc))
+	r.Get("/{id}", get(svc))
 	r.Delete("/{id}", delete(svc))
 	return r
 }
@@ -76,6 +77,23 @@ func create(svc *labelssvc.Service) http.HandlerFunc {
 		}
 
 		respond.JSON(w, http.StatusCreated, label)
+	}
+}
+
+func get(svc *labelssvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		label, err := svc.Get(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, labelssvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "label not found")
+				return
+			}
+			log.Printf("labels: error getting label: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, label)
 	}
 }
 

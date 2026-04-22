@@ -11,11 +11,9 @@ CREATE TABLE IF NOT EXISTS labels (
 CREATE TABLE IF NOT EXISTS issue_labels (
     issue_id    TEXT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
     label_id    TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
-    company_id  TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     created_at  TEXT NOT NULL,
     PRIMARY KEY (issue_id, label_id)
 );
 
 CREATE INDEX IF NOT EXISTS issue_labels_label_idx   ON issue_labels(label_id);
-CREATE INDEX IF NOT EXISTS issue_labels_company_idx ON issue_labels(company_id);
 CREATE INDEX IF NOT EXISTS labels_company_idx       ON labels(company_id);

@@ -27,7 +27,7 @@ func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsv
 	r.Post("/{id}/release", release(issueSvc))
 	r.Get("/{id}/comments", listComments(commentSvc))
 	r.Post("/{id}/comments", createComment(commentSvc))
-	r.Post("/{id}/labels", addLabel(labelSvc))
+	r.Post("/{id}/labels", addLabel(issueSvc, labelSvc))
 	r.Delete("/{id}/labels/{labelId}", removeLabel(labelSvc))
 	return r
 }
@@ -329,25 +329,36 @@ func createComment(s *comments.Service) http.HandlerFunc {
 	}
 }
 
-func addLabel(labelSvc *lsvc.Service) http.HandlerFunc {
+func addLabel(issueSvc *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
-			LabelID   string `json:"labelId"`
-			CompanyID string `json:"companyId"`
+			LabelID string `json:"labelId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 			return
 		}
-		if body.LabelID == "" || body.CompanyID == "" {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "labelId and companyId are required")
+		if body.LabelID == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "labelId is required")
 			return
 		}
 
-		// Verify label exists
-		_, err := labelSvc.Get(r.Context(), body.LabelID)
+		// Verify issue exists and get its company_id
+		issue, err := issueSvc.Get(r.Context(), issueID)
+		if err != nil {
+			if errors.Is(err, isvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")
+				return
+			}
+			log.Printf("issues: error getting issue: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+
+		// Verify label exists and get its company_id
+		label, err := labelSvc.Get(r.Context(), body.LabelID)
 		if err != nil {
 			if errors.Is(err, lsvc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "label_not_found", "label not found")
@@ -358,7 +369,13 @@ func addLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 			return
 		}
 
-		err = labelSvc.AddToIssue(r.Context(), issueID, body.LabelID, body.CompanyID)
+		// Verify issue and label are in the same company
+		if issue.CompanyID != label.CompanyID {
+			respond.Error(w, http.StatusConflict, "conflict", "issue and label are in different companies")
+			return
+		}
+
+		err = labelSvc.AddToIssue(r.Context(), issueID, body.LabelID)
 		if err != nil {
 			log.Printf("labels: error adding to issue: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
