@@ -6,19 +6,21 @@
 
 ---
 
-## Status & Recent Review (2026-04-22)
+## Status & Recent Review (2026-04-23)
 
-**Phases Completed:** A1-A4, B1-B2, C1 ✅
+**Phases Completed:** A1-A4, B1-B2, C1 ✅  
+**Build Status:** ✅ `make build && make test` green
 
-**Recent Code Review Findings:**
+**Code Quality Review Summary (2026-04-23):**
 
-| Category | Status | Details |
-|----------|--------|---------|
-| Security | 🔧 Fixed | Cross-company label removal vulnerability patched; `UnlinkFromIssue()` now validates company ownership |
-| Code Quality | 🔧 Fixed | `json.Marshal` errors for state-transition metadata are now checked in `Pause`/`Resume`/`Terminate`; implicit FK cascades now documented |
+| Item | Status | Details |
+|------|--------|---------|
+| Security | ✅ FIXED | Cross-company label removal vulnerability (C1): `UnlinkFromIssue()` validates company ownership in transaction; test regression added |
+| Error Handling | ✅ FIXED | Activity log error messages clarified in `Pause`/`Resume`/`Terminate`; now document graceful degradation (audit trail failures don't fail state transitions) |
+| Docstring | ✅ FIXED | `UnlinkFromIssue()` documentation updated to match implementation (returns `ErrAssociationNotFound` for all error cases, including company mismatch) |
 | Parity | ✅ Verified | All response schemas match TS; JSON keys consistent (camelCase); no missing endpoints in A-C phases |
-| Testing | ⚠️ Debt | Handler packages lack unit tests; E2E coverage exists but focused on happy path |
-| Next Quick Wins | → C2/C3 | Documents/work-products and archive/read state require minimal effort; zero cross-tenant concerns |
+| Testing | ⚠️ Debt | Handler packages (`api/{agents,issues,companies}`) lack unit tests; E2E coverage exists but focused on happy path |
+| Next Phases | → C2/C3 | Documents/work-products and archive/read state have zero cross-tenant concerns; minimal implementation effort |
 
 ---
 

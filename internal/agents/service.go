@@ -332,7 +332,9 @@ func (s *Service) Pause(ctx context.Context, agentID string) (*domain.Agent, err
 		return nil, fmt.Errorf("marshaling state transition metadata: %w", err)
 	}
 	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "pause", "agent", agentID, string(metaJSON)); err != nil {
-		log.Printf("activity log error: %v\n", err)
+		// Log activity audit failure but don't fail the state transition; callers expect
+		// the pause operation to succeed even if audit trail is unavailable (temporary DB issue, etc.)
+		log.Printf("warning: activity log error during pause: %v", err)
 	}
 
 	// Fetch and return the updated agent
@@ -380,7 +382,9 @@ func (s *Service) Resume(ctx context.Context, agentID string) (*domain.Agent, er
 		return nil, fmt.Errorf("marshaling state transition metadata: %w", err)
 	}
 	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "resume", "agent", agentID, string(metaJSON)); err != nil {
-		log.Printf("activity log error: %v\n", err)
+		// Log activity audit failure but don't fail the state transition; callers expect
+		// the resume operation to succeed even if audit trail is unavailable (temporary DB issue, etc.)
+		log.Printf("warning: activity log error during resume: %v", err)
 	}
 
 	// Fetch and return the updated agent
@@ -428,7 +432,9 @@ func (s *Service) Terminate(ctx context.Context, agentID string) (*domain.Agent,
 		return nil, fmt.Errorf("marshaling state transition metadata: %w", err)
 	}
 	if err := s.log.Record(ctx, agent.CompanyID, "system", "system", "terminate", "agent", agentID, string(metaJSON)); err != nil {
-		log.Printf("activity log error: %v\n", err)
+		// Log activity audit failure but don't fail the state transition; callers expect
+		// the terminate operation to succeed even if audit trail is unavailable (temporary DB issue, etc.)
+		log.Printf("warning: activity log error during terminate: %v", err)
 	}
 
 	// Fetch and return the updated agent
