@@ -217,8 +217,9 @@ func (s *Service) LinkToIssue(ctx context.Context, issueID, labelID string) erro
 
 // UnlinkFromIssue removes the association between a label and an issue.
 // Atomically verifies that both issue and label exist and belong to the same company.
-// Returns ErrAssociationNotFound if the association does not exist.
-// Returns ErrCompanyMismatch if issue and label belong to different companies.
+// Returns ErrAssociationNotFound if the association does not exist, either entity is missing,
+// or if they belong to different companies (for backward compatibility with callers that
+// only special-case ErrAssociationNotFound).
 func (s *Service) UnlinkFromIssue(ctx context.Context, issueID, labelID string) error {
 	return s.store.WithTx(ctx, func(tx *sql.Tx) error {
 		// Verify both issue and label exist and belong to same company
