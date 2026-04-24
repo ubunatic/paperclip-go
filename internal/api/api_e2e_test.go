@@ -796,6 +796,125 @@ func TestIssuesE2E(t *testing.T) {
 	if fetchedStatus != "blocked" {
 		t.Errorf("fetched issue status = %q, want %q", fetchedStatus, "blocked")
 	}
+
+	// Create a new issue for documents/workProducts tests
+	docTestBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue for Documents",
+		"body":      "Issue for testing documents and workProducts",
+	})
+	respDocTest, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(docTestBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues (doc test): %v", err)
+	}
+	defer respDocTest.Body.Close()
+
+	var docTestIssue map[string]any
+	if err := json.NewDecoder(respDocTest.Body).Decode(&docTestIssue); err != nil {
+		t.Fatalf("decoding doc test issue: %v", err)
+	}
+	docTestIssueID, _ := docTestIssue["id"].(string)
+
+	// Test PATCH with documents → 200
+	docPatchBody, _ := json.Marshal(map[string]any{
+		"documents": []map[string]string{
+			{"title": "spec", "url": "https://example.com/spec"},
+			{"title": "design", "url": "https://example.com/design"},
+		},
+	})
+	req3, _ := http.NewRequest("PATCH", srv.URL+"/api/issues/"+docTestIssueID, bytes.NewReader(docPatchBody))
+	req3.Header.Set("Content-Type", "application/json")
+	resp15, err := http.DefaultClient.Do(req3)
+	if err != nil {
+		t.Fatalf("PATCH /api/issues/%s (documents): %v", docTestIssueID, err)
+	}
+	resp15.Body.Close()
+	if resp15.StatusCode != http.StatusOK {
+		t.Errorf("PATCH /api/issues/%s (documents) status = %d, want 200", docTestIssueID, resp15.StatusCode)
+	}
+
+	// GET /api/issues/{id} to verify documents persisted
+	resp16, err := http.Get(srv.URL + "/api/issues/" + docTestIssueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s (verify documents): %v", docTestIssueID, err)
+	}
+	defer resp16.Body.Close()
+
+	var fetchedWithDocs map[string]any
+	if err := json.NewDecoder(resp16.Body).Decode(&fetchedWithDocs); err != nil {
+		t.Fatalf("decoding fetched issue with documents: %v", err)
+	}
+
+	docs, ok := fetchedWithDocs["documents"].([]any)
+	if !ok || len(docs) != 2 {
+		t.Errorf("fetched issue documents = %v, want slice of 2 items", fetchedWithDocs["documents"])
+	}
+
+	// Test PATCH with workProducts → 200
+	wpPatchBody, _ := json.Marshal(map[string]any{
+		"workProducts": []map[string]string{
+			{"name": "report", "type": "pdf"},
+		},
+	})
+	req4, _ := http.NewRequest("PATCH", srv.URL+"/api/issues/"+docTestIssueID, bytes.NewReader(wpPatchBody))
+	req4.Header.Set("Content-Type", "application/json")
+	resp17, err := http.DefaultClient.Do(req4)
+	if err != nil {
+		t.Fatalf("PATCH /api/issues/%s (workProducts): %v", docTestIssueID, err)
+	}
+	resp17.Body.Close()
+	if resp17.StatusCode != http.StatusOK {
+		t.Errorf("PATCH /api/issues/%s (workProducts) status = %d, want 200", docTestIssueID, resp17.StatusCode)
+	}
+
+	// GET /api/issues/{id} to verify workProducts persisted
+	resp18, err := http.Get(srv.URL + "/api/issues/" + docTestIssueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s (verify workProducts): %v", docTestIssueID, err)
+	}
+	defer resp18.Body.Close()
+
+	var fetchedWithWP map[string]any
+	if err := json.NewDecoder(resp18.Body).Decode(&fetchedWithWP); err != nil {
+		t.Fatalf("decoding fetched issue with workProducts: %v", err)
+	}
+
+	wps, ok := fetchedWithWP["workProducts"].([]any)
+	if !ok || len(wps) != 1 {
+		t.Errorf("fetched issue workProducts = %v, want slice of 1 item", fetchedWithWP["workProducts"])
+	}
+
+	// Test PATCH with empty documents to clear → 200
+	clearDocsPatchBody, _ := json.Marshal(map[string]any{
+		"documents": []any{},
+	})
+	req5, _ := http.NewRequest("PATCH", srv.URL+"/api/issues/"+docTestIssueID, bytes.NewReader(clearDocsPatchBody))
+	req5.Header.Set("Content-Type", "application/json")
+	resp19, err := http.DefaultClient.Do(req5)
+	if err != nil {
+		t.Fatalf("PATCH /api/issues/%s (clear documents): %v", docTestIssueID, err)
+	}
+	resp19.Body.Close()
+	if resp19.StatusCode != http.StatusOK {
+		t.Errorf("PATCH /api/issues/%s (clear documents) status = %d, want 200", docTestIssueID, resp19.StatusCode)
+	}
+
+	// GET /api/issues/{id} to verify documents cleared
+	resp20, err := http.Get(srv.URL + "/api/issues/" + docTestIssueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s (verify cleared documents): %v", docTestIssueID, err)
+	}
+	defer resp20.Body.Close()
+
+	var fetchedClearedDocs map[string]any
+	if err := json.NewDecoder(resp20.Body).Decode(&fetchedClearedDocs); err != nil {
+		t.Fatalf("decoding fetched issue with cleared documents: %v", err)
+	}
+
+	clearedDocs, ok := fetchedClearedDocs["documents"].([]any)
+	if !ok || len(clearedDocs) != 0 {
+		t.Errorf("fetched issue cleared documents = %v, want empty array", fetchedClearedDocs["documents"])
+	}
 }
 
 func TestStubEndpointsE2E(t *testing.T) {
