@@ -17,6 +17,8 @@ type Issue struct {
 	ParentIssueID *string    `json:"parentIssueId"`
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
+	Documents     []any      `json:"documents"`
+	WorkProducts  []any      `json:"workProducts"`
 }
 
 // validStatuses contains the allowed status values for issues.
