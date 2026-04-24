@@ -1,0 +1,2 @@
+ALTER TABLE issues ADD COLUMN documents     TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE issues ADD COLUMN work_products TEXT NOT NULL DEFAULT '[]';

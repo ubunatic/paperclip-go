@@ -6,21 +6,21 @@
 
 ---
 
-## Status & Recent Review (2026-04-23)
+## Status & Recent Review (2026-04-24)
 
-**Phases Completed:** A1-A4, B1-B2, C1 ✅  
+**Phases Completed:** A1-A4, B1-B2, C1-C2 ✅  
 **Build Status:** ✅ `make build && make test` green
 
-**Code Quality Review Summary (2026-04-23):**
+**Code Quality Review Summary (2026-04-24):**
 
 | Item | Status | Details |
 |------|--------|---------|
-| Security | ✅ FIXED | Cross-company label removal vulnerability (C1): `UnlinkFromIssue()` validates company ownership in transaction; test regression added |
-| Error Handling | ✅ FIXED | Activity log error messages clarified in `Pause`/`Resume`/`Terminate`; now document graceful degradation (audit trail failures don't fail state transitions) |
-| Docstring | ✅ FIXED | `UnlinkFromIssue()` documentation updated to match implementation (returns `ErrAssociationNotFound` for all error cases, including company mismatch) |
-| Parity | ✅ Verified | All response schemas match TS; JSON keys consistent (camelCase); no missing endpoints in A-C phases |
-| Testing | ⚠️ Debt | Handler packages (`api/{agents,issues,companies}`) lack unit tests; E2E coverage exists but focused on happy path |
-| Next Phases | → C2/C3 | Documents/work-products and archive/read state have zero cross-tenant concerns; minimal implementation effort |
+| C2 Implementation | ✅ COMPLETE | Documents/work_products JSON arrays added to issues table; PATCH support with replacement semantics; comprehensive E2E + unit tests |
+| Code Quality | ✅ FIXED | All code review findings addressed: gofmt compliance, JSON unmarshal error logging, complete test coverage with edge cases |
+| Service Tests | ✅ ADDED | Unit tests for documents/workProducts set/clear at service layer; E2E tests cover persistence, clearing, and 404 errors |
+| Parity | ✅ Verified | Response schemas match TS (camelCase JSON keys); pointer fields enable "field absent" vs "field present but empty" semantics |
+| Testing | ✅ IMPROVED | Added service-level unit tests + comprehensive E2E coverage (set, retrieve, clear, cross-field persistence, 404 error case) |
+| Next Phase | → C3 | Archive/read state: `archived_at` column, archive/unarchive endpoints, filter exclusion by default |
 
 ---
 
@@ -55,7 +55,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | Agent configuration field | 1 | ✅ | B2 |
 | `/api/issues` CRUD + checkout/release | 9 | ✅ | — |
 | Issue labels | 5+ | ✅ | C1 |
-| Issue documents / work-products | 5+ | 🔲 | C2 |
+| Issue documents / work-products | 5+ | ✅ | C2 |
 | Issue read / archive state | 2 | 🔲 | C3 |
 | `/api/issues/{id}/comments` | 2 | ✅ | — |
 | `/api/activity` GET | 1 | ✅ | — |
@@ -97,8 +97,8 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | Feature | TS | Go | Phase |
 |---|---|---|---|
 | `issues.labels` (junction table) | ✅ | ✅ | C1 |
-| `issues.documents` / `work_products` | ✅ | 🔲 | C2 |
-| `issues.execution_policy` | ✅ | 🔲 | C2 |
+| `issues.documents` / `work_products` | ✅ | ✅ | C2 |
+| `issues.execution_policy` | ✅ | 🔲 | C2+ |
 | `agents.configuration` (YAML/JSON) | ✅ | ✅ | B2 |
 | `agents.runtime_state` | ✅ | ✅ | B1 |
 | `secrets` table | ✅ | 🔲 | F1 |
