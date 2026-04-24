@@ -269,10 +269,10 @@ func TestDeleteAgentWithHeartbeatRuns(t *testing.T) {
 		t.Fatalf("Create heartbeat run: %v", err)
 	}
 
-	// Try to delete agent - should fail with ErrHasActiveCheckout
+	// Try to delete agent - should fail with ErrHasActiveDependents
 	err = agentSvc.Delete(ctx, agent.ID)
-	if !errors.Is(err, agents.ErrHasActiveCheckout) {
-		t.Fatalf("Delete with heartbeat runs: expected ErrHasActiveCheckout, got %v", err)
+	if !errors.Is(err, agents.ErrHasActiveDependents) {
+		t.Fatalf("Delete with heartbeat runs: expected ErrHasActiveDependents, got %v", err)
 	}
 
 	// Verify agent still exists
@@ -313,10 +313,10 @@ func TestDeleteAgentHasActiveCheckout(t *testing.T) {
 		t.Fatalf("Checkout: %v", err)
 	}
 
-	// Try to delete agent - should fail with ErrHasActiveCheckout
+	// Try to delete agent - should fail with ErrHasActiveDependents
 	err = agentSvc.Delete(ctx, agent.ID)
-	if !errors.Is(err, agents.ErrHasActiveCheckout) {
-		t.Fatalf("Delete with active checkout: expected ErrHasActiveCheckout, got %v", err)
+	if !errors.Is(err, agents.ErrHasActiveDependents) {
+		t.Fatalf("Delete with active checkout: expected ErrHasActiveDependents, got %v", err)
 	}
 
 	// Verify agent still exists

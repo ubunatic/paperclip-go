@@ -19,8 +19,8 @@ import (
 // ErrNotFound is returned when a requested agent does not exist.
 var ErrNotFound = errors.New("agent not found")
 
-// ErrHasActiveCheckout is returned when attempting to delete an agent with active checkouts.
-var ErrHasActiveCheckout = errors.New("agent has active checkouts")
+// ErrHasActiveDependents is returned when attempting to delete an agent with active associations (assigned issues, checked-out issues, comments, heartbeat runs).
+var ErrHasActiveDependents = errors.New("agent has active dependents")
 
 // ErrInvalidRuntimeState is returned when an invalid runtime state is provided.
 var ErrInvalidRuntimeState = errors.New("invalid runtime state")
@@ -150,7 +150,7 @@ func (s *Service) GetByShortname(ctx context.Context, companyID, shortname strin
 
 // Delete deletes an agent if it has no active associations.
 // Returns ErrNotFound if the agent does not exist.
-// Returns ErrHasActiveCheckout if the agent has assigned issues, checked-out issues, comments, or heartbeat runs.
+// Returns ErrHasActiveDependents if the agent has assigned issues, checked-out issues, comments, or heartbeat runs.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	// Wrap in transaction for consistency and atomicity
 	return s.store.WithTx(ctx, func(tx *sql.Tx) error {
@@ -178,7 +178,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		}
 
 		if assigneeCount > 0 || checkedOutCount > 0 || commentCount > 0 || heartbeatCount > 0 {
-			return ErrHasActiveCheckout
+			return ErrHasActiveDependents
 		}
 
 		// Delete the agent
