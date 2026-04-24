@@ -985,6 +985,193 @@ func TestIssuesE2E(t *testing.T) {
 	}
 }
 
+func TestIssueArchiveE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Create a company first
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	respCompany.Body.Close()
+	companyID, _ := company["id"].(string)
+
+	// Create 2 issues
+	issueBody1, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Issue 1",
+		"body":      "First test issue",
+	})
+	resp1, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody1))
+	if err != nil {
+		t.Fatalf("POST /api/issues (issue 1): %v", err)
+	}
+	var issue1 map[string]any
+	if err := json.NewDecoder(resp1.Body).Decode(&issue1); err != nil {
+		t.Fatalf("decoding issue 1 response: %v", err)
+	}
+	resp1.Body.Close()
+	issue1ID, _ := issue1["id"].(string)
+
+	issueBody2, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Issue 2",
+		"body":      "Second test issue",
+	})
+	resp2, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody2))
+	if err != nil {
+		t.Fatalf("POST /api/issues (issue 2): %v", err)
+	}
+	var issue2 map[string]any
+	if err := json.NewDecoder(resp2.Body).Decode(&issue2); err != nil {
+		t.Fatalf("decoding issue 2 response: %v", err)
+	}
+	resp2.Body.Close()
+	_ = issue2["id"].(string) // issue 2 created but not used in this test
+
+	// GET list without archived filter - expect 2
+	resp3, err := http.Get(srv.URL + "/api/issues?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/issues (list 1): %v", err)
+	}
+	var list1 map[string]any
+	if err := json.NewDecoder(resp3.Body).Decode(&list1); err != nil {
+		t.Fatalf("decoding list 1: %v", err)
+	}
+	resp3.Body.Close()
+	items1, _ := list1["items"].([]any)
+	if len(items1) != 2 {
+		t.Errorf("GET /api/issues (list 1) items count = %d, want 2", len(items1))
+	}
+
+	// POST archive issue 1 - expect 200
+	resp4, err := http.Post(srv.URL+"/api/issues/"+issue1ID+"/archive", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/archive: %v", issue1ID, err)
+	}
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/issues/%s/archive status = %d, want 200", issue1ID, resp4.StatusCode)
+	}
+
+	// GET list default (no includeArchived) - expect 1
+	resp5, err := http.Get(srv.URL + "/api/issues?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/issues (list 2): %v", err)
+	}
+	var list2 map[string]any
+	if err := json.NewDecoder(resp5.Body).Decode(&list2); err != nil {
+		t.Fatalf("decoding list 2: %v", err)
+	}
+	resp5.Body.Close()
+	items2, _ := list2["items"].([]any)
+	if len(items2) != 1 {
+		t.Errorf("GET /api/issues (list 2) items count = %d, want 1", len(items2))
+	}
+
+	// GET list with includeArchived=true - expect 2
+	resp6, err := http.Get(srv.URL + "/api/issues?companyId=" + companyID + "&includeArchived=true")
+	if err != nil {
+		t.Fatalf("GET /api/issues (list 3 with archived): %v", err)
+	}
+	var list3 map[string]any
+	if err := json.NewDecoder(resp6.Body).Decode(&list3); err != nil {
+		t.Fatalf("decoding list 3: %v", err)
+	}
+	resp6.Body.Close()
+	items3, _ := list3["items"].([]any)
+	if len(items3) != 2 {
+		t.Errorf("GET /api/issues (list 3 with archived) items count = %d, want 2", len(items3))
+	}
+
+	// GET issue 1 by ID - verify archivedAt is not nil
+	resp7, err := http.Get(srv.URL + "/api/issues/" + issue1ID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s: %v", issue1ID, err)
+	}
+	var fetchedIssue1 map[string]any
+	if err := json.NewDecoder(resp7.Body).Decode(&fetchedIssue1); err != nil {
+		t.Fatalf("decoding fetched issue 1: %v", err)
+	}
+	resp7.Body.Close()
+	if resp7.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/issues/%s status = %d, want 200", issue1ID, resp7.StatusCode)
+	}
+	archivedAt, _ := fetchedIssue1["archivedAt"].(string)
+	if archivedAt == "" {
+		t.Error("fetched issue 1 archivedAt should not be empty after archive")
+	}
+
+	// POST unarchive issue 1 - expect 200
+	resp8, err := http.Post(srv.URL+"/api/issues/"+issue1ID+"/unarchive", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		t.Fatalf("POST /api/issues/%s/unarchive: %v", issue1ID, err)
+	}
+	resp8.Body.Close()
+	if resp8.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/issues/%s/unarchive status = %d, want 200", issue1ID, resp8.StatusCode)
+	}
+
+	// GET list default - expect 2 again
+	resp9, err := http.Get(srv.URL + "/api/issues?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/issues (list 4): %v", err)
+	}
+	var list4 map[string]any
+	if err := json.NewDecoder(resp9.Body).Decode(&list4); err != nil {
+		t.Fatalf("decoding list 4: %v", err)
+	}
+	resp9.Body.Close()
+	items4, _ := list4["items"].([]any)
+	if len(items4) != 2 {
+		t.Errorf("GET /api/issues (list 4 after unarchive) items count = %d, want 2", len(items4))
+	}
+
+	// GET issue 1 by ID - verify archivedAt is null
+	resp10, err := http.Get(srv.URL + "/api/issues/" + issue1ID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s (after unarchive): %v", issue1ID, err)
+	}
+	var fetchedIssue2 map[string]any
+	if err := json.NewDecoder(resp10.Body).Decode(&fetchedIssue2); err != nil {
+		t.Fatalf("decoding fetched issue 1 (after unarchive): %v", err)
+	}
+	resp10.Body.Close()
+	archivedAtAfter, ok := fetchedIssue2["archivedAt"]
+	if ok && archivedAtAfter != nil {
+		t.Errorf("fetched issue 1 archivedAt should be null after unarchive, got %v", archivedAtAfter)
+	}
+
+	// POST archive nonexistent issue - expect 404
+	resp11, err := http.Post(srv.URL+"/api/issues/nonexistent-id/archive", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		t.Fatalf("POST /api/issues/nonexistent/archive: %v", err)
+	}
+	resp11.Body.Close()
+	if resp11.StatusCode != http.StatusNotFound {
+		t.Errorf("POST /api/issues/nonexistent/archive status = %d, want 404", resp11.StatusCode)
+	}
+
+	// POST unarchive nonexistent issue - expect 404
+	resp12, err := http.Post(srv.URL+"/api/issues/nonexistent-id/unarchive", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		t.Fatalf("POST /api/issues/nonexistent/unarchive: %v", err)
+	}
+	resp12.Body.Close()
+	if resp12.StatusCode != http.StatusNotFound {
+		t.Errorf("POST /api/issues/nonexistent/unarchive status = %d, want 404", resp12.StatusCode)
+	}
+}
+
 func TestStubEndpointsE2E(t *testing.T) {
 	srv, _ := testutil.SpawnTestServer(t)
 

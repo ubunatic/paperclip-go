@@ -17,6 +17,7 @@ type Issue struct {
 	ParentIssueID *string    `json:"parentIssueId"`
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
+	ArchivedAt    *time.Time `json:"archivedAt"`
 	Documents     []any      `json:"documents"`
 	WorkProducts  []any      `json:"workProducts"`
 }

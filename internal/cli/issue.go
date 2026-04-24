@@ -117,7 +117,7 @@ func runIssueList(cmd *cobra.Command, args []string) error {
 		assigneeID = &flagIssueListAssignee
 	}
 
-	list, err := svc.ListWithFilters(ctx, companyID, flagIssueStatus, assigneeID)
+	list, err := svc.ListWithFilters(ctx, companyID, flagIssueStatus, assigneeID, false)
 	if err != nil {
 		return err
 	}
