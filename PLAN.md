@@ -16,10 +16,12 @@
 | Item | Status | Details |
 |------|--------|---------|
 | C2 Implementation | ✅ COMPLETE | Documents/work_products JSON arrays added to issues table; PATCH support with replacement semantics; comprehensive E2E + unit tests |
+| A-C Security Audit | ✅ FIXED | Cross-tenant isolation assumptions documented; Delete() docstring corrected to reflect actual dependencies (assigned/checked-out/comments/runs, not just in_progress) |
 | Code Quality | ✅ FIXED | All code review findings addressed: gofmt compliance, JSON unmarshal error logging, complete test coverage with edge cases |
 | Service Tests | ✅ ADDED | Unit tests for documents/workProducts set/clear at service layer; E2E tests cover persistence, clearing, and 404 errors |
-| Parity | ✅ Verified | Response schemas match TS (camelCase JSON keys); pointer fields enable "field absent" vs "field present but empty" semantics |
+| Parity | ✅ Verified | Response schemas match TS (camelCase JSON keys, Agent runtimeState/configuration, Issue documents/workProducts); all HTTP status codes consistent (204, 200, 404, 409, 422) |
 | Testing | ✅ IMPROVED | Added service-level unit tests + comprehensive E2E coverage (set, retrieve, clear, cross-field persistence, 404 error case) |
+| Design Debt | 📝 Noted | Handler unit tests (A-C packages); route-level cross-tenant isolation; state machine RBAC guards (deferred to Phase D+) |
 | Next Phase | → C3 | Archive/read state: `archived_at` column, archive/unarchive endpoints, filter exclusion by default |
 
 ---
