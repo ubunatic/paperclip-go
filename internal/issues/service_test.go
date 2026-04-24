@@ -272,7 +272,7 @@ func TestUpdate(t *testing.T) {
 	}
 
 	// Update status
-	updated, err := issueSvc.Update(ctx, issue.ID, "done", nil)
+	updated, err := issueSvc.Update(ctx, issue.ID, "done", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -281,7 +281,7 @@ func TestUpdate(t *testing.T) {
 	}
 
 	// Update assignee
-	updated, err = issueSvc.Update(ctx, issue.ID, "", &agent.ID)
+	updated, err = issueSvc.Update(ctx, issue.ID, "", &agent.ID, nil, nil)
 	if err != nil {
 		t.Fatalf("Update assignee: %v", err)
 	}
@@ -444,7 +444,7 @@ func TestUpdateInvalidStatus(t *testing.T) {
 	}
 
 	// Try to update with invalid status
-	_, err = issueSvc.Update(ctx, issue.ID, "invalid_status", nil)
+	_, err = issueSvc.Update(ctx, issue.ID, "invalid_status", nil, nil, nil)
 	if !errors.Is(err, issues.ErrInvalidStatus) {
 		t.Fatalf("Update with invalid status: expected ErrInvalidStatus, got %v", err)
 	}

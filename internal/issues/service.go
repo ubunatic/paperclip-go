@@ -4,6 +4,7 @@ package issues
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -53,19 +54,21 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, status str
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	i := &domain.Issue{
-		ID:         ids.NewUUID(),
-		CompanyID:  companyID,
-		Title:      title,
-		Body:       body,
-		Status:     status,
-		AssigneeID: assigneeID,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:           ids.NewUUID(),
+		CompanyID:    companyID,
+		Title:        title,
+		Body:         body,
+		Status:       status,
+		AssigneeID:   assigneeID,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		Documents:    []any{},
+		WorkProducts: []any{},
 	}
 	_, err := s.store.DB.ExecContext(ctx,
-		`INSERT INTO issues(id, company_id, title, body, status, assignee_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		i.ID, i.CompanyID, i.Title, i.Body, i.Status, i.AssigneeID, ts, ts,
+		`INSERT INTO issues(id, company_id, title, body, status, assignee_id, created_at, updated_at, documents, work_products)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		i.ID, i.CompanyID, i.Title, i.Body, i.Status, i.AssigneeID, ts, ts, "[]", "[]",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("inserting issue: %w", err)
@@ -76,7 +79,7 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, status str
 // Get returns the issue with the given ID, or ErrNotFound if it doesn't exist.
 func (s *Service) Get(ctx context.Context, id string) (*domain.Issue, error) {
 	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at
+		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, documents, work_products
 		 FROM issues WHERE id = ?`, id,
 	)
 	i, err := scanIssue(row)
@@ -89,7 +92,7 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Issue, error) {
 // ListByCompany returns all issues for a given company, ordered by creation time descending.
 func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domain.Issue, error) {
 	rows, err := s.store.DB.QueryContext(ctx,
-		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at
+		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, documents, work_products
 		 FROM issues WHERE company_id = ? ORDER BY created_at DESC`,
 		companyID,
 	)
@@ -114,7 +117,7 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domai
 
 // ListWithFilters returns issues for a company with optional status and assignee filters, ordered by creation time descending.
 func (s *Service) ListWithFilters(ctx context.Context, companyID, status string, assigneeID *string) ([]*domain.Issue, error) {
-	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at
+	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, documents, work_products
 	          FROM issues WHERE company_id = ?`
 	args := []interface{}{companyID}
 
@@ -152,7 +155,7 @@ func (s *Service) ListWithFilters(ctx context.Context, companyID, status string,
 
 // Update updates the status and/or assignee of an issue.
 // Returns ErrInvalidStatus if the status is not valid.
-func (s *Service) Update(ctx context.Context, id, status string, assigneeID *string) (*domain.Issue, error) {
+func (s *Service) Update(ctx context.Context, id, status string, assigneeID *string, documents, workProducts *[]any) (*domain.Issue, error) {
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 
@@ -173,6 +176,24 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 	if assigneeID != nil {
 		query += `, assignee_id = ?`
 		args = append(args, *assigneeID)
+	}
+
+	if documents != nil {
+		query += `, documents = ?`
+		docsJSON, err := json.Marshal(documents)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling documents: %w", err)
+		}
+		args = append(args, string(docsJSON))
+	}
+
+	if workProducts != nil {
+		query += `, work_products = ?`
+		wpJSON, err := json.Marshal(workProducts)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling work_products: %w", err)
+		}
+		args = append(args, string(wpJSON))
 	}
 
 	query += ` WHERE id = ?`
@@ -360,8 +381,9 @@ func scanIssue(s scanner) (*domain.Issue, error) {
 	var createdAt, updatedAt string
 	var checkedOutAt *string
 	var checkedOutBy, assigneeID, parentIssueID *string
+	var documentsStr, workProductsStr string
 
-	if err := s.Scan(&i.ID, &i.CompanyID, &i.Title, &i.Body, &i.Status, &assigneeID, &checkedOutBy, &checkedOutAt, &parentIssueID, &createdAt, &updatedAt); err != nil {
+	if err := s.Scan(&i.ID, &i.CompanyID, &i.Title, &i.Body, &i.Status, &assigneeID, &checkedOutBy, &checkedOutAt, &parentIssueID, &createdAt, &updatedAt, &documentsStr, &workProductsStr); err != nil {
 		return nil, err
 	}
 
@@ -385,6 +407,18 @@ func scanIssue(s scanner) (*domain.Issue, error) {
 			return nil, fmt.Errorf("parsing checked_out_at %q: %w", *checkedOutAt, err)
 		}
 		i.CheckedOutAt = &parsedTime
+	}
+
+	// Unmarshal documents
+	i.Documents = []any{}
+	if err := json.Unmarshal([]byte(documentsStr), &i.Documents); err != nil {
+		i.Documents = []any{}
+	}
+
+	// Unmarshal work_products
+	i.WorkProducts = []any{}
+	if err := json.Unmarshal([]byte(workProductsStr), &i.WorkProducts); err != nil {
+		i.WorkProducts = []any{}
 	}
 
 	return &i, nil
