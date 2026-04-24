@@ -80,7 +80,7 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, status str
 // Get returns the issue with the given ID, or ErrNotFound if it doesn't exist.
 func (s *Service) Get(ctx context.Context, id string) (*domain.Issue, error) {
 	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, documents, work_products
+		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, archived_at, documents, work_products
 		 FROM issues WHERE id = ?`, id,
 	)
 	i, err := scanIssue(row)
@@ -91,12 +91,19 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Issue, error) {
 }
 
 // ListByCompany returns all issues for a given company, ordered by creation time descending.
-func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domain.Issue, error) {
-	rows, err := s.store.DB.QueryContext(ctx,
-		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, documents, work_products
-		 FROM issues WHERE company_id = ? ORDER BY created_at DESC`,
-		companyID,
-	)
+// If includeArchived is false, archived issues (archived_at IS NOT NULL) are excluded.
+func (s *Service) ListByCompany(ctx context.Context, companyID string, includeArchived bool) ([]*domain.Issue, error) {
+	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, archived_at, documents, work_products
+	          FROM issues WHERE company_id = ?`
+	args := []interface{}{companyID}
+
+	if !includeArchived {
+		query += ` AND archived_at IS NULL`
+	}
+
+	query += ` ORDER BY created_at DESC`
+
+	rows, err := s.store.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing issues by company: %w", err)
 	}
@@ -117,8 +124,9 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domai
 }
 
 // ListWithFilters returns issues for a company with optional status and assignee filters, ordered by creation time descending.
-func (s *Service) ListWithFilters(ctx context.Context, companyID, status string, assigneeID *string) ([]*domain.Issue, error) {
-	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, documents, work_products
+// If includeArchived is false, archived issues (archived_at IS NOT NULL) are excluded.
+func (s *Service) ListWithFilters(ctx context.Context, companyID, status string, assigneeID *string, includeArchived bool) ([]*domain.Issue, error) {
+	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, archived_at, documents, work_products
 	          FROM issues WHERE company_id = ?`
 	args := []interface{}{companyID}
 
@@ -130,6 +138,10 @@ func (s *Service) ListWithFilters(ctx context.Context, companyID, status string,
 	if assigneeID != nil {
 		query += ` AND assignee_id = ?`
 		args = append(args, *assigneeID)
+	}
+
+	if !includeArchived {
+		query += ` AND archived_at IS NULL`
 	}
 
 	query += ` ORDER BY created_at DESC`
@@ -319,6 +331,94 @@ func (s *Service) Release(ctx context.Context, issueID, agentID string) error {
 	return ErrNotCheckedOut
 }
 
+// Archive marks an issue as archived (sets archived_at to current time).
+// Returns ErrNotFound if the issue does not exist.
+// Returns nil if the issue is already archived (idempotent).
+func (s *Service) Archive(ctx context.Context, id string) error {
+	now := time.Now().UTC().Truncate(time.Second)
+	ts := now.Format(time.RFC3339)
+
+	// Try atomic update: only succeeds if issue exists and is not already archived
+	result, err := s.store.DB.ExecContext(ctx,
+		`UPDATE issues SET archived_at = ?, updated_at = ?
+		 WHERE id = ? AND archived_at IS NULL`,
+		ts, ts, id,
+	)
+	if err != nil {
+		return fmt.Errorf("archiving issue: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("getting rows affected: %w", err)
+	}
+
+	if rowsAffected == 1 {
+		return nil
+	}
+
+	// UPDATE affected 0 rows: either issue doesn't exist or is already archived
+	// Query to check if issue exists at all
+	var exists sql.NullString
+	err = s.store.DB.QueryRowContext(ctx,
+		`SELECT id FROM issues WHERE id = ? LIMIT 1`,
+		id,
+	).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("checking issue exists: %w", err)
+	}
+
+	// Issue exists and is already archived (idempotent success)
+	return nil
+}
+
+// Unarchive marks an issue as not archived (sets archived_at to NULL).
+// Returns ErrNotFound if the issue does not exist.
+// Returns nil if the issue is not archived (idempotent).
+func (s *Service) Unarchive(ctx context.Context, id string) error {
+	now := time.Now().UTC().Truncate(time.Second)
+	ts := now.Format(time.RFC3339)
+
+	// Try atomic update: only succeeds if issue exists and is archived
+	result, err := s.store.DB.ExecContext(ctx,
+		`UPDATE issues SET archived_at = NULL, updated_at = ?
+		 WHERE id = ? AND archived_at IS NOT NULL`,
+		ts, id,
+	)
+	if err != nil {
+		return fmt.Errorf("unarchiving issue: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("getting rows affected: %w", err)
+	}
+
+	if rowsAffected == 1 {
+		return nil
+	}
+
+	// UPDATE affected 0 rows: either issue doesn't exist or is not archived
+	// Query to check if issue exists at all
+	var exists sql.NullString
+	err = s.store.DB.QueryRowContext(ctx,
+		`SELECT id FROM issues WHERE id = ? LIMIT 1`,
+		id,
+	).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("checking issue exists: %w", err)
+	}
+
+	// Issue exists and is not archived (idempotent success)
+	return nil
+}
+
 // Delete deletes an issue and its associated comments in a transaction.
 // Returns ErrNotFound if the issue does not exist.
 // Returns ErrCheckoutConflictDelete if the issue is checked out.
@@ -395,11 +495,11 @@ type scanner interface {
 func scanIssue(s scanner) (*domain.Issue, error) {
 	var i domain.Issue
 	var createdAt, updatedAt string
-	var checkedOutAt *string
+	var checkedOutAt, archivedAt *string
 	var checkedOutBy, assigneeID, parentIssueID *string
 	var documentsStr, workProductsStr string
 
-	if err := s.Scan(&i.ID, &i.CompanyID, &i.Title, &i.Body, &i.Status, &assigneeID, &checkedOutBy, &checkedOutAt, &parentIssueID, &createdAt, &updatedAt, &documentsStr, &workProductsStr); err != nil {
+	if err := s.Scan(&i.ID, &i.CompanyID, &i.Title, &i.Body, &i.Status, &assigneeID, &checkedOutBy, &checkedOutAt, &parentIssueID, &createdAt, &updatedAt, &archivedAt, &documentsStr, &workProductsStr); err != nil {
 		return nil, err
 	}
 
@@ -423,6 +523,14 @@ func scanIssue(s scanner) (*domain.Issue, error) {
 			return nil, fmt.Errorf("parsing checked_out_at %q: %w", *checkedOutAt, err)
 		}
 		i.CheckedOutAt = &parsedTime
+	}
+
+	if archivedAt != nil {
+		parsedTime, err := time.Parse(time.RFC3339, *archivedAt)
+		if err != nil {
+			return nil, fmt.Errorf("parsing archived_at %q: %w", *archivedAt, err)
+		}
+		i.ArchivedAt = &parsedTime
 	}
 
 	// Unmarshal documents

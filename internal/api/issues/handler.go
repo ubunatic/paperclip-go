@@ -31,6 +31,8 @@ func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsv
 	r.Delete("/{id}", delete(issueSvc))
 	r.Post("/{id}/checkout", checkout(issueSvc))
 	r.Post("/{id}/release", release(issueSvc))
+	r.Post("/{id}/archive", archive(issueSvc))
+	r.Post("/{id}/unarchive", unarchive(issueSvc))
 	r.Get("/{id}/comments", listComments(commentSvc))
 	r.Post("/{id}/comments", createComment(commentSvc))
 	r.Post("/{id}/labels", addLabel(labelSvc))
@@ -43,6 +45,7 @@ func list(s *isvc.Service) http.HandlerFunc {
 		companyID := r.URL.Query().Get("companyId")
 		status := r.URL.Query().Get("status")
 		assigneeID := r.URL.Query().Get("assigneeId")
+		includeArchived := r.URL.Query().Get("includeArchived") == "true"
 
 		if companyID == "" {
 			respond.Error(w, http.StatusBadRequest, "validation_error", "companyId is required")
@@ -64,9 +67,9 @@ func list(s *isvc.Service) http.HandlerFunc {
 			if assigneeID != "" {
 				aid = &assigneeID
 			}
-			items, err = s.ListWithFilters(r.Context(), companyID, status, aid)
+			items, err = s.ListWithFilters(r.Context(), companyID, status, aid, includeArchived)
 		} else {
-			items, err = s.ListByCompany(r.Context(), companyID)
+			items, err = s.ListByCompany(r.Context(), companyID, includeArchived)
 		}
 
 		if err != nil {
@@ -261,6 +264,40 @@ func delete(s *isvc.Service) http.HandlerFunc {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func archive(s *isvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		err := s.Archive(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, isvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")
+				return
+			}
+			log.Printf("issues: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, map[string]string{"status": "archived"})
+	}
+}
+
+func unarchive(s *isvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := chi.URLParam(r, "id")
+		err := s.Unarchive(r.Context(), id)
+		if err != nil {
+			if errors.Is(err, isvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")
+				return
+			}
+			log.Printf("issues: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, map[string]string{"status": "unarchived"})
 	}
 }
 

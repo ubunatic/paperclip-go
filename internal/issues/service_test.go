@@ -124,7 +124,7 @@ func TestListByCompany(t *testing.T) {
 	}
 
 	// List by company
-	list, err := svc.ListByCompany(ctx, company.ID)
+	list, err := svc.ListByCompany(ctx, company.ID, false)
 	if err != nil {
 		t.Fatalf("ListByCompany: %v", err)
 	}
@@ -576,6 +576,218 @@ func TestUpdateDocuments(t *testing.T) {
 
 	if updated4.WorkProducts == nil || len(updated4.WorkProducts) != 0 {
 		t.Errorf("Cleared workProducts = %v, want empty array", updated4.WorkProducts)
+	}
+}
+
+func TestArchiveIssue(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and 2 issues
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue1, err := issueSvc.Create(ctx, company.ID, "Issue 1", "Body 1", "", nil)
+	if err != nil {
+		t.Fatalf("Create issue 1: %v", err)
+	}
+	_, err = issueSvc.Create(ctx, company.ID, "Issue 2", "Body 2", "", nil)
+	if err != nil {
+		t.Fatalf("Create issue 2: %v", err)
+	}
+
+	// List without archived - expect 2
+	list, err := issueSvc.ListByCompany(ctx, company.ID, false)
+	if err != nil {
+		t.Fatalf("ListByCompany: %v", err)
+	}
+	if len(list) != 2 {
+		t.Errorf("ListByCompany (not archived) len = %d, want 2", len(list))
+	}
+
+	// Archive issue1
+	err = issueSvc.Archive(ctx, issue1.ID)
+	if err != nil {
+		t.Fatalf("Archive issue1: %v", err)
+	}
+
+	// Verify archivedAt is set
+	archived, err := issueSvc.Get(ctx, issue1.ID)
+	if err != nil {
+		t.Fatalf("Get archived issue: %v", err)
+	}
+	if archived.ArchivedAt == nil {
+		t.Fatal("ArchivedAt should not be nil after archive")
+	}
+
+	// List without archived - expect 1
+	list, err = issueSvc.ListByCompany(ctx, company.ID, false)
+	if err != nil {
+		t.Fatalf("ListByCompany after archive: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("ListByCompany (not archived) after archive len = %d, want 1", len(list))
+	}
+
+	// List with archived - expect 2
+	list, err = issueSvc.ListByCompany(ctx, company.ID, true)
+	if err != nil {
+		t.Fatalf("ListByCompany with archived: %v", err)
+	}
+	if len(list) != 2 {
+		t.Errorf("ListByCompany (with archived) len = %d, want 2", len(list))
+	}
+}
+
+func TestArchiveIdempotent(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Archive twice should succeed both times
+	err = issueSvc.Archive(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("First archive: %v", err)
+	}
+
+	err = issueSvc.Archive(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Second archive (idempotent): %v", err)
+	}
+}
+
+func TestUnarchiveIssue(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Archive the issue
+	err = issueSvc.Archive(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Archive: %v", err)
+	}
+
+	// Unarchive the issue
+	err = issueSvc.Unarchive(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Unarchive: %v", err)
+	}
+
+	// Verify archivedAt is nil
+	restored, err := issueSvc.Get(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Get restored issue: %v", err)
+	}
+	if restored.ArchivedAt != nil {
+		t.Errorf("ArchivedAt after unarchive = %v, want nil", restored.ArchivedAt)
+	}
+
+	// Verify it appears in list (not archived)
+	list, err := issueSvc.ListByCompany(ctx, company.ID, false)
+	if err != nil {
+		t.Fatalf("ListByCompany: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("ListByCompany len = %d, want 1", len(list))
+	}
+}
+
+func TestArchiveNotFound(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	issueSvc := issues.New(s)
+	err := issueSvc.Archive(ctx, "nonexistent-id")
+	if !errors.Is(err, issues.ErrNotFound) {
+		t.Fatalf("Archive nonexistent: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestUnarchiveNotFound(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	issueSvc := issues.New(s)
+	err := issueSvc.Unarchive(ctx, "nonexistent-id")
+	if !errors.Is(err, issues.ErrNotFound) {
+		t.Fatalf("Unarchive nonexistent: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestListWithFiltersExcludesArchived(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and 2 issues with status "open"
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue1, err := issueSvc.Create(ctx, company.ID, "Issue 1", "Body 1", "open", nil)
+	if err != nil {
+		t.Fatalf("Create issue 1: %v", err)
+	}
+	issue2, err := issueSvc.Create(ctx, company.ID, "Issue 2", "Body 2", "open", nil)
+	if err != nil {
+		t.Fatalf("Create issue 2: %v", err)
+	}
+
+	// Archive issue1
+	err = issueSvc.Archive(ctx, issue1.ID)
+	if err != nil {
+		t.Fatalf("Archive issue1: %v", err)
+	}
+
+	// ListWithFilters without archived - expect 1
+	list, err := issueSvc.ListWithFilters(ctx, company.ID, "open", nil, false)
+	if err != nil {
+		t.Fatalf("ListWithFilters: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("ListWithFilters (not archived) len = %d, want 1", len(list))
+	}
+	if list[0].ID != issue2.ID {
+		t.Errorf("ListWithFilters returned wrong issue, want %q, got %q", issue2.ID, list[0].ID)
+	}
+
+	// ListWithFilters with archived - expect 2
+	list, err = issueSvc.ListWithFilters(ctx, company.ID, "open", nil, true)
+	if err != nil {
+		t.Fatalf("ListWithFilters with archived: %v", err)
+	}
+	if len(list) != 2 {
+		t.Errorf("ListWithFilters (with archived) len = %d, want 2", len(list))
 	}
 }
 

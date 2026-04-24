@@ -75,7 +75,7 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 	// Select an issue to work on (first open issue)
 	// This is a simple heuristic; heartbeat may pass nil issue
 	var selectedIssue *domain.Issue
-	issues, err := r.issues.ListWithFilters(ctx, agent.CompanyID, "open", nil)
+	issues, err := r.issues.ListWithFilters(ctx, agent.CompanyID, "open", nil, false)
 	if err != nil {
 		return nil, fmt.Errorf("listing issues: %w", err)
 	}
