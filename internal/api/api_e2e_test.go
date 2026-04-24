@@ -842,6 +842,9 @@ func TestIssuesE2E(t *testing.T) {
 		t.Fatalf("GET /api/issues/%s (verify documents): %v", docTestIssueID, err)
 	}
 	defer resp16.Body.Close()
+	if resp16.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues/%s (verify documents) status = %d, want 200", docTestIssueID, resp16.StatusCode)
+	}
 
 	var fetchedWithDocs map[string]any
 	if err := json.NewDecoder(resp16.Body).Decode(&fetchedWithDocs); err != nil {
@@ -876,6 +879,9 @@ func TestIssuesE2E(t *testing.T) {
 		t.Fatalf("GET /api/issues/%s (verify workProducts): %v", docTestIssueID, err)
 	}
 	defer resp18.Body.Close()
+	if resp18.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues/%s (verify workProducts) status = %d, want 200", docTestIssueID, resp18.StatusCode)
+	}
 
 	var fetchedWithWP map[string]any
 	if err := json.NewDecoder(resp18.Body).Decode(&fetchedWithWP); err != nil {
@@ -914,6 +920,9 @@ func TestIssuesE2E(t *testing.T) {
 		t.Fatalf("GET /api/issues/%s (verify cleared documents): %v", docTestIssueID, err)
 	}
 	defer resp20.Body.Close()
+	if resp20.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues/%s (verify cleared documents) status = %d, want 200", docTestIssueID, resp20.StatusCode)
+	}
 
 	var fetchedClearedDocs map[string]any
 	if err := json.NewDecoder(resp20.Body).Decode(&fetchedClearedDocs); err != nil {
@@ -946,6 +955,9 @@ func TestIssuesE2E(t *testing.T) {
 		t.Fatalf("GET /api/issues/%s (verify cleared workProducts): %v", docTestIssueID, err)
 	}
 	defer resp22.Body.Close()
+	if resp22.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues/%s (verify cleared workProducts) status = %d, want 200", docTestIssueID, resp22.StatusCode)
+	}
 
 	var fetchedClearedWP map[string]any
 	if err := json.NewDecoder(resp22.Body).Decode(&fetchedClearedWP); err != nil {

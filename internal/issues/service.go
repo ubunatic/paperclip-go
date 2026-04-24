@@ -157,6 +157,11 @@ func (s *Service) ListWithFilters(ctx context.Context, companyID, status string,
 // Update updates the status and/or assignee of an issue.
 // Returns ErrInvalidStatus if the status is not valid.
 func (s *Service) Update(ctx context.Context, id, status string, assigneeID *string, documents, workProducts *[]any) (*domain.Issue, error) {
+	// Validate that at least one field is being updated
+	if status == "" && assigneeID == nil && documents == nil && workProducts == nil {
+		return nil, fmt.Errorf("at least one field must be provided for update")
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 
@@ -181,7 +186,12 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 
 	if documents != nil {
 		query += `, documents = ?`
-		docsJSON, err := json.Marshal(documents)
+		// Normalize nil slice to empty array for consistent JSON output
+		docsToMarshal := documents
+		if *documents == nil {
+			docsToMarshal = &[]any{}
+		}
+		docsJSON, err := json.Marshal(docsToMarshal)
 		if err != nil {
 			return nil, fmt.Errorf("marshaling documents: %w", err)
 		}
@@ -190,7 +200,12 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 
 	if workProducts != nil {
 		query += `, work_products = ?`
-		wpJSON, err := json.Marshal(workProducts)
+		// Normalize nil slice to empty array for consistent JSON output
+		wpsToMarshal := workProducts
+		if *workProducts == nil {
+			wpsToMarshal = &[]any{}
+		}
+		wpJSON, err := json.Marshal(wpsToMarshal)
 		if err != nil {
 			return nil, fmt.Errorf("marshaling work_products: %w", err)
 		}
@@ -416,11 +431,19 @@ func scanIssue(s scanner) (*domain.Issue, error) {
 		log.Printf("scanIssue: failed to unmarshal documents for issue %q: %v", i.ID, err)
 		i.Documents = []any{}
 	}
+	// Normalize nil to empty array for consistent API responses
+	if i.Documents == nil {
+		i.Documents = []any{}
+	}
 
 	// Unmarshal work_products
 	i.WorkProducts = []any{}
 	if err := json.Unmarshal([]byte(workProductsStr), &i.WorkProducts); err != nil {
 		log.Printf("scanIssue: failed to unmarshal work_products for issue %q: %v", i.ID, err)
+		i.WorkProducts = []any{}
+	}
+	// Normalize nil to empty array for consistent API responses
+	if i.WorkProducts == nil {
 		i.WorkProducts = []any{}
 	}
 
