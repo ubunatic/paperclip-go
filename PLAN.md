@@ -16,10 +16,12 @@
 | Item | Status | Details |
 |------|--------|---------|
 | C2 Implementation | ✅ COMPLETE | Documents/work_products JSON arrays added to issues table; PATCH support with replacement semantics; comprehensive E2E + unit tests |
+| A-C Security Audit | ✅ FIXED | Cross-tenant isolation assumptions documented; Delete() docstring corrected to reflect actual dependencies (assigned/checked-out/comments/runs, not just in_progress) |
 | Code Quality | ✅ FIXED | All code review findings addressed: gofmt compliance, JSON unmarshal error logging, complete test coverage with edge cases |
 | Service Tests | ✅ ADDED | Unit tests for documents/workProducts set/clear at service layer; E2E tests cover persistence, clearing, and 404 errors |
-| Parity | ✅ Verified | Response schemas match TS (camelCase JSON keys); pointer fields enable "field absent" vs "field present but empty" semantics |
+| Parity | ✅ Verified | Response schemas match TS (camelCase JSON keys, Agent runtimeState/configuration, Issue documents/workProducts); all HTTP status codes consistent (204, 200, 404, 409, 422) |
 | Testing | ✅ IMPROVED | Added service-level unit tests + comprehensive E2E coverage (set, retrieve, clear, cross-field persistence, 404 error case) |
+| Design Debt | 📝 Noted | Handler unit tests (A-C packages); route-level cross-tenant isolation; state machine RBAC guards (deferred to Phase D+) |
 | Next Phase | → C3 | Archive/read state: `archived_at` column, archive/unarchive endpoints, filter exclusion by default |
 
 ---
@@ -521,6 +523,52 @@ Columns: `id, company_id, issue_id, kind, status, continuation_policy, idempoten
 | 2 | `issues.origin_fingerprint` | 0006 | S | G2 routines dedup |
 | 3 | `issue_thread_interactions` | 0007 | M | agent continuation loop |
 | 4 | `routine_runs.dispatch_fingerprint` | inline G2 | — | G2 |
+
+---
+
+## Code Review & Quality Audit (2026-04-24)
+
+**Phases A-C Status:** ✅ Complete. All tests pass (`make test` green).
+
+### Applied Fixes
+
+| Issue | File | Status |
+|-------|------|--------|
+| Misleading docstring on Delete | `internal/agents/service.go:153` | ✅ Fixed |
+| Cross-tenant security assumption | `internal/api/agents/handler.go:124` | 📝 Documented |
+
+### Design Debt (Future Phases)
+
+1. **Cross-tenant isolation at route level** (Medium)
+   - Current: Handlers accept agent ID only; tenant validation depends on auth middleware
+   - Risk: Low if auth layer enforces `companyId` scoping; medium if auth is not present
+   - Recommendation: Add optional `?companyId=` query param to DELETE, PATCH, state-transition endpoints for defensive isolation. Or require company_id in route path (e.g., `/api/companies/{companyId}/agents/{agentId}`)
+   - Timeline: Phase D or later (after auth infrastructure is in place)
+
+2. **State machine validation + RBAC** (Medium)
+   - Current: `Pause`, `Resume`, `Terminate`, `Update` have no permission guards; any authenticated user can call them
+   - Risk: Medium — no permission-based access control; no audit trail for who changed state
+   - Recommendation: Add optional role/permission checks in handlers; wrap state transitions with auth context
+   - Timeline: Phase F onwards (when auth framework is available)
+
+3. **Activity log reliability** (Low)
+   - Current: Activity log errors in `Pause`, `Resume`, `Terminate` are logged but don't fail the operation
+   - Risk: Low — state transitions succeed even if audit fails; acceptable trade-off for graceful degradation
+   - Recommendation: Add metrics/monitoring for audit log failures; consider circuit-breaker if failures persist
+   - Timeline: Phase F (instrumentation & monitoring)
+
+4. **Handler unit test coverage** (Low)
+   - Current: Handlers use E2E tests; no isolated handler-level tests for error cases (malformed JSON, oversized bodies, missing params)
+   - Recommendation: Add `handler_test.go` per package (agents, companies, issues) covering 400/404/409/422 cases
+   - Timeline: Next phase or parallel effort
+
+### TS Parity Verification (Phases A-C)
+
+- ✅ Endpoints: All routes match TS (DELETE, PATCH, POST pause/resume/terminate, configuration merge)
+- ✅ Status codes: 204 (delete), 200 (state transitions), 404, 409, 422 per spec
+- ✅ Response schemas: Agent includes `runtimeState`, `configuration`; camelCase JSON keys
+- ✅ Error handling: Consistent error shapes and HTTP status codes
+- ✅ Database: Migrations idempotent, all new columns have defaults, no breaking changes
 
 ---
 

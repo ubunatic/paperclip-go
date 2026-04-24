@@ -124,14 +124,16 @@ func getMe(s *svc.Service) http.HandlerFunc {
 func delete(s *svc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
+		// NOTE: This handler does not enforce company/tenant isolation.
+		// Deployments must ensure requests are scoped to the requesting company via auth middleware or API gateway.
 		err := s.Delete(r.Context(), id)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
 				return
 			}
-			if errors.Is(err, svc.ErrHasActiveCheckout) {
-				respond.Error(w, http.StatusConflict, "has_active_checkout", "agent has active checkouts")
+			if errors.Is(err, svc.ErrHasActiveDependents) {
+				respond.Error(w, http.StatusConflict, "has_active_dependents", "agent has active associations")
 				return
 			}
 			log.Printf("agents: error: %v", err)
