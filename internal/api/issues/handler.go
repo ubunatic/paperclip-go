@@ -145,10 +145,10 @@ func update(s *isvc.Service) http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
-			Status       string   `json:"status"`
-			AssigneeID   *string  `json:"assigneeId"`
-			Documents    *[]any   `json:"documents"`
-			WorkProducts *[]any   `json:"workProducts"`
+			Status       string  `json:"status"`
+			AssigneeID   *string `json:"assigneeId"`
+			Documents    *[]any  `json:"documents"`
+			WorkProducts *[]any  `json:"workProducts"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")

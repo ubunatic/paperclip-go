@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/domain"
@@ -412,12 +413,14 @@ func scanIssue(s scanner) (*domain.Issue, error) {
 	// Unmarshal documents
 	i.Documents = []any{}
 	if err := json.Unmarshal([]byte(documentsStr), &i.Documents); err != nil {
+		log.Printf("scanIssue: failed to unmarshal documents for issue %q: %v", i.ID, err)
 		i.Documents = []any{}
 	}
 
 	// Unmarshal work_products
 	i.WorkProducts = []any{}
 	if err := json.Unmarshal([]byte(workProductsStr), &i.WorkProducts); err != nil {
+		log.Printf("scanIssue: failed to unmarshal work_products for issue %q: %v", i.ID, err)
 		i.WorkProducts = []any{}
 	}
 

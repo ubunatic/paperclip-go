@@ -808,6 +808,9 @@ func TestIssuesE2E(t *testing.T) {
 		t.Fatalf("POST /api/issues (doc test): %v", err)
 	}
 	defer respDocTest.Body.Close()
+	if respDocTest.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/issues (doc test) status = %d, want 201", respDocTest.StatusCode)
+	}
 
 	var docTestIssue map[string]any
 	if err := json.NewDecoder(respDocTest.Body).Decode(&docTestIssue); err != nil {
@@ -884,6 +887,12 @@ func TestIssuesE2E(t *testing.T) {
 		t.Errorf("fetched issue workProducts = %v, want slice of 1 item", fetchedWithWP["workProducts"])
 	}
 
+	// Verify documents still intact after workProducts patch
+	docsAfterWP, okDocs := fetchedWithWP["documents"].([]any)
+	if !okDocs || len(docsAfterWP) != 2 {
+		t.Errorf("documents should still have 2 items after workProducts patch, got %v", fetchedWithWP["documents"])
+	}
+
 	// Test PATCH with empty documents to clear → 200
 	clearDocsPatchBody, _ := json.Marshal(map[string]any{
 		"documents": []any{},
@@ -914,6 +923,53 @@ func TestIssuesE2E(t *testing.T) {
 	clearedDocs, ok := fetchedClearedDocs["documents"].([]any)
 	if !ok || len(clearedDocs) != 0 {
 		t.Errorf("fetched issue cleared documents = %v, want empty array", fetchedClearedDocs["documents"])
+	}
+
+	// Test PATCH with empty workProducts to clear → 200
+	clearWPPatchBody, _ := json.Marshal(map[string]any{
+		"workProducts": []any{},
+	})
+	req6, _ := http.NewRequest("PATCH", srv.URL+"/api/issues/"+docTestIssueID, bytes.NewReader(clearWPPatchBody))
+	req6.Header.Set("Content-Type", "application/json")
+	resp21, err := http.DefaultClient.Do(req6)
+	if err != nil {
+		t.Fatalf("PATCH /api/issues/%s (clear workProducts): %v", docTestIssueID, err)
+	}
+	resp21.Body.Close()
+	if resp21.StatusCode != http.StatusOK {
+		t.Errorf("PATCH /api/issues/%s (clear workProducts) status = %d, want 200", docTestIssueID, resp21.StatusCode)
+	}
+
+	// GET /api/issues/{id} to verify workProducts cleared
+	resp22, err := http.Get(srv.URL + "/api/issues/" + docTestIssueID)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s (verify cleared workProducts): %v", docTestIssueID, err)
+	}
+	defer resp22.Body.Close()
+
+	var fetchedClearedWP map[string]any
+	if err := json.NewDecoder(resp22.Body).Decode(&fetchedClearedWP); err != nil {
+		t.Fatalf("decoding fetched issue with cleared workProducts: %v", err)
+	}
+
+	clearedWP, ok := fetchedClearedWP["workProducts"].([]any)
+	if !ok || len(clearedWP) != 0 {
+		t.Errorf("fetched issue cleared workProducts = %v, want empty array", fetchedClearedWP["workProducts"])
+	}
+
+	// Test PATCH /api/issues/nonexistent with documents → 404
+	patchNonexistentBody, _ := json.Marshal(map[string]any{
+		"documents": []map[string]string{{"title": "test"}},
+	})
+	req7, _ := http.NewRequest("PATCH", srv.URL+"/api/issues/nonexistent-id", bytes.NewReader(patchNonexistentBody))
+	req7.Header.Set("Content-Type", "application/json")
+	resp23, err := http.DefaultClient.Do(req7)
+	if err != nil {
+		t.Fatalf("PATCH /api/issues/nonexistent (with documents): %v", err)
+	}
+	resp23.Body.Close()
+	if resp23.StatusCode != http.StatusNotFound {
+		t.Errorf("PATCH /api/issues/nonexistent status = %d, want 404", resp23.StatusCode)
 	}
 }
 

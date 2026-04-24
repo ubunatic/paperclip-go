@@ -492,3 +492,90 @@ func TestCreateInvalidStatus(t *testing.T) {
 	}
 }
 
+func TestUpdateDocuments(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Setup: create company and issue
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	// Test 1: Set documents
+	docs := []any{
+		map[string]string{"title": "spec", "url": "https://example.com/spec"},
+		map[string]string{"title": "design", "url": "https://example.com/design"},
+	}
+	updated, err := issueSvc.Update(ctx, issue.ID, "", nil, &docs, nil)
+	if err != nil {
+		t.Fatalf("Update documents: %v", err)
+	}
+
+	if updated.Documents == nil || len(updated.Documents) != 2 {
+		t.Errorf("Updated issue documents = %v, want 2 items", updated.Documents)
+	}
+
+	// Verify persistence by re-fetching
+	fetched, err := issueSvc.Get(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Get issue: %v", err)
+	}
+
+	if fetched.Documents == nil || len(fetched.Documents) != 2 {
+		t.Errorf("Fetched issue documents = %v, want 2 items", fetched.Documents)
+	}
+
+	// Test 2: Clear documents
+	emptyDocs := []any{}
+	updated2, err := issueSvc.Update(ctx, issue.ID, "", nil, &emptyDocs, nil)
+	if err != nil {
+		t.Fatalf("Clear documents: %v", err)
+	}
+
+	if updated2.Documents == nil || len(updated2.Documents) != 0 {
+		t.Errorf("Cleared documents = %v, want empty array", updated2.Documents)
+	}
+
+	// Test 3: Set workProducts
+	wps := []any{
+		map[string]string{"name": "report", "type": "pdf"},
+	}
+	updated3, err := issueSvc.Update(ctx, issue.ID, "", nil, nil, &wps)
+	if err != nil {
+		t.Fatalf("Update workProducts: %v", err)
+	}
+
+	if updated3.WorkProducts == nil || len(updated3.WorkProducts) != 1 {
+		t.Errorf("Updated issue workProducts = %v, want 1 item", updated3.WorkProducts)
+	}
+
+	// Verify persistence
+	fetched2, err := issueSvc.Get(ctx, issue.ID)
+	if err != nil {
+		t.Fatalf("Get issue: %v", err)
+	}
+
+	if fetched2.WorkProducts == nil || len(fetched2.WorkProducts) != 1 {
+		t.Errorf("Fetched issue workProducts = %v, want 1 item", fetched2.WorkProducts)
+	}
+
+	// Test 4: Clear workProducts
+	emptyWPs := []any{}
+	updated4, err := issueSvc.Update(ctx, issue.ID, "", nil, nil, &emptyWPs)
+	if err != nil {
+		t.Fatalf("Clear workProducts: %v", err)
+	}
+
+	if updated4.WorkProducts == nil || len(updated4.WorkProducts) != 0 {
+		t.Errorf("Cleared workProducts = %v, want empty array", updated4.WorkProducts)
+	}
+}
+
