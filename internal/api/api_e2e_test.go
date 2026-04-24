@@ -998,12 +998,18 @@ func TestIssueArchiveE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/companies: %v", err)
 	}
+	defer respCompany.Body.Close()
+	if respCompany.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/companies status = %d, want %d", respCompany.StatusCode, http.StatusCreated)
+	}
 	var company map[string]any
 	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
 		t.Fatalf("decoding company response: %v", err)
 	}
-	respCompany.Body.Close()
 	companyID, _ := company["id"].(string)
+	if companyID == "" {
+		t.Fatalf("company id is empty")
+	}
 
 	// Create 2 issues
 	issueBody1, _ := json.Marshal(map[string]any{
@@ -1015,12 +1021,19 @@ func TestIssueArchiveE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/issues (issue 1): %v", err)
 	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp1.Body)
+		t.Fatalf("POST /api/issues (issue 1) status=%d body=%s", resp1.StatusCode, string(body))
+	}
 	var issue1 map[string]any
 	if err := json.NewDecoder(resp1.Body).Decode(&issue1); err != nil {
 		t.Fatalf("decoding issue 1 response: %v", err)
 	}
-	resp1.Body.Close()
 	issue1ID, _ := issue1["id"].(string)
+	if issue1ID == "" {
+		t.Fatal("issue 1 response missing id")
+	}
 
 	issueBody2, _ := json.Marshal(map[string]any{
 		"companyId": companyID,
@@ -1031,23 +1044,29 @@ func TestIssueArchiveE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/issues (issue 2): %v", err)
 	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp2.Body)
+		t.Fatalf("POST /api/issues (issue 2) status=%d body=%s", resp2.StatusCode, string(body))
+	}
 	var issue2 map[string]any
 	if err := json.NewDecoder(resp2.Body).Decode(&issue2); err != nil {
 		t.Fatalf("decoding issue 2 response: %v", err)
 	}
-	resp2.Body.Close()
-	_ = issue2["id"].(string) // issue 2 created but not used in this test
 
 	// GET list without archived filter - expect 2
 	resp3, err := http.Get(srv.URL + "/api/issues?companyId=" + companyID)
 	if err != nil {
 		t.Fatalf("GET /api/issues (list 1): %v", err)
 	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues (list 1) status = %d, want 200", resp3.StatusCode)
+	}
 	var list1 map[string]any
 	if err := json.NewDecoder(resp3.Body).Decode(&list1); err != nil {
 		t.Fatalf("decoding list 1: %v", err)
 	}
-	resp3.Body.Close()
 	items1, _ := list1["items"].([]any)
 	if len(items1) != 2 {
 		t.Errorf("GET /api/issues (list 1) items count = %d, want 2", len(items1))
@@ -1068,11 +1087,14 @@ func TestIssueArchiveE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/issues (list 2): %v", err)
 	}
+	defer resp5.Body.Close()
+	if resp5.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues (list 2) status = %d, want 200", resp5.StatusCode)
+	}
 	var list2 map[string]any
 	if err := json.NewDecoder(resp5.Body).Decode(&list2); err != nil {
 		t.Fatalf("decoding list 2: %v", err)
 	}
-	resp5.Body.Close()
 	items2, _ := list2["items"].([]any)
 	if len(items2) != 1 {
 		t.Errorf("GET /api/issues (list 2) items count = %d, want 1", len(items2))
@@ -1083,11 +1105,14 @@ func TestIssueArchiveE2E(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/issues (list 3 with archived): %v", err)
 	}
+	defer resp6.Body.Close()
+	if resp6.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues (list 3) status = %d, want 200", resp6.StatusCode)
+	}
 	var list3 map[string]any
 	if err := json.NewDecoder(resp6.Body).Decode(&list3); err != nil {
 		t.Fatalf("decoding list 3: %v", err)
 	}
-	resp6.Body.Close()
 	items3, _ := list3["items"].([]any)
 	if len(items3) != 2 {
 		t.Errorf("GET /api/issues (list 3 with archived) items count = %d, want 2", len(items3))
