@@ -124,6 +124,8 @@ func getMe(s *svc.Service) http.HandlerFunc {
 func delete(s *svc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
+		// NOTE: Agent ownership (company isolation) must be enforced by auth middleware.
+		// This handler accepts any agent ID without explicit company_id validation.
 		err := s.Delete(r.Context(), id)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {

@@ -148,9 +148,9 @@ func (s *Service) GetByShortname(ctx context.Context, companyID, shortname strin
 	return a, err
 }
 
-// Delete deletes an agent if it has no active checkouts.
+// Delete deletes an agent if it has no active associations.
 // Returns ErrNotFound if the agent does not exist.
-// Returns ErrHasActiveCheckout if the agent has issues checked out with in_progress status.
+// Returns ErrHasActiveCheckout if the agent has assigned issues, checked-out issues, comments, or heartbeat runs.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	// Wrap in transaction for consistency and atomicity
 	return s.store.WithTx(ctx, func(tx *sql.Tx) error {
