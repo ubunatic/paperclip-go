@@ -8,21 +8,22 @@
 
 ## Status & Recent Review (2026-04-24)
 
-**Phases Completed:** A1-A4, B1-B2, C1-C2 ✅  
+**Phases Completed:** A1-A4, B1-B2, C1-C3 ✅  
 **Build Status:** ✅ `make build && make test` green
 
 **Code Quality Review Summary (2026-04-24):**
 
 | Item | Status | Details |
 |------|--------|---------|
+| C3 Implementation | ✅ COMPLETE | `archived_at` column added; POST archive/unarchive endpoints; GET /api/issues default excludes archived, `?includeArchived=true` includes; 6 unit tests + comprehensive E2E |
 | C2 Implementation | ✅ COMPLETE | Documents/work_products JSON arrays added to issues table; PATCH support with replacement semantics; comprehensive E2E + unit tests |
 | A-C Security Audit | ✅ FIXED | Cross-tenant isolation assumptions documented; Delete() docstring corrected to reflect actual dependencies (assigned/checked-out/comments/runs, not just in_progress) |
 | Code Quality | ✅ FIXED | All code review findings addressed: gofmt compliance, JSON unmarshal error logging, complete test coverage with edge cases |
 | Service Tests | ✅ ADDED | Unit tests for documents/workProducts set/clear at service layer; E2E tests cover persistence, clearing, and 404 errors |
-| Parity | ✅ Verified | Response schemas match TS (camelCase JSON keys, Agent runtimeState/configuration, Issue documents/workProducts); all HTTP status codes consistent (204, 200, 404, 409, 422) |
+| Parity | ✅ Verified | Response schemas match TS (camelCase JSON keys, Agent runtimeState/configuration, Issue documents/workProducts, ArchivedAt); all HTTP status codes consistent (204, 200, 404, 409, 422) |
 | Testing | ✅ IMPROVED | Added service-level unit tests + comprehensive E2E coverage (set, retrieve, clear, cross-field persistence, 404 error case) |
 | Design Debt | 📝 Noted | Handler unit tests (A-C packages); route-level cross-tenant isolation; state machine RBAC guards (deferred to Phase D+) |
-| Next Phase | → C3 | Archive/read state: `archived_at` column, archive/unarchive endpoints, filter exclusion by default |
+| Next Phase | → D1 | Activity POST + issue-scoped activity: `POST /api/activity`, `GET /api/issues/{id}/activity` |
 
 ---
 
@@ -58,7 +59,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/issues` CRUD + checkout/release | 9 | ✅ | — |
 | Issue labels | 5+ | ✅ | C1 |
 | Issue documents / work-products | 5+ | ✅ | C2 |
-| Issue read / archive state | 2 | 🔲 | C3 |
+| Issue read / archive state | 2 | ✅ | C3 |
 | `/api/issues/{id}/comments` | 2 | ✅ | — |
 | `/api/activity` GET | 1 | ✅ | — |
 | `/api/activity` POST + issue-scoped | 3 | 🔲 | D1 |
@@ -100,6 +101,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 |---|---|---|---|
 | `issues.labels` (junction table) | ✅ | ✅ | C1 |
 | `issues.documents` / `work_products` | ✅ | ✅ | C2 |
+| `issues.archived_at` | ✅ | ✅ | C3 |
 | `issues.execution_policy` | ✅ | 🔲 | C2+ |
 | `agents.configuration` (YAML/JSON) | ✅ | ✅ | B2 |
 | `agents.runtime_state` | ✅ | ✅ | B1 |
@@ -240,17 +242,19 @@ Tasks:
 
 Acceptance: `PATCH /api/issues/$IID -d '{"documents":[{"title":"spec","url":"..."}]}'` → 200; GET returns documents.
 
-#### C3 — Issue read/archive state
+#### C3 — Issue read/archive state ✅
 
-**Files:** `internal/store/migrations/0006_issue_state.sql`, `internal/domain/issue.go`, `internal/issues/service.go`
+**Files:** `internal/store/migrations/0006_issue_archived_at.sql`, `internal/domain/issue.go`, `internal/issues/service.go`, `internal/api/issues/handler.go`
 
-Tasks:
-- Migration: `ALTER TABLE issues ADD COLUMN archived_at TEXT DEFAULT NULL`.
-- `POST /api/issues/{id}/archive` sets `archived_at`; `POST /api/issues/{id}/unarchive` clears it.
-- `GET /api/issues` default filter excludes archived; `?includeArchived=true` includes them.
-- Unit tests: archive, list (excluded), list with flag (included), unarchive.
+Tasks: ✅ COMPLETE
+- Migration: `ALTER TABLE issues ADD COLUMN archived_at TEXT DEFAULT NULL` — ✅ Added
+- `POST /api/issues/{id}/archive` sets `archived_at` to current timestamp — ✅ Implemented
+- `POST /api/issues/{id}/unarchive` clears `archived_at` to NULL — ✅ Implemented
+- `GET /api/issues` default filter excludes archived; `?includeArchived=true` includes them — ✅ Implemented with filtering logic
+- Unit tests: 6 test functions covering archive, list (excluded), list with flag (included), unarchive, 404s — ✅ All passing
+- E2E tests: Full workflow validation including filtering, field values, and edge cases — ✅ All passing
 
-Acceptance: archive issue → not in default list; `?includeArchived=true` → visible.
+Acceptance: ✅ Archive issue → not in default list; `?includeArchived=true` → visible; both endpoints return 200 with status field; GET by ID always returns issue; 404 on nonexistent.
 
 ---
 
