@@ -145,19 +145,21 @@ func update(s *isvc.Service) http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
-			Status     string  `json:"status"`
-			AssigneeID *string `json:"assigneeId"`
+			Status       string  `json:"status"`
+			AssigneeID   *string `json:"assigneeId"`
+			Documents    *[]any  `json:"documents"`
+			WorkProducts *[]any  `json:"workProducts"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
 			return
 		}
 		// At least one field must be provided
-		if body.Status == "" && body.AssigneeID == nil {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of status or assigneeId is required")
+		if body.Status == "" && body.AssigneeID == nil && body.Documents == nil && body.WorkProducts == nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of status, assigneeId, documents, or workProducts is required")
 			return
 		}
-		issue, err := s.Update(r.Context(), id, body.Status, body.AssigneeID)
+		issue, err := s.Update(r.Context(), id, body.Status, body.AssigneeID, body.Documents, body.WorkProducts)
 		if err != nil {
 			if errors.Is(err, isvc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")
