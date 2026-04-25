@@ -22,29 +22,42 @@ func New(s *store.Store) *Log {
 	return &Log{store: s}
 }
 
-// Record inserts a new activity log entry.
-func (l *Log) Record(ctx context.Context, companyID, actorKind, actorID, action, entityKind, entityID, metaJSON string) error {
+// Record inserts a new activity log entry and returns the created Activity.
+func (l *Log) Record(ctx context.Context, companyID, actorKind, actorID, action, entityKind, entityID, metaJSON string) (*domain.Activity, error) {
 	// Default empty metaJSON to '{}'
 	if metaJSON == "" {
 		metaJSON = "{}"
 	}
 	// Validate metaJSON is valid JSON
 	if !json.Valid([]byte(metaJSON)) {
-		return fmt.Errorf("metaJSON is not valid JSON: %q", metaJSON)
+		return nil, fmt.Errorf("metaJSON is not valid JSON: %q", metaJSON)
 	}
 
+	id := ids.NewUUID()
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 
 	_, err := l.store.DB.ExecContext(ctx,
 		`INSERT INTO activity_log(id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		ids.NewUUID(), companyID, actorKind, actorID, action, entityKind, entityID, metaJSON, ts,
+		id, companyID, actorKind, actorID, action, entityKind, entityID, metaJSON, ts,
 	)
 	if err != nil {
-		return fmt.Errorf("inserting activity: %w", err)
+		return nil, fmt.Errorf("inserting activity: %w", err)
 	}
-	return nil
+
+	// Return the created activity
+	return &domain.Activity{
+		ID:         id,
+		CompanyID:  companyID,
+		ActorKind:  actorKind,
+		ActorID:    actorID,
+		Action:     action,
+		EntityKind: entityKind,
+		EntityID:   entityID,
+		MetaJSON:   json.RawMessage(metaJSON),
+		CreatedAt:  now,
+	}, nil
 }
 
 // List returns the most recent activity log entries for a company, limited by count.
@@ -56,6 +69,34 @@ func (l *Log) List(ctx context.Context, companyID string, limit int) ([]*domain.
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying activity log: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]*domain.Activity, 0)
+	for rows.Next() {
+		a, err := scanActivity(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating activity log: %w", err)
+	}
+	return out, nil
+}
+
+// ListByEntity queries all activities for a given entity (no pagination yet).
+// Safe for issues with typical activity volume; consider adding LIMIT for high-volume entities.
+// Returns activity log entries for a specific entity, ordered chronologically (ascending by created_at).
+func (l *Log) ListByEntity(ctx context.Context, entityKind, entityID string) ([]*domain.Activity, error) {
+	rows, err := l.store.DB.QueryContext(ctx,
+		`SELECT id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at
+		 FROM activity_log WHERE entity_kind = ? AND entity_id = ? ORDER BY created_at ASC, id ASC`,
+		entityKind, entityID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("querying activity log by entity: %w", err)
 	}
 	defer rows.Close()
 

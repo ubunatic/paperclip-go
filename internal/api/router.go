@@ -60,7 +60,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 		r.Mount("/companies", apicompanies.Handler(companySvc))
 		r.Mount("/agents", apiagents.Handler(agentSvc))
 		r.Mount("/activity", apiactivity.Handler(activityLog))
-		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc, labelSvc))
+		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc, labelSvc, activityLog))
 		r.Mount("/labels", apilabels.Handler(labelSvc))
 		r.Mount("/heartbeat", apiheartbeat.Handler(heartbeatRunner))
 		// GET /skills is read-only; use Get, not Mount

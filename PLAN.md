@@ -6,24 +6,21 @@
 
 ---
 
-## Status & Recent Review (2026-04-24)
+## Status & Recent Review (2026-04-25)
 
-**Phases Completed:** A1-A4, B1-B2, C1-C3 ✅  
+**Phases Completed:** A1-A4, B1-B2, C1-C3, D1 ✅  
 **Build Status:** ✅ `make build && make test` green
 
-**Code Quality Review Summary (2026-04-24):**
+**Code Quality Review Summary (2026-04-25):**
 
 | Item | Status | Details |
 |------|--------|---------|
-| C3 Implementation | ✅ COMPLETE | `archived_at` column added; POST archive/unarchive endpoints; GET /api/issues default excludes archived, `?includeArchived=true` includes; 6 unit tests + comprehensive E2E |
-| C2 Implementation | ✅ COMPLETE | Documents/work_products JSON arrays added to issues table; PATCH support with replacement semantics; comprehensive E2E + unit tests |
-| A-C Security Audit | ✅ FIXED | Cross-tenant isolation assumptions documented; Delete() docstring corrected to reflect actual dependencies (assigned/checked-out/comments/runs, not just in_progress) |
-| Code Quality | ✅ FIXED | All code review findings addressed: gofmt compliance, JSON unmarshal error logging, complete test coverage with edge cases |
-| Service Tests | ✅ ADDED | Unit tests for documents/workProducts set/clear at service layer; E2E tests cover persistence, clearing, and 404 errors |
-| Parity | ✅ Verified | Response schemas match TS (camelCase JSON keys, Agent runtimeState/configuration, Issue documents/workProducts, ArchivedAt); all HTTP status codes consistent (204, 200, 404, 409, 422) |
-| Testing | ✅ IMPROVED | Added service-level unit tests + comprehensive E2E coverage (set, retrieve, clear, cross-field persistence, 404 error case) |
-| Design Debt | 📝 Noted | Handler unit tests (A-C packages); route-level cross-tenant isolation; state machine RBAC guards (deferred to Phase D+) |
-| Next Phase | → D1 | Activity POST + issue-scoped activity: `POST /api/activity`, `GET /api/issues/{id}/activity` |
+| D1 Implementation | ✅ COMPLETE | `POST /api/activity` endpoint with required field validation (422 for invalid input); `GET /api/issues/{id}/activity` for issue-scoped queries; Service layer refactored: `Record()` now returns `(*domain.Activity, error)` |
+| D1 Testing | ✅ COMPLETE | Service-layer unit tests with proper ID-based ordering assertions; comprehensive E2E coverage (10 scenarios: creation, validation, listing, ordering, error handling) |
+| D1 Code Review | ✅ FIXED | Address all review findings: moved metaJson validation to handler layer (422), fixed ordering assertions in tests, added status guards in E2E setup, gofmt clean |
+| Parity | ✅ Verified | POST /api/activity accepts required fields and optional metaJson; returns 201 with created record; GET /api/issues/{id}/activity returns 200 with chronologically-ordered items |
+| Design Debt | 📝 Noted | ListByEntity has no pagination (acceptable for typical issue volumes); documented in comments |
+| Next Phase | → E1 | Heartbeat run detail + cancel: `GET /api/heartbeat/runs/{id}`, `POST /api/heartbeat/runs/{id}/cancel` |
 
 ---
 
@@ -62,7 +59,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | Issue read / archive state | 2 | ✅ | C3 |
 | `/api/issues/{id}/comments` | 2 | ✅ | — |
 | `/api/activity` GET | 1 | ✅ | — |
-| `/api/activity` POST + issue-scoped | 3 | 🔲 | D1 |
+| `/api/activity` POST + issue-scoped | 3 | ✅ | D1 |
 | `/api/heartbeat/runs` POST + GET | 2 | ✅ | — |
 | Heartbeat run detail GET | 1 | 🔲 | E1 |
 | Heartbeat run cancel | 1 | 🔲 | E1 |
@@ -260,16 +257,19 @@ Acceptance: ✅ Archive issue → not in default list; `?includeArchived=true` �
 
 ### Phase D — Activity Enhancements
 
-#### D1 — POST activity + issue-scoped activity
+#### D1 — POST activity + issue-scoped activity ✅
 
-**Files:** `internal/activity/log.go`, `internal/api/activity/handler.go`
+**Files:** `internal/activity/log.go`, `internal/api/activity/handler.go`, `internal/api/issues/handler.go`, `internal/api/router.go`, `internal/activity/log_test.go`, `internal/api/api_e2e_test.go`
 
-Tasks:
-- Add `POST /api/activity` endpoint: accepts `{companyId, actorKind, actorId, action, entityKind, entityId, metaJson?}` and inserts a row.
-- Add `GET /api/issues/{id}/activity` route in the issues handler: queries `activity_log WHERE entity_kind='issue' AND entity_id=?` ordered by `created_at`.
-- Unit tests: post entry, list by company, list by issue.
+Tasks: ✅ COMPLETE
+- ✅ Add `POST /api/activity` endpoint: accepts `{companyId, actorKind, actorId, action, entityKind, entityId, metaJson?}` and inserts a row (returns 201 with created record; 422 on validation error)
+- ✅ Add `GET /api/issues/{id}/activity` route in the issues handler: queries `activity_log WHERE entity_kind='issue' AND entity_id=?` ordered by `created_at ASC` (chronological)
+- ✅ Unit tests: `TestListByEntity` with proper ID-based ordering assertions (handles same-timestamp scenarios)
+- ✅ E2E tests: `TestActivityD1E2E` with 10 scenarios (POST creation, validation, listing by company, issue-scoped queries, error handling)
+- ✅ Service layer refactor: `Record()` now returns `(*domain.Activity, error)` for full record return
+- ✅ Code review: moved metaJson validation to handler layer (422 for invalid JSON), added status guards, gofmt clean
 
-Acceptance: `POST /api/activity` creates a row; `GET /api/issues/$IID/activity` returns it.
+Acceptance: ✅ `POST /api/activity` creates a row (201); `GET /api/activity?companyId=...` lists it; `GET /api/issues/$IID/activity` returns issue-scoped activities in chronological order.
 
 ---
 
