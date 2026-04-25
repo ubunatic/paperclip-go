@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1490,9 +1489,9 @@ func TestHeartbeatE2E(t *testing.T) {
 	}
 
 	// Try to cancel the already-completed run → 409 (since stub adapter completes immediately)
-	req := &http.Request{
-		Method: "POST",
-		URL: &url.URL{Scheme: "http", Host: srv.Listener.Addr().String(), Path: "/api/heartbeat/runs/" + runID + "/cancel"},
+	req, err := http.NewRequest("POST", srv.URL+"/api/heartbeat/runs/"+runID+"/cancel", nil)
+	if err != nil {
+		t.Fatalf("creating POST request: %v", err)
 	}
 	respCancelTerminal, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -1504,10 +1503,11 @@ func TestHeartbeatE2E(t *testing.T) {
 	}
 
 	// POST /api/heartbeat/runs/{nonexistent}/cancel → 404
-	respCancelNotFound, err := http.DefaultClient.Do(&http.Request{
-		Method: "POST",
-		URL: &url.URL{Scheme: "http", Host: srv.Listener.Addr().String(), Path: "/api/heartbeat/runs/nonexistent-run-id/cancel"},
-	})
+	req2, err := http.NewRequest("POST", srv.URL+"/api/heartbeat/runs/nonexistent-run-id/cancel", nil)
+	if err != nil {
+		t.Fatalf("creating POST request: %v", err)
+	}
+	respCancelNotFound, err := http.DefaultClient.Do(req2)
 	if err != nil {
 		t.Fatalf("POST /api/heartbeat/runs/{nonexistent}/cancel: %v", err)
 	}

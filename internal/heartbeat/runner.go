@@ -268,28 +268,39 @@ func (r *Runner) GetByID(ctx context.Context, id string) (*domain.HeartbeatRun, 
 // Cancel attempts to cancel a heartbeat run.
 // Returns ErrNotFound if the run does not exist.
 // Returns ErrTerminalStatus if the run has already finished (status is not "running").
+// Uses atomic conditional UPDATE to avoid race conditions where a concurrent
+// Run() operation might be updating the run to a terminal status.
 func (r *Runner) Cancel(ctx context.Context, id string) (*domain.HeartbeatRun, error) {
-	// Fetch the run to check its current status
-	run, err := r.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Only allow cancellation if the run is still running
-	if run.Status != "running" {
-		return nil, ErrTerminalStatus
-	}
-
-	// Update status to "cancelled" and set finished_at
+	// Atomically update only if the run is still in "running" state.
 	finishedAt := time.Now().UTC().Truncate(time.Second)
 	finishedAtStr := finishedAt.Format(time.RFC3339)
 
-	_, err = r.store.DB.ExecContext(ctx,
-		`UPDATE heartbeat_runs SET status = ?, finished_at = ? WHERE id = ?`,
-		"cancelled", finishedAtStr, id,
+	result, err := r.store.DB.ExecContext(ctx,
+		`UPDATE heartbeat_runs SET status = ?, finished_at = ? WHERE id = ? AND status = ?`,
+		"cancelled", finishedAtStr, id, "running",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("cancelling heartbeat run: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("determining if heartbeat run was cancelled: %w", err)
+	}
+
+	// If no rows were affected, the run doesn't exist or is already terminal
+	if rowsAffected == 0 {
+		latestRun, err := r.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		// If we can fetch it but it's not running, return terminal status error
+		if latestRun.Status != "running" {
+			return nil, ErrTerminalStatus
+		}
+		// This shouldn't happen (we couldn't update but status is running),
+		// but treat as terminal status to be safe
+		return nil, ErrTerminalStatus
 	}
 
 	return r.GetByID(ctx, id)
