@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	asvc "github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	isvc "github.com/ubunatic/paperclip-go/internal/issues"
@@ -22,7 +23,7 @@ type issueWithLabels struct {
 }
 
 // Handler returns an http.Handler for the /api/issues sub-router.
-func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsvc.Service) http.Handler {
+func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsvc.Service, activityLog *asvc.Log) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", list(issueSvc))
 	r.Post("/", create(issueSvc))
@@ -35,6 +36,7 @@ func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsv
 	r.Post("/{id}/unarchive", unarchive(issueSvc))
 	r.Get("/{id}/comments", listComments(commentSvc))
 	r.Post("/{id}/comments", createComment(commentSvc))
+	r.Get("/{id}/activity", listActivity(activityLog))
 	r.Post("/{id}/labels", addLabel(labelSvc))
 	r.Delete("/{id}/labels/{labelId}", removeLabel(labelSvc))
 	return r
@@ -307,6 +309,19 @@ func listComments(s *comments.Service) http.HandlerFunc {
 		items, err := s.ListByIssue(r.Context(), issueID)
 		if err != nil {
 			log.Printf("comments: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, map[string]any{"items": items})
+	}
+}
+
+func listActivity(a *asvc.Log) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		issueID := chi.URLParam(r, "id")
+		items, err := a.ListByEntity(r.Context(), "issue", issueID)
+		if err != nil {
+			log.Printf("activity: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}

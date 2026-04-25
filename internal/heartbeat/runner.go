@@ -171,7 +171,7 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 	}
 
 	// Record activity: heartbeat_run
-	actErr := r.actLog.Record(ctx,
+	_, actErr := r.actLog.Record(ctx,
 		agent.CompanyID, "system", agentID, "heartbeat_run", "heartbeat_run", run.ID,
 		"{}",
 	)

@@ -2,6 +2,7 @@
 package activity
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 	"strconv"
@@ -15,10 +16,51 @@ import (
 func Handler(s *svc.Log) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", list(s))
+	r.Post("/", create(s))
 	return r
 }
 
 const maxLimit = 500
+
+func create(s *svc.Log) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
+		var body struct {
+			CompanyID  string          `json:"companyId"`
+			ActorKind  string          `json:"actorKind"`
+			ActorID    string          `json:"actorId"`
+			Action     string          `json:"action"`
+			EntityKind string          `json:"entityKind"`
+			EntityID   string          `json:"entityId"`
+			MetaJSON   json.RawMessage `json:"metaJson"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+			return
+		}
+
+		// Validate required fields
+		if body.CompanyID == "" || body.ActorKind == "" || body.ActorID == "" || body.Action == "" || body.EntityKind == "" || body.EntityID == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId, actorKind, actorId, action, entityKind, and entityId are required")
+			return
+		}
+
+		// Validate metaJson is valid JSON if provided
+		if len(body.MetaJSON) > 0 && !json.Valid(body.MetaJSON) {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "metaJson must be valid JSON")
+			return
+		}
+
+		activity, err := s.Record(r.Context(), body.CompanyID, body.ActorKind, body.ActorID, body.Action, body.EntityKind, body.EntityID, string(body.MetaJSON))
+		if err != nil {
+			log.Printf("activity: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+
+		respond.JSON(w, http.StatusCreated, activity)
+	}
+}
 
 func list(s *svc.Log) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
