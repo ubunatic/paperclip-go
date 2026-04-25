@@ -75,7 +75,7 @@ func TestListActivities(t *testing.T) {
 	// Items are ordered by created_at DESC, id DESC, so check id ordering
 	for i := 0; i < len(items)-1; i++ {
 		if items[i].ID <= items[i+1].ID {
-			t.Errorf("want DESC by id, got items[%d].ID=%s > items[%d].ID=%s", i, items[i].ID, i+1, items[i+1].ID)
+			t.Errorf("want DESC by id, got items[%d].ID=%s <= items[%d].ID=%s", i, items[i].ID, i+1, items[i+1].ID)
 		}
 	}
 

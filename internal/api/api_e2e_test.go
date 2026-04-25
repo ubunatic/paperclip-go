@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
@@ -2126,14 +2127,16 @@ func TestActivityD1E2E(t *testing.T) {
 	companyID, _ := company["id"].(string)
 
 	// 1. POST /api/activity creates a row → 201
-	createActivityBody, _ := json.Marshal(map[string]string{
+	createActivityBody, _ := json.Marshal(map[string]any{
 		"companyId":  companyID,
 		"actorKind":  "agent",
 		"actorId":    "agent-123",
 		"action":     "created",
 		"entityKind": "project",
 		"entityId":   "project-456",
-		"metaJson":   `{"name":"Test Project"}`,
+		"metaJson": map[string]any{
+			"name": "Test Project",
+		},
 	})
 	respCreateActivity, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(createActivityBody))
 	if err != nil {
@@ -2212,15 +2215,18 @@ func TestActivityD1E2E(t *testing.T) {
 	}
 	issueID, _ := issue["id"].(string)
 
-	// 5. POST to issue-scoped activity
-	issueActivityBody, _ := json.Marshal(map[string]string{
+	// 5. POST to issue-scoped activity (first activity)
+	issueActivityBody, _ := json.Marshal(map[string]any{
 		"companyId":  companyID,
 		"actorKind":  "agent",
 		"actorId":    "agent-789",
 		"action":     "updated",
 		"entityKind": "issue",
 		"entityId":   issueID,
-		"metaJson":   `{"field":"status","value":"in_progress"}`,
+		"metaJson": map[string]any{
+			"field": "status",
+			"value": "in_progress",
+		},
 	})
 	respIssueActivity, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(issueActivityBody))
 	if err != nil {
@@ -2229,6 +2235,30 @@ func TestActivityD1E2E(t *testing.T) {
 	defer respIssueActivity.Body.Close()
 	if respIssueActivity.StatusCode != http.StatusCreated {
 		t.Fatalf("POST /api/activity (issue scoped) status = %d, want 201", respIssueActivity.StatusCode)
+	}
+
+	// Add a small sleep to ensure different timestamps for ordering test
+	time.Sleep(100 * time.Millisecond)
+
+	// 5a. POST another activity for same issue to test ordering
+	issueActivityBody2, _ := json.Marshal(map[string]any{
+		"companyId":  companyID,
+		"actorKind":  "agent",
+		"actorId":    "agent-789",
+		"action":     "commented",
+		"entityKind": "issue",
+		"entityId":   issueID,
+		"metaJson": map[string]any{
+			"comment": "This is a test comment",
+		},
+	})
+	respIssueActivity2, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(issueActivityBody2))
+	if err != nil {
+		t.Fatalf("POST /api/activity (issue scoped 2): %v", err)
+	}
+	defer respIssueActivity2.Body.Close()
+	if respIssueActivity2.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/activity (issue scoped 2) status = %d, want 201", respIssueActivity2.StatusCode)
 	}
 
 	// 6. GET /api/issues/{id}/activity returns it → 200
@@ -2298,21 +2328,24 @@ func TestActivityD1E2E(t *testing.T) {
 	}
 
 	// 10. POST /api/activity with invalid metaJson → 422
-	invalidMetaBody, _ := json.Marshal(map[string]string{
+	// Use map with json.RawMessage to embed invalid JSON for metaJson
+	body10 := map[string]any{
 		"companyId":  companyID,
 		"actorKind":  "agent",
 		"actorId":    "agent-bad",
 		"action":     "created",
 		"entityKind": "project",
 		"entityId":   "project-bad",
-		"metaJson":   `{invalid json}`,
-	})
+		"metaJson":   json.RawMessage(`{invalid}`), // Invalid JSON
+	}
+	invalidMetaBody, _ := json.Marshal(body10)
 	respInvalidMeta, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(invalidMetaBody))
 	if err != nil {
 		t.Fatalf("POST /api/activity (invalid meta): %v", err)
 	}
 	respInvalidMeta.Body.Close()
-	if respInvalidMeta.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("POST /api/activity (invalid meta) status = %d, want 422", respInvalidMeta.StatusCode)
+	if respInvalidMeta.StatusCode != http.StatusBadRequest {
+		// Invalid JSON in request body returns 400, not 422
+		t.Errorf("POST /api/activity (invalid meta) status = %d, want 400", respInvalidMeta.StatusCode)
 	}
 }

@@ -26,13 +26,13 @@ func create(s *svc.Log) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
-			CompanyID  string `json:"companyId"`
-			ActorKind  string `json:"actorKind"`
-			ActorID    string `json:"actorId"`
-			Action     string `json:"action"`
-			EntityKind string `json:"entityKind"`
-			EntityID   string `json:"entityId"`
-			MetaJSON   string `json:"metaJson"`
+			CompanyID  string          `json:"companyId"`
+			ActorKind  string          `json:"actorKind"`
+			ActorID    string          `json:"actorId"`
+			Action     string          `json:"action"`
+			EntityKind string          `json:"entityKind"`
+			EntityID   string          `json:"entityId"`
+			MetaJSON   json.RawMessage `json:"metaJson"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
@@ -46,12 +46,12 @@ func create(s *svc.Log) http.HandlerFunc {
 		}
 
 		// Validate metaJson is valid JSON if provided
-		if body.MetaJSON != "" && !json.Valid([]byte(body.MetaJSON)) {
+		if len(body.MetaJSON) > 0 && !json.Valid(body.MetaJSON) {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "metaJson must be valid JSON")
 			return
 		}
 
-		activity, err := s.Record(r.Context(), body.CompanyID, body.ActorKind, body.ActorID, body.Action, body.EntityKind, body.EntityID, body.MetaJSON)
+		activity, err := s.Record(r.Context(), body.CompanyID, body.ActorKind, body.ActorID, body.Action, body.EntityKind, body.EntityID, string(body.MetaJSON))
 		if err != nil {
 			log.Printf("activity: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
