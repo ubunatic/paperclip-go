@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1458,6 +1459,61 @@ func TestHeartbeatE2E(t *testing.T) {
 	resp5.Body.Close()
 	if resp5.StatusCode != http.StatusNotFound {
 		t.Errorf("POST /api/heartbeat/runs (not found) status = %d, want 404", resp5.StatusCode)
+	}
+
+	// GET /api/heartbeat/runs/{id} → 200 with full run record (E1)
+	respGet, err := http.Get(srv.URL + "/api/heartbeat/runs/" + runID)
+	if err != nil {
+		t.Fatalf("GET /api/heartbeat/runs/{id}: %v", err)
+	}
+	defer respGet.Body.Close()
+	if respGet.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/heartbeat/runs/{id} status = %d, want 200", respGet.StatusCode)
+	}
+
+	var getRun map[string]any
+	if err := json.NewDecoder(respGet.Body).Decode(&getRun); err != nil {
+		t.Fatalf("decoding GET run response: %v", err)
+	}
+	if getRun["id"] != runID {
+		t.Errorf("GET run id = %v, want %v", getRun["id"], runID)
+	}
+
+	// GET /api/heartbeat/runs/{nonexistent} → 404
+	respGetNotFound, err := http.Get(srv.URL + "/api/heartbeat/runs/nonexistent-run-id")
+	if err != nil {
+		t.Fatalf("GET /api/heartbeat/runs/{nonexistent}: %v", err)
+	}
+	respGetNotFound.Body.Close()
+	if respGetNotFound.StatusCode != http.StatusNotFound {
+		t.Errorf("GET /api/heartbeat/runs/{nonexistent} status = %d, want 404", respGetNotFound.StatusCode)
+	}
+
+	// Try to cancel the already-completed run → 409 (since stub adapter completes immediately)
+	req := &http.Request{
+		Method: "POST",
+		URL: &url.URL{Scheme: "http", Host: srv.Listener.Addr().String(), Path: "/api/heartbeat/runs/" + runID + "/cancel"},
+	}
+	respCancelTerminal, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs/{id}/cancel (already complete): %v", err)
+	}
+	respCancelTerminal.Body.Close()
+	if respCancelTerminal.StatusCode != http.StatusConflict {
+		t.Fatalf("POST /api/heartbeat/runs/{id}/cancel (already complete) status = %d, want 409", respCancelTerminal.StatusCode)
+	}
+
+	// POST /api/heartbeat/runs/{nonexistent}/cancel → 404
+	respCancelNotFound, err := http.DefaultClient.Do(&http.Request{
+		Method: "POST",
+		URL: &url.URL{Scheme: "http", Host: srv.Listener.Addr().String(), Path: "/api/heartbeat/runs/nonexistent-run-id/cancel"},
+	})
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs/{nonexistent}/cancel: %v", err)
+	}
+	respCancelNotFound.Body.Close()
+	if respCancelNotFound.StatusCode != http.StatusNotFound {
+		t.Errorf("POST /api/heartbeat/runs/{nonexistent}/cancel status = %d, want 404", respCancelNotFound.StatusCode)
 	}
 }
 

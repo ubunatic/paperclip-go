@@ -8,8 +8,8 @@
 
 ## Status & Recent Review (2026-04-25)
 
-**Phases Completed:** A1-A4, B1-B2, C1-C3, D1 ✅  
-**Build Status:** ✅ `make build && make test` green
+**Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1 ✅  
+**Build Status:** ✅ `make build && make test` green (all tests passing)
 
 **Code Quality Review Summary (2026-04-25):**
 
@@ -19,8 +19,31 @@
 | D1 Testing | ✅ COMPLETE | Service-layer unit tests with proper ID-based ordering assertions; comprehensive E2E coverage (10 scenarios: creation, validation, listing, ordering, error handling) |
 | D1 Code Review | ✅ FIXED | Address all review findings: moved metaJson validation to handler layer (422), fixed ordering assertions in tests, added status guards in E2E setup, gofmt clean |
 | Parity | ✅ Verified | POST /api/activity accepts required fields and optional metaJson; returns 201 with created record; GET /api/issues/{id}/activity returns 200 with chronologically-ordered items |
-| Design Debt | 📝 Noted | ListByEntity has no pagination (acceptable for typical issue volumes); documented in comments |
-| Next Phase | → E1 | Heartbeat run detail + cancel: `GET /api/heartbeat/runs/{id}`, `POST /api/heartbeat/runs/{id}/cancel` |
+| E1 Implementation | ✅ COMPLETE | Added `GET /api/heartbeat/runs/{id}` returning full run record (404 if not found); Added `POST /api/heartbeat/runs/{id}/cancel` with status validation (409 if not running) |
+| E1 Testing | ✅ COMPLETE | Unit tests: `TestRunnerCancel` covering success case, terminal-status rejection (409), and missing-run (404); E2E tests extending `TestHeartbeatE2E` for all 3 new scenarios |
+| Next Phase | → E2 | Mock adapter for tests: refactor `runner_test.go` to use reusable `MockAdapter` |
+
+---
+
+## Quality Audit Notes (2026-04-25)
+
+### 🐛 Minor Issues Identified
+
+1. **Activity.Record() return value not used** — Callers in `agents/service.go` (Pause/Resume/Terminate) and `heartbeat/runner.go` discard return via `_`. Document whether return is intentional for future use.
+2. **Agent error message breaking change** — Error code `"has_active_checkout"` renamed to `"has_active_dependents"` in Phase B1; clients need migration guidance.
+
+### 🏗️ Design Debt
+
+1. **Activity list pagination missing** — `ListByEntity()` queries all records with no LIMIT; should default to 100-500 with optional `?limit=N` query param. Concern: thousands of activities could cause memory issues.
+2. **documents/workProducts JSON normalization is redundant** — Normalized at Create, Update, and scanIssue layers; consolidate into single helper function.
+3. **SQL column coupling in scanIssue()** — Column list hardcoded across multiple SELECT statements; consider centralizing as constant.
+4. **Archive/unarchive missing activity logging** — No "issue_archived"/"issue_unarchived" events recorded; adds to audit trail debt.
+5. **Tenant isolation at handler level undocumented** — Archive/unarchive handlers lack company verification; depends on auth middleware (acceptable, but should document).
+
+### 🚀 Pre-E1 Improvements (Optional)
+
+- Add database index on `activity_log(entity_kind, entity_id, created_at)` for performance as activity volume grows.
+- Verify schema migrations (0005_issue_docs, 0006_issue_archived_at) are idempotent in production.
 
 ---
 
@@ -61,8 +84,8 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/activity` GET | 1 | ✅ | — |
 | `/api/activity` POST + issue-scoped | 3 | ✅ | D1 |
 | `/api/heartbeat/runs` POST + GET | 2 | ✅ | — |
-| Heartbeat run detail GET | 1 | 🔲 | E1 |
-| Heartbeat run cancel | 1 | 🔲 | E1 |
+| Heartbeat run detail GET | 1 | ✅ | E1 |
+| Heartbeat run cancel | 1 | ✅ | E1 |
 | `/api/skills` GET | 1 | ✅ | — |
 | `/api/secrets` CRUD | 8+ | 🔲 | F1 |
 | `/api/instance-settings` CRUD | 5+ | 🔲 | F2 |
