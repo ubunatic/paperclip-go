@@ -414,7 +414,7 @@ func TestActivityE2E(t *testing.T) {
 	ctx := respCompany.Request.Context()
 	activityLog := testutil.SpawnActivityLog(store)
 	for i := 0; i < 3; i++ {
-		if err := activityLog.Record(ctx, companyID, "agent", "agent-123", "action", "entity", "entity-id", "{}"); err != nil {
+		if _, err := activityLog.Record(ctx, companyID, "agent", "agent-123", "action", "entity", "entity-id", "{}"); err != nil {
 			t.Fatalf("recording activity %d: %v", i, err)
 		}
 	}
@@ -2099,5 +2099,220 @@ func TestLabelsE2E(t *testing.T) {
 	respBadListLabels.Body.Close()
 	if respBadListLabels.StatusCode != http.StatusBadRequest {
 		t.Errorf("GET /api/labels without companyId status = %d, want 400", respBadListLabels.StatusCode)
+	}
+}
+
+func TestActivityD1E2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t) // store managed by t.Cleanup
+
+	// Setup: Create a company
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "For activity tests",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	defer respCompany.Body.Close()
+	if respCompany.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/companies status = %d, want 201", respCompany.StatusCode)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company: %v", err)
+	}
+	companyID, _ := company["id"].(string)
+
+	// 1. POST /api/activity creates a row → 201
+	createActivityBody, _ := json.Marshal(map[string]string{
+		"companyId":  companyID,
+		"actorKind":  "agent",
+		"actorId":    "agent-123",
+		"action":     "created",
+		"entityKind": "project",
+		"entityId":   "project-456",
+		"metaJson":   `{"name":"Test Project"}`,
+	})
+	respCreateActivity, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(createActivityBody))
+	if err != nil {
+		t.Fatalf("POST /api/activity: %v", err)
+	}
+	defer respCreateActivity.Body.Close()
+	if respCreateActivity.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/activity status = %d, want 201", respCreateActivity.StatusCode)
+	}
+
+	var createdActivity map[string]any
+	if err := json.NewDecoder(respCreateActivity.Body).Decode(&createdActivity); err != nil {
+		t.Fatalf("decoding created activity: %v", err)
+	}
+	if createdActivity["id"] == "" {
+		t.Fatalf("expected id in created activity")
+	}
+	if createdActivity["action"] != "created" {
+		t.Errorf("action = %v, want 'created'", createdActivity["action"])
+	}
+
+	// 2. POST /api/activity with missing required field → 422
+	missingFieldBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"actorKind": "agent",
+		// missing actorId
+		"action":     "created",
+		"entityKind": "project",
+		"entityId":   "project-456",
+	})
+	respMissingField, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(missingFieldBody))
+	if err != nil {
+		t.Fatalf("POST /api/activity (missing field): %v", err)
+	}
+	respMissingField.Body.Close()
+	if respMissingField.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST /api/activity (missing field) status = %d, want 422", respMissingField.StatusCode)
+	}
+
+	// 3. GET /api/activity?companyId=X lists activities → 200
+	respListActivity, err := http.Get(srv.URL + "/api/activity?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/activity: %v", err)
+	}
+	defer respListActivity.Body.Close()
+	if respListActivity.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/activity status = %d, want 200", respListActivity.StatusCode)
+	}
+
+	var activityList map[string]any
+	if err := json.NewDecoder(respListActivity.Body).Decode(&activityList); err != nil {
+		t.Fatalf("decoding activity list: %v", err)
+	}
+	items, _ := activityList["items"].([]any)
+	if len(items) < 1 {
+		t.Errorf("activity list len = %d, want >= 1", len(items))
+	}
+
+	// 4. Create an issue for issue-scoped activity tests
+	issueBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"title":     "Test Issue for Activity",
+		"body":      "This issue is used to test activity tracking",
+	})
+	respIssue, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
+	defer respIssue.Body.Close()
+	if respIssue.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/issues status = %d, want 201", respIssue.StatusCode)
+	}
+	var issue map[string]any
+	if err := json.NewDecoder(respIssue.Body).Decode(&issue); err != nil {
+		t.Fatalf("decoding issue: %v", err)
+	}
+	issueID, _ := issue["id"].(string)
+
+	// 5. POST to issue-scoped activity
+	issueActivityBody, _ := json.Marshal(map[string]string{
+		"companyId":  companyID,
+		"actorKind":  "agent",
+		"actorId":    "agent-789",
+		"action":     "updated",
+		"entityKind": "issue",
+		"entityId":   issueID,
+		"metaJson":   `{"field":"status","value":"in_progress"}`,
+	})
+	respIssueActivity, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(issueActivityBody))
+	if err != nil {
+		t.Fatalf("POST /api/activity (issue scoped): %v", err)
+	}
+	defer respIssueActivity.Body.Close()
+	if respIssueActivity.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/activity (issue scoped) status = %d, want 201", respIssueActivity.StatusCode)
+	}
+
+	// 6. GET /api/issues/{id}/activity returns it → 200
+	respIssueActivityList, err := http.Get(srv.URL + "/api/issues/" + issueID + "/activity")
+	if err != nil {
+		t.Fatalf("GET /api/issues/{id}/activity: %v", err)
+	}
+	defer respIssueActivityList.Body.Close()
+	if respIssueActivityList.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues/{id}/activity status = %d, want 200", respIssueActivityList.StatusCode)
+	}
+
+	var issueActivityList map[string]any
+	if err := json.NewDecoder(respIssueActivityList.Body).Decode(&issueActivityList); err != nil {
+		t.Fatalf("decoding issue activity list: %v", err)
+	}
+	issueItems, _ := issueActivityList["items"].([]any)
+	if len(issueItems) < 1 {
+		t.Errorf("issue activity list len = %d, want >= 1", len(issueItems))
+	}
+
+	// 7. Verify issue activity is ordered chronologically (ascending by created_at)
+	if len(issueItems) > 1 {
+		item1, _ := issueItems[0].(map[string]any)
+		item2, _ := issueItems[1].(map[string]any)
+		time1, _ := item1["createdAt"].(string)
+		time2, _ := item2["createdAt"].(string)
+		if time1 > time2 {
+			t.Errorf("issue activity not in chronological order: %q vs %q", time1, time2)
+		}
+	}
+
+	// 8. GET /api/issues/{id}/activity for nonexistent issue → 200 (empty list)
+	respNotFoundActivity, err := http.Get(srv.URL + "/api/issues/nonexistent-issue/activity")
+	if err != nil {
+		t.Fatalf("GET /api/issues/nonexistent/activity: %v", err)
+	}
+	defer respNotFoundActivity.Body.Close()
+	if respNotFoundActivity.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/issues/nonexistent/activity status = %d, want 200", respNotFoundActivity.StatusCode)
+	}
+
+	var emptyList map[string]any
+	if err := json.NewDecoder(respNotFoundActivity.Body).Decode(&emptyList); err != nil {
+		t.Fatalf("decoding empty activity list: %v", err)
+	}
+	emptyItems, _ := emptyList["items"].([]any)
+	if len(emptyItems) != 0 {
+		t.Errorf("nonexistent issue activity len = %d, want 0", len(emptyItems))
+	}
+
+	// 9. POST /api/activity without companyId → 422
+	noCIDBody, _ := json.Marshal(map[string]string{
+		"actorKind":  "agent",
+		"actorId":    "agent-xyz",
+		"action":     "created",
+		"entityKind": "project",
+		"entityId":   "project-xyz",
+	})
+	respNoCID, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(noCIDBody))
+	if err != nil {
+		t.Fatalf("POST /api/activity (no companyId): %v", err)
+	}
+	respNoCID.Body.Close()
+	if respNoCID.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST /api/activity (no companyId) status = %d, want 422", respNoCID.StatusCode)
+	}
+
+	// 10. POST /api/activity with invalid metaJson → 422
+	invalidMetaBody, _ := json.Marshal(map[string]string{
+		"companyId":  companyID,
+		"actorKind":  "agent",
+		"actorId":    "agent-bad",
+		"action":     "created",
+		"entityKind": "project",
+		"entityId":   "project-bad",
+		"metaJson":   `{invalid json}`,
+	})
+	respInvalidMeta, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(invalidMetaBody))
+	if err != nil {
+		t.Fatalf("POST /api/activity (invalid meta): %v", err)
+	}
+	respInvalidMeta.Body.Close()
+	if respInvalidMeta.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST /api/activity (invalid meta) status = %d, want 422", respInvalidMeta.StatusCode)
 	}
 }
