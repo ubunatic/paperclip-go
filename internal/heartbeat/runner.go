@@ -234,6 +234,11 @@ func (r *Runner) Create(ctx context.Context, agentID string, issueID *string, st
 }
 
 // Update updates the status, summary, and error of a heartbeat run.
+// Note: This uses an unconditional UPDATE. If a concurrent Cancel() updates the run to
+// "cancelled" status while Update() is in flight, Update() will overwrite the cancellation.
+// For true race-safety, Update() should be conditional (WHERE status='running') and skip
+// side effects (activity logging, comments) if the run was already cancelled. This is a
+// known limitation for MVP; consider addressing in E2+ when cancellation is more critical.
 func (r *Runner) Update(ctx context.Context, id, status string, summary, errMsg *string) (*domain.HeartbeatRun, error) {
 	finishedAt := time.Now().UTC().Truncate(time.Second)
 	finishedAtStr := finishedAt.Format(time.RFC3339)
