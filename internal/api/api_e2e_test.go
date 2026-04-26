@@ -2129,10 +2129,10 @@ func TestActivityD1E2E(t *testing.T) {
 	// 1. POST /api/activity creates a row → 201
 	createActivityBody, _ := json.Marshal(map[string]any{
 		"companyId":  companyID,
-		"actorKind":  "agent",
+		"actorType":  "agent",
 		"actorId":    "agent-123",
 		"action":     "created",
-		"entityKind": "project",
+		"entityType": "project",
 		"entityId":   "project-456",
 		"metaJson": map[string]any{
 			"name": "Test Project",
@@ -2161,10 +2161,10 @@ func TestActivityD1E2E(t *testing.T) {
 	// 2. POST /api/activity with missing required field → 422
 	missingFieldBody, _ := json.Marshal(map[string]string{
 		"companyId": companyID,
-		"actorKind": "agent",
+		"actorType": "agent",
 		// missing actorId
 		"action":     "created",
-		"entityKind": "project",
+		"entityType": "project",
 		"entityId":   "project-456",
 	})
 	respMissingField, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(missingFieldBody))
@@ -2218,10 +2218,10 @@ func TestActivityD1E2E(t *testing.T) {
 	// 5. POST to issue-scoped activity (first activity)
 	issueActivityBody, _ := json.Marshal(map[string]any{
 		"companyId":  companyID,
-		"actorKind":  "agent",
+		"actorType":  "agent",
 		"actorId":    "agent-789",
 		"action":     "updated",
-		"entityKind": "issue",
+		"entityType": "issue",
 		"entityId":   issueID,
 		"metaJson": map[string]any{
 			"field": "status",
@@ -2243,10 +2243,10 @@ func TestActivityD1E2E(t *testing.T) {
 	// 5a. POST another activity for same issue to test ordering
 	issueActivityBody2, _ := json.Marshal(map[string]any{
 		"companyId":  companyID,
-		"actorKind":  "agent",
+		"actorType":  "agent",
 		"actorId":    "agent-789",
 		"action":     "commented",
-		"entityKind": "issue",
+		"entityType": "issue",
 		"entityId":   issueID,
 		"metaJson": map[string]any{
 			"comment": "This is a test comment",
@@ -2312,10 +2312,10 @@ func TestActivityD1E2E(t *testing.T) {
 
 	// 9. POST /api/activity without companyId → 422
 	noCIDBody, _ := json.Marshal(map[string]string{
-		"actorKind":  "agent",
+		"actorType":  "agent",
 		"actorId":    "agent-xyz",
 		"action":     "created",
-		"entityKind": "project",
+		"entityType": "project",
 		"entityId":   "project-xyz",
 	})
 	respNoCID, err := http.Post(srv.URL+"/api/activity", "application/json", bytes.NewReader(noCIDBody))
@@ -2327,14 +2327,15 @@ func TestActivityD1E2E(t *testing.T) {
 		t.Errorf("POST /api/activity (no companyId) status = %d, want 422", respNoCID.StatusCode)
 	}
 
-	// 10. POST /api/activity with invalid metaJson → 422
+	// 10. POST /api/activity with invalid metaJson → 400
 	// Use map with json.RawMessage to embed invalid JSON for metaJson
+	// Invalid JSON in request body returns 400 (bad request), not 422 (unprocessable entity)
 	body10 := map[string]any{
 		"companyId":  companyID,
-		"actorKind":  "agent",
+		"actorType":  "agent",
 		"actorId":    "agent-bad",
 		"action":     "created",
-		"entityKind": "project",
+		"entityType": "project",
 		"entityId":   "project-bad",
 		"metaJson":   json.RawMessage(`{invalid}`), // Invalid JSON
 	}
