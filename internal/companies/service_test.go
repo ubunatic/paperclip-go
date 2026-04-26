@@ -202,7 +202,7 @@ func TestCompanyCRUD(t *testing.T) {
 
 		// Create an activity log entry for this company
 		_, err = s.DB.ExecContext(ctx,
-			`INSERT INTO activity_log(id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at)
+			`INSERT INTO activity_log(id, company_id, actor_type, actor_id, action, entity_type, entity_id, meta_json, created_at)
 			 VALUES (?, ?, 'system', 'system', 'created', 'company', ?, '{}', ?)`,
 			"activity-1", c.ID, c.ID, "2024-01-01T00:00:00Z",
 		)

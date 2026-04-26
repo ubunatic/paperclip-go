@@ -27,10 +27,10 @@ func create(s *svc.Log) http.HandlerFunc {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			CompanyID  string          `json:"companyId"`
-			ActorKind  string          `json:"actorKind"`
+			ActorType  string          `json:"actorType"`
 			ActorID    string          `json:"actorId"`
 			Action     string          `json:"action"`
-			EntityKind string          `json:"entityKind"`
+			EntityType string          `json:"entityType"`
 			EntityID   string          `json:"entityId"`
 			MetaJSON   json.RawMessage `json:"metaJson"`
 		}
@@ -40,8 +40,8 @@ func create(s *svc.Log) http.HandlerFunc {
 		}
 
 		// Validate required fields
-		if body.CompanyID == "" || body.ActorKind == "" || body.ActorID == "" || body.Action == "" || body.EntityKind == "" || body.EntityID == "" {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId, actorKind, actorId, action, entityKind, and entityId are required")
+		if body.CompanyID == "" || body.ActorType == "" || body.ActorID == "" || body.Action == "" || body.EntityType == "" || body.EntityID == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId, actorType, actorId, action, entityType, and entityId are required")
 			return
 		}
 
@@ -51,7 +51,7 @@ func create(s *svc.Log) http.HandlerFunc {
 			return
 		}
 
-		activity, err := s.Record(r.Context(), body.CompanyID, body.ActorKind, body.ActorID, body.Action, body.EntityKind, body.EntityID, string(body.MetaJSON))
+		activity, err := s.Record(r.Context(), body.CompanyID, body.ActorType, body.ActorID, body.Action, body.EntityType, body.EntityID, string(body.MetaJSON))
 		if err != nil {
 			log.Printf("activity: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")

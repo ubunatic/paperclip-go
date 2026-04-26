@@ -6,21 +6,21 @@
 
 ---
 
-## Status & Recent Review (2026-04-25)
+## Status & Recent Review (2026-04-26)
 
 **Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1 ✅  
 **Build Status:** ✅ `make build && make test` green (all tests passing)
 
-**Code Quality Review Summary (2026-04-25):**
+**Code Quality Review Summary (2026-04-26):**
 
 | Item | Status | Details |
 |------|--------|---------|
-| D1 Implementation | ✅ COMPLETE | `POST /api/activity` endpoint with required field validation (422 for invalid input); `GET /api/issues/{id}/activity` for issue-scoped queries; Service layer refactored: `Record()` now returns `(*domain.Activity, error)` |
-| D1 Testing | ✅ COMPLETE | Service-layer unit tests with proper ID-based ordering assertions; comprehensive E2E coverage (10 scenarios: creation, validation, listing, ordering, error handling) |
-| D1 Code Review | ✅ FIXED | Address all review findings: moved metaJson validation to handler layer (422), fixed ordering assertions in tests, added status guards in E2E setup, gofmt clean |
-| Parity | ✅ Verified | POST /api/activity accepts required fields and optional metaJson; returns 201 with created record; GET /api/issues/{id}/activity returns 200 with chronologically-ordered items |
-| E1 Implementation | ✅ COMPLETE | Added `GET /api/heartbeat/runs/{id}` returning full run record (404 if not found); Added `POST /api/heartbeat/runs/{id}/cancel` with status validation (409 if not running) |
-| E1 Testing | ✅ COMPLETE | Unit tests: `TestRunnerCancel` covering success case, terminal-status rejection (409), and missing-run (404); E2E tests extending `TestHeartbeatE2E` for all 3 new scenarios |
+| D1 Field Parity | ✅ FIXED | Renamed `actorKind`→`actorType`, `entityKind`→`entityType` in schema, domain, service, handlers, and all tests. Migration 0007 applied. Now matches TS schema exactly. |
+| D1 API Request/Response | ✅ VERIFIED | POST /api/activity accepts `{companyId, actorType, actorId, action, entityType, entityId, metaJson?}` and returns 201 with full Activity record. GET /api/issues/{id}/activity returns items array ordered by created_at ASC. Response format matches TS. |
+| E2E Test Coverage | ✅ COMPLETE | 10 scenarios: creation, validation, listing, ordering, 422 errors, missing fields, issue-scoped queries. All passing. |
+| E1 Implementation | ✅ COMPLETE | Added `GET /api/heartbeat/runs/{id}` returning full run record (404 if not found); Added `POST /api/heartbeat/runs/{id}/cancel` with atomic conditional UPDATE (409 if not running) |
+| E1 Code Review | ✅ FIXED | Addressed Copilot findings: (1) Made Cancel() atomic with conditional UPDATE + RowsAffected check to prevent race conditions; (2) Fixed test code style to use http.NewRequest pattern |
+| Design Debt | 📝 Noted | ListByEntity has no pagination (acceptable for typical issue volumes); identified improvement opportunities deferred to E2+ |
 | Next Phase | → E2 | Mock adapter for tests: refactor `runner_test.go` to use reusable `MockAdapter` |
 
 ---
@@ -40,7 +40,7 @@
 4. **Archive/unarchive missing activity logging** — No "issue_archived"/"issue_unarchived" events recorded; adds to audit trail debt.
 5. **Tenant isolation at handler level undocumented** — Archive/unarchive handlers lack company verification; depends on auth middleware (acceptable, but should document).
 
-### 🚀 Pre-E1 Improvements (Optional)
+### 🚀 Pre-E2 Improvements (Optional)
 
 - Add database index on `activity_log(entity_kind, entity_id, created_at)` for performance as activity volume grows.
 - Verify schema migrations (0005_issue_docs, 0006_issue_archived_at) are idempotent in production.
@@ -684,3 +684,19 @@ These remain deferred until there is a concrete need.
 - **Build**: `make build && make test` ✅ green
 - **Gaps**: Handler packages (agents, issues, companies) lack unit tests; only E2E coverage exists
 - **Recommendation**: Consider adding `handler_test.go` per package in next phase for 404/409/422 error cases
+
+---
+
+## Code Quality Debt (Deferred, Post-MVP)
+
+Identified during 2026-04-26 audit of D1 implementation. All items are acceptable for MVP; prioritized for phases E1+.
+
+| Item | Severity | Location | Recommendation | Effort |
+|------|----------|----------|---|---|
+| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | Replace bare `log.Printf()` with structured logger (slog or wrapper) | 20 min |
+| Unbounded ListByEntity | MEDIUM | `internal/activity/log.go:92` | Add optional `limit` parameter (default 100, max 500). Pre-allocate slice. Prevents OOM on high-activity entities. | 15 min |
+| MaxBytesReader boilerplate | LOW | `internal/api/*/handler.go` (8 instances) | Extract `readJSONBody(r, maxBytes, &target)` helper to reduce repetition and centralize size limits | 20 min |
+| Request correlation in audit logs | LOW-MED | `internal/api/activity/handler.go` | Pass `X-Request-ID` header to activity service for audit trail. Aids debugging. | 20 min |
+| Validation pattern repetition | LOW | `internal/api/{issues,agents}/handler.go` | Define reusable validators or use lightweight validation library (go-playground/validator) | 30 min |
+
+**Estimated total effort for all deferred items:** ~2 hours. Recommended for Phase E2 (post-heartbeat work).
