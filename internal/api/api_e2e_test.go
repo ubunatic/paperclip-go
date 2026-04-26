@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1295,7 +1296,7 @@ func TestUIServingE2E(t *testing.T) {
 }
 
 func TestHeartbeatE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, store := testutil.SpawnTestServer(t)
 
 	// Create a company
 	companyBody, _ := json.Marshal(map[string]string{
@@ -1514,6 +1515,43 @@ func TestHeartbeatE2E(t *testing.T) {
 	respCancelNotFound.Body.Close()
 	if respCancelNotFound.StatusCode != http.StatusNotFound {
 		t.Errorf("POST /api/heartbeat/runs/{nonexistent}/cancel status = %d, want 404", respCancelNotFound.StatusCode)
+	}
+
+	// Test successful cancel: insert a heartbeat run with status='running' directly and cancel it
+	// This tests the success path (200) as required by acceptance criteria
+	runID3 := "test-run-" + uuid.New().String()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = store.DB.ExecContext(context.Background(),
+		`INSERT INTO heartbeat_runs(id, agent_id, issue_id, status, started_at) VALUES(?, ?, NULL, ?, ?)`,
+		runID3, agentID, "running", now,
+	)
+	if err != nil {
+		t.Fatalf("inserting test heartbeat run: %v", err)
+	}
+
+	// POST /api/heartbeat/runs/{id}/cancel on running run → 200 with cancelled status
+	req3, err := http.NewRequest("POST", srv.URL+"/api/heartbeat/runs/"+runID3+"/cancel", nil)
+	if err != nil {
+		t.Fatalf("creating POST request: %v", err)
+	}
+	respCancelSuccess, err := http.DefaultClient.Do(req3)
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs/{id}/cancel (success): %v", err)
+	}
+	defer respCancelSuccess.Body.Close()
+	if respCancelSuccess.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/heartbeat/runs/{id}/cancel (success) status = %d, want 200", respCancelSuccess.StatusCode)
+	}
+
+	var cancelledRun map[string]any
+	if err := json.NewDecoder(respCancelSuccess.Body).Decode(&cancelledRun); err != nil {
+		t.Fatalf("decoding cancel success response: %v", err)
+	}
+	if cancelledRun["status"] != "cancelled" {
+		t.Errorf("cancelled run status = %v, want \"cancelled\"", cancelledRun["status"])
+	}
+	if cancelledRun["finishedAt"] == nil {
+		t.Errorf("cancelled run finishedAt should not be nil")
 	}
 }
 
