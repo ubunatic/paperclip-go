@@ -6,20 +6,20 @@
 
 ---
 
-## Status & Recent Review (2026-04-25)
+## Status & Recent Review (2026-04-26)
 
 **Phases Completed:** A1-A4, B1-B2, C1-C3, D1 ✅  
 **Build Status:** ✅ `make build && make test` green
 
-**Code Quality Review Summary (2026-04-25):**
+**Code Quality Review Summary (2026-04-26 — D1 Parity Audit):**
 
 | Item | Status | Details |
 |------|--------|---------|
-| D1 Implementation | ✅ COMPLETE | `POST /api/activity` endpoint with required field validation (422 for invalid input); `GET /api/issues/{id}/activity` for issue-scoped queries; Service layer refactored: `Record()` now returns `(*domain.Activity, error)` |
-| D1 Testing | ✅ COMPLETE | Service-layer unit tests with proper ID-based ordering assertions; comprehensive E2E coverage (10 scenarios: creation, validation, listing, ordering, error handling) |
-| D1 Code Review | ✅ FIXED | Address all review findings: moved metaJson validation to handler layer (422), fixed ordering assertions in tests, added status guards in E2E setup, gofmt clean |
-| Parity | ✅ Verified | POST /api/activity accepts required fields and optional metaJson; returns 201 with created record; GET /api/issues/{id}/activity returns 200 with chronologically-ordered items |
-| Design Debt | 📝 Noted | ListByEntity has no pagination (acceptable for typical issue volumes); documented in comments |
+| D1 Field Parity | ✅ FIXED | Renamed `actorKind`→`actorType`, `entityKind`→`entityType` in schema, domain, service, handlers, and all tests. Migration 0007 applied. Now matches TS schema exactly. |
+| D1 API Request/Response | ✅ VERIFIED | POST /api/activity accepts `{companyId, actorType, actorId, action, entityType, entityId, metaJson?}` and returns 201 with full Activity record. GET /api/issues/{id}/activity returns items array ordered by created_at ASC. Response format matches TS. |
+| Code Quality Issues | 📝 DEFERRED | Identified 9 improvement opportunities (3 high, 6 medium/low severity): bare logging vs structured (low), unbounded ListByEntity query (medium), MaxBytesReader boilerplate (low). All deferred to Phase E1+ (acceptable for MVP). |
+| E2E Test Coverage | ✅ COMPLETE | 10 scenarios: creation, validation, listing, ordering, 422 errors, missing fields, issue-scoped queries. All passing. |
+| Design Debt | 📝 Noted | ListByEntity has no pagination; acceptable for typical issue volumes. Response wrapping with `{items:[...]}` matches TS pattern for lists. |
 | Next Phase | → E1 | Heartbeat run detail + cancel: `GET /api/heartbeat/runs/{id}`, `POST /api/heartbeat/runs/{id}/cancel` |
 
 ---
@@ -661,3 +661,19 @@ These remain deferred until there is a concrete need.
 - **Build**: `make build && make test` ✅ green
 - **Gaps**: Handler packages (agents, issues, companies) lack unit tests; only E2E coverage exists
 - **Recommendation**: Consider adding `handler_test.go` per package in next phase for 404/409/422 error cases
+
+---
+
+## Code Quality Debt (Deferred, Post-MVP)
+
+Identified during 2026-04-26 audit of D1 implementation. All items are acceptable for MVP; prioritized for phases E1+.
+
+| Item | Severity | Location | Recommendation | Effort |
+|------|----------|----------|---|---|
+| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | Replace bare `log.Printf()` with structured logger (slog or wrapper) | 20 min |
+| Unbounded ListByEntity | MEDIUM | `internal/activity/log.go:92` | Add optional `limit` parameter (default 100, max 500). Pre-allocate slice. Prevents OOM on high-activity entities. | 15 min |
+| MaxBytesReader boilerplate | LOW | `internal/api/*/handler.go` (8 instances) | Extract `readJSONBody(r, maxBytes, &target)` helper to reduce repetition and centralize size limits | 20 min |
+| Request correlation in audit logs | LOW-MED | `internal/api/activity/handler.go` | Pass `X-Request-ID` header to activity service for audit trail. Aids debugging. | 20 min |
+| Validation pattern repetition | LOW | `internal/api/{issues,agents}/handler.go` | Define reusable validators or use lightweight validation library (go-playground/validator) | 30 min |
+
+**Estimated total effort for all deferred items:** ~2 hours. Recommended for Phase E2 (post-heartbeat work).

@@ -597,10 +597,10 @@ func TestActivityLoggingOnTransition(t *testing.T) {
 		t.Fatalf("Pause: %v", err)
 	}
 
-	// Query activity_log and assert entry exists with action="pause", entity_kind="agent"
+	// Query activity_log and assert entry exists with action="pause", entity_type="agent"
 	var count int
 	err = s.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM activity_log WHERE entity_id = ? AND entity_kind = 'agent' AND action = 'pause'`,
+		`SELECT COUNT(*) FROM activity_log WHERE entity_id = ? AND entity_type = 'agent' AND action = 'pause'`,
 		agent.ID,
 	).Scan(&count)
 	if err != nil {
@@ -617,7 +617,7 @@ func TestActivityLoggingOnTransition(t *testing.T) {
 	}
 
 	err = s.DB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM activity_log WHERE entity_id = ? AND entity_kind = 'agent' AND action = 'resume'`,
+		`SELECT COUNT(*) FROM activity_log WHERE entity_id = ? AND entity_type = 'agent' AND action = 'resume'`,
 		agent.ID,
 	).Scan(&count)
 	if err != nil {

@@ -23,7 +23,7 @@ func New(s *store.Store) *Log {
 }
 
 // Record inserts a new activity log entry and returns the created Activity.
-func (l *Log) Record(ctx context.Context, companyID, actorKind, actorID, action, entityKind, entityID, metaJSON string) (*domain.Activity, error) {
+func (l *Log) Record(ctx context.Context, companyID, actorType, actorID, action, entityType, entityID, metaJSON string) (*domain.Activity, error) {
 	// Default empty metaJSON to '{}'
 	if metaJSON == "" {
 		metaJSON = "{}"
@@ -38,9 +38,9 @@ func (l *Log) Record(ctx context.Context, companyID, actorKind, actorID, action,
 	ts := now.Format(time.RFC3339)
 
 	_, err := l.store.DB.ExecContext(ctx,
-		`INSERT INTO activity_log(id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at)
+		`INSERT INTO activity_log(id, company_id, actor_type, actor_id, action, entity_type, entity_id, meta_json, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		id, companyID, actorKind, actorID, action, entityKind, entityID, metaJSON, ts,
+		id, companyID, actorType, actorID, action, entityType, entityID, metaJSON, ts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("inserting activity: %w", err)
@@ -50,10 +50,10 @@ func (l *Log) Record(ctx context.Context, companyID, actorKind, actorID, action,
 	return &domain.Activity{
 		ID:         id,
 		CompanyID:  companyID,
-		ActorKind:  actorKind,
+		ActorType:  actorType,
 		ActorID:    actorID,
 		Action:     action,
-		EntityKind: entityKind,
+		EntityType: entityType,
 		EntityID:   entityID,
 		MetaJSON:   json.RawMessage(metaJSON),
 		CreatedAt:  now,
@@ -63,7 +63,7 @@ func (l *Log) Record(ctx context.Context, companyID, actorKind, actorID, action,
 // List returns the most recent activity log entries for a company, limited by count.
 func (l *Log) List(ctx context.Context, companyID string, limit int) ([]*domain.Activity, error) {
 	rows, err := l.store.DB.QueryContext(ctx,
-		`SELECT id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at
+		`SELECT id, company_id, actor_type, actor_id, action, entity_type, entity_id, meta_json, created_at
 		 FROM activity_log WHERE company_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
 		companyID, limit,
 	)
@@ -89,11 +89,11 @@ func (l *Log) List(ctx context.Context, companyID string, limit int) ([]*domain.
 // ListByEntity queries all activities for a given entity (no pagination yet).
 // Safe for issues with typical activity volume; consider adding LIMIT for high-volume entities.
 // Returns activity log entries for a specific entity, ordered chronologically (ascending by created_at).
-func (l *Log) ListByEntity(ctx context.Context, entityKind, entityID string) ([]*domain.Activity, error) {
+func (l *Log) ListByEntity(ctx context.Context, entityType, entityID string) ([]*domain.Activity, error) {
 	rows, err := l.store.DB.QueryContext(ctx,
-		`SELECT id, company_id, actor_kind, actor_id, action, entity_kind, entity_id, meta_json, created_at
-		 FROM activity_log WHERE entity_kind = ? AND entity_id = ? ORDER BY created_at ASC, id ASC`,
-		entityKind, entityID,
+		`SELECT id, company_id, actor_type, actor_id, action, entity_type, entity_id, meta_json, created_at
+		 FROM activity_log WHERE entity_type = ? AND entity_id = ? ORDER BY created_at ASC, id ASC`,
+		entityType, entityID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying activity log by entity: %w", err)
@@ -123,7 +123,7 @@ func scanActivity(s scanner) (*domain.Activity, error) {
 	var a domain.Activity
 	var createdAt string
 	var metaJSONBytes []byte
-	if err := s.Scan(&a.ID, &a.CompanyID, &a.ActorKind, &a.ActorID, &a.Action, &a.EntityKind, &a.EntityID, &metaJSONBytes, &createdAt); err != nil {
+	if err := s.Scan(&a.ID, &a.CompanyID, &a.ActorType, &a.ActorID, &a.Action, &a.EntityType, &a.EntityID, &metaJSONBytes, &createdAt); err != nil {
 		return nil, err
 	}
 	a.MetaJSON = json.RawMessage(metaJSONBytes)
