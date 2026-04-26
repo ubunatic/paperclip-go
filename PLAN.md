@@ -17,7 +17,7 @@
 |------|--------|---------|
 | D1 Field Parity | ✅ FIXED | Renamed `actorKind`→`actorType`, `entityKind`→`entityType` in schema, domain, service, handlers, and all tests. Migration 0007 applied. Now matches TS schema exactly. |
 | D1 API Request/Response | ✅ VERIFIED | POST /api/activity accepts `{companyId, actorType, actorId, action, entityType, entityId, metaJson?}` and returns 201 with full Activity record. GET /api/issues/{id}/activity returns items array ordered by created_at ASC. Response format matches TS. |
-| Code Quality Issues | 📝 DEFERRED | Identified 9 improvement opportunities (3 high, 6 medium/low severity): bare logging vs structured (low), unbounded ListByEntity query (medium), MaxBytesReader boilerplate (low). All deferred to Phase E1+ (acceptable for MVP). |
+| Code Quality Issues | 📝 DEFERRED | Identified improvement opportunities (1 medium, 2 low severity shown): bare logging vs structured (low), unbounded ListByEntity query (medium), MaxBytesReader boilerplate (low). All deferred to Phase E1+ (acceptable for MVP). See deferred debt table for additional items. |
 | E2E Test Coverage | ✅ COMPLETE | 10 scenarios: creation, validation, listing, ordering, 422 errors, missing fields, issue-scoped queries. All passing. |
 | Design Debt | 📝 Noted | ListByEntity has no pagination; acceptable for typical issue volumes. Response wrapping with `{items:[...]}` matches TS pattern for lists. |
 | Next Phase | → E1 | Heartbeat run detail + cancel: `GET /api/heartbeat/runs/{id}`, `POST /api/heartbeat/runs/{id}/cancel` |

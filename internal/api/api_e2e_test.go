@@ -2327,8 +2327,9 @@ func TestActivityD1E2E(t *testing.T) {
 		t.Errorf("POST /api/activity (no companyId) status = %d, want 422", respNoCID.StatusCode)
 	}
 
-	// 10. POST /api/activity with invalid metaJson → 422
+	// 10. POST /api/activity with invalid metaJson → 400
 	// Use map with json.RawMessage to embed invalid JSON for metaJson
+	// Invalid JSON in request body returns 400 (bad request), not 422 (unprocessable entity)
 	body10 := map[string]any{
 		"companyId":  companyID,
 		"actorType":  "agent",
