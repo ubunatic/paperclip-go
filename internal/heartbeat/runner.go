@@ -21,6 +21,9 @@ import (
 // ErrNotFound is returned when a heartbeat run is not found.
 var ErrNotFound = errors.New("heartbeat run not found")
 
+// ErrTerminalStatus is returned when attempting to cancel a run that is already terminal.
+var ErrTerminalStatus = errors.New("heartbeat run is not running")
+
 // Runner provides heartbeat run operations backed by the store.
 type Runner struct {
 	store       *store.Store
@@ -231,6 +234,11 @@ func (r *Runner) Create(ctx context.Context, agentID string, issueID *string, st
 }
 
 // Update updates the status, summary, and error of a heartbeat run.
+// Note: This uses an unconditional UPDATE. If a concurrent Cancel() updates the run to
+// "cancelled" status while Update() is in flight, Update() will overwrite the cancellation.
+// For true race-safety, Update() should be conditional (WHERE status='running') and skip
+// side effects (activity logging, comments) if the run was already cancelled. This is a
+// known limitation for MVP; consider addressing in E2+ when cancellation is more critical.
 func (r *Runner) Update(ctx context.Context, id, status string, summary, errMsg *string) (*domain.HeartbeatRun, error) {
 	finishedAt := time.Now().UTC().Truncate(time.Second)
 	finishedAtStr := finishedAt.Format(time.RFC3339)
@@ -260,6 +268,47 @@ func (r *Runner) GetByID(ctx context.Context, id string) (*domain.HeartbeatRun, 
 		return nil, ErrNotFound
 	}
 	return run, err
+}
+
+// Cancel attempts to cancel a heartbeat run.
+// Returns ErrNotFound if the run does not exist.
+// Returns ErrTerminalStatus if the run has already finished (status is not "running").
+// Uses atomic conditional UPDATE to avoid race conditions where a concurrent
+// Run() operation might be updating the run to a terminal status.
+func (r *Runner) Cancel(ctx context.Context, id string) (*domain.HeartbeatRun, error) {
+	// Atomically update only if the run is still in "running" state.
+	finishedAt := time.Now().UTC().Truncate(time.Second)
+	finishedAtStr := finishedAt.Format(time.RFC3339)
+
+	result, err := r.store.DB.ExecContext(ctx,
+		`UPDATE heartbeat_runs SET status = ?, finished_at = ? WHERE id = ? AND status = ?`,
+		"cancelled", finishedAtStr, id, "running",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("cancelling heartbeat run: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("determining if heartbeat run was cancelled: %w", err)
+	}
+
+	// If no rows were affected, the run doesn't exist or is already terminal
+	if rowsAffected == 0 {
+		latestRun, err := r.GetByID(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		// If we can fetch it but it's not running, return terminal status error
+		if latestRun.Status != "running" {
+			return nil, ErrTerminalStatus
+		}
+		// This shouldn't happen (we couldn't update but status is running),
+		// but treat as terminal status to be safe
+		return nil, ErrTerminalStatus
+	}
+
+	return r.GetByID(ctx, id)
 }
 
 // ListByAgent returns all heartbeat runs for a given agent, ordered by started_at descending.

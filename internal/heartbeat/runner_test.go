@@ -419,3 +419,57 @@ type ErrorAdapter struct{}
 func (a *ErrorAdapter) Run(ctx context.Context, agent *domain.Agent, issue *domain.Issue) (*domain.RunResult, error) {
 	return nil, errors.New("adapter error for testing")
 }
+
+func TestRunnerCancel(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company and agent
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	agentSvc := agents.New(s, activity.New(s))
+	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// Create heartbeat runner
+	actLog := activity.New(s)
+	commentSvc := comments.New(s)
+	registry := heartbeat.NewDefaultRegistry()
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
+
+	// Create a heartbeat run with "running" status
+	run, err := runner.Create(ctx, agent.ID, nil, "running")
+	if err != nil {
+		t.Fatalf("Create run: %v", err)
+	}
+
+	// Cancel the running run
+	cancelled, err := runner.Cancel(ctx, run.ID)
+	if err != nil {
+		t.Fatalf("Cancel run: %v", err)
+	}
+	if cancelled.Status != "cancelled" {
+		t.Errorf("Status = %q, want %q", cancelled.Status, "cancelled")
+	}
+	if cancelled.FinishedAt == nil {
+		t.Error("FinishedAt should be set after cancel")
+	}
+
+	// Try to cancel an already-cancelled run (should fail with ErrTerminalStatus)
+	_, err = runner.Cancel(ctx, run.ID)
+	if !errors.Is(err, heartbeat.ErrTerminalStatus) {
+		t.Errorf("Cancel already-cancelled run: expected ErrTerminalStatus, got %v", err)
+	}
+
+	// Try to cancel a non-existent run (should fail with ErrNotFound)
+	_, err = runner.Cancel(ctx, "nonexistent")
+	if !errors.Is(err, heartbeat.ErrNotFound) {
+		t.Errorf("Cancel non-existent run: expected ErrNotFound, got %v", err)
+	}
+}

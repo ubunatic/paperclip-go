@@ -8,19 +8,42 @@
 
 ## Status & Recent Review (2026-04-26)
 
-**Phases Completed:** A1-A4, B1-B2, C1-C3, D1 ✅  
-**Build Status:** ✅ `make build && make test` green
+**Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1 ✅  
+**Build Status:** ✅ `make build && make test` green (all tests passing)
 
-**Code Quality Review Summary (2026-04-26 — D1 Parity Audit):**
+**Code Quality Review Summary (2026-04-26):**
 
 | Item | Status | Details |
 |------|--------|---------|
 | D1 Field Parity | ✅ FIXED | Renamed `actorKind`→`actorType`, `entityKind`→`entityType` in schema, domain, service, handlers, and all tests. Migration 0007 applied. Now matches TS schema exactly. |
 | D1 API Request/Response | ✅ VERIFIED | POST /api/activity accepts `{companyId, actorType, actorId, action, entityType, entityId, metaJson?}` and returns 201 with full Activity record. GET /api/issues/{id}/activity returns items array ordered by created_at ASC. Response format matches TS. |
-| Code Quality Issues | 📝 DEFERRED | Identified improvement opportunities (1 medium, 2 low severity shown): bare logging vs structured (low), unbounded ListByEntity query (medium), MaxBytesReader boilerplate (low). All deferred to Phase E1+ (acceptable for MVP). See deferred debt table for additional items. |
 | E2E Test Coverage | ✅ COMPLETE | 10 scenarios: creation, validation, listing, ordering, 422 errors, missing fields, issue-scoped queries. All passing. |
-| Design Debt | 📝 Noted | ListByEntity has no pagination; acceptable for typical issue volumes. Response wrapping with `{items:[...]}` matches TS pattern for lists. |
-| Next Phase | → E1 | Heartbeat run detail + cancel: `GET /api/heartbeat/runs/{id}`, `POST /api/heartbeat/runs/{id}/cancel` |
+| E1 Implementation | ✅ COMPLETE | Added `GET /api/heartbeat/runs/{id}` returning full run record (404 if not found); Added `POST /api/heartbeat/runs/{id}/cancel` with atomic conditional UPDATE (409 if not running) |
+| E1 Code Review | ✅ FIXED | Addressed Copilot findings: (1) Made Cancel() atomic with conditional UPDATE + RowsAffected check to prevent race conditions; (2) Fixed test code style to use http.NewRequest pattern |
+| Design Debt | 📝 Noted | ListByEntity has no pagination (acceptable for typical issue volumes); identified improvement opportunities deferred to E2+ |
+| Next Phase | → E2 | Mock adapter for tests: refactor `runner_test.go` to use reusable `MockAdapter` |
+
+---
+
+## Quality Audit Notes (2026-04-25)
+
+### 🐛 Minor Issues Identified
+
+1. **Activity.Record() return value not used** — Callers in `agents/service.go` (Pause/Resume/Terminate) and `heartbeat/runner.go` discard return via `_`. Document whether return is intentional for future use.
+2. **Agent error message breaking change** — Error code `"has_active_checkout"` renamed to `"has_active_dependents"` in Phase B1; clients need migration guidance.
+
+### 🏗️ Design Debt
+
+1. **Activity list pagination missing** — `ListByEntity()` queries all records with no LIMIT; should default to 100-500 with optional `?limit=N` query param. Concern: thousands of activities could cause memory issues.
+2. **documents/workProducts JSON normalization is redundant** — Normalized at Create, Update, and scanIssue layers; consolidate into single helper function.
+3. **SQL column coupling in scanIssue()** — Column list hardcoded across multiple SELECT statements; consider centralizing as constant.
+4. **Archive/unarchive missing activity logging** — No "issue_archived"/"issue_unarchived" events recorded; adds to audit trail debt.
+5. **Tenant isolation at handler level undocumented** — Archive/unarchive handlers lack company verification; depends on auth middleware (acceptable, but should document).
+
+### 🚀 Pre-E2 Improvements (Optional)
+
+- Add database index on `activity_log(entity_kind, entity_id, created_at)` for performance as activity volume grows.
+- Verify schema migrations (0005_issue_docs, 0006_issue_archived_at) are idempotent in production.
 
 ---
 
@@ -61,8 +84,8 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/activity` GET | 1 | ✅ | — |
 | `/api/activity` POST + issue-scoped | 3 | ✅ | D1 |
 | `/api/heartbeat/runs` POST + GET | 2 | ✅ | — |
-| Heartbeat run detail GET | 1 | 🔲 | E1 |
-| Heartbeat run cancel | 1 | 🔲 | E1 |
+| Heartbeat run detail GET | 1 | ✅ | E1 |
+| Heartbeat run cancel | 1 | ✅ | E1 |
 | `/api/skills` GET | 1 | ✅ | — |
 | `/api/secrets` CRUD | 8+ | 🔲 | F1 |
 | `/api/instance-settings` CRUD | 5+ | 🔲 | F2 |

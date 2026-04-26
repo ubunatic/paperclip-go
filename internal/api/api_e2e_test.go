@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -1295,7 +1296,7 @@ func TestUIServingE2E(t *testing.T) {
 }
 
 func TestHeartbeatE2E(t *testing.T) {
-	srv, _ := testutil.SpawnTestServer(t)
+	srv, store := testutil.SpawnTestServer(t)
 
 	// Create a company
 	companyBody, _ := json.Marshal(map[string]string{
@@ -1458,6 +1459,99 @@ func TestHeartbeatE2E(t *testing.T) {
 	resp5.Body.Close()
 	if resp5.StatusCode != http.StatusNotFound {
 		t.Errorf("POST /api/heartbeat/runs (not found) status = %d, want 404", resp5.StatusCode)
+	}
+
+	// GET /api/heartbeat/runs/{id} → 200 with full run record (E1)
+	respGet, err := http.Get(srv.URL + "/api/heartbeat/runs/" + runID)
+	if err != nil {
+		t.Fatalf("GET /api/heartbeat/runs/{id}: %v", err)
+	}
+	defer respGet.Body.Close()
+	if respGet.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/heartbeat/runs/{id} status = %d, want 200", respGet.StatusCode)
+	}
+
+	var getRun map[string]any
+	if err := json.NewDecoder(respGet.Body).Decode(&getRun); err != nil {
+		t.Fatalf("decoding GET run response: %v", err)
+	}
+	if getRun["id"] != runID {
+		t.Errorf("GET run id = %v, want %v", getRun["id"], runID)
+	}
+
+	// GET /api/heartbeat/runs/{nonexistent} → 404
+	respGetNotFound, err := http.Get(srv.URL + "/api/heartbeat/runs/nonexistent-run-id")
+	if err != nil {
+		t.Fatalf("GET /api/heartbeat/runs/{nonexistent}: %v", err)
+	}
+	respGetNotFound.Body.Close()
+	if respGetNotFound.StatusCode != http.StatusNotFound {
+		t.Errorf("GET /api/heartbeat/runs/{nonexistent} status = %d, want 404", respGetNotFound.StatusCode)
+	}
+
+	// Try to cancel the already-completed run → 409 (since stub adapter completes immediately)
+	req, err := http.NewRequest("POST", srv.URL+"/api/heartbeat/runs/"+runID+"/cancel", nil)
+	if err != nil {
+		t.Fatalf("creating POST request: %v", err)
+	}
+	respCancelTerminal, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs/{id}/cancel (already complete): %v", err)
+	}
+	respCancelTerminal.Body.Close()
+	if respCancelTerminal.StatusCode != http.StatusConflict {
+		t.Fatalf("POST /api/heartbeat/runs/{id}/cancel (already complete) status = %d, want 409", respCancelTerminal.StatusCode)
+	}
+
+	// POST /api/heartbeat/runs/{nonexistent}/cancel → 404
+	req2, err := http.NewRequest("POST", srv.URL+"/api/heartbeat/runs/nonexistent-run-id/cancel", nil)
+	if err != nil {
+		t.Fatalf("creating POST request: %v", err)
+	}
+	respCancelNotFound, err := http.DefaultClient.Do(req2)
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs/{nonexistent}/cancel: %v", err)
+	}
+	respCancelNotFound.Body.Close()
+	if respCancelNotFound.StatusCode != http.StatusNotFound {
+		t.Errorf("POST /api/heartbeat/runs/{nonexistent}/cancel status = %d, want 404", respCancelNotFound.StatusCode)
+	}
+
+	// Test successful cancel: insert a heartbeat run with status='running' directly and cancel it
+	// This tests the success path (200) as required by acceptance criteria
+	runID3 := "test-run-" + uuid.New().String()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = store.DB.ExecContext(context.Background(),
+		`INSERT INTO heartbeat_runs(id, agent_id, issue_id, status, started_at) VALUES(?, ?, NULL, ?, ?)`,
+		runID3, agentID, "running", now,
+	)
+	if err != nil {
+		t.Fatalf("inserting test heartbeat run: %v", err)
+	}
+
+	// POST /api/heartbeat/runs/{id}/cancel on running run → 200 with cancelled status
+	req3, err := http.NewRequest("POST", srv.URL+"/api/heartbeat/runs/"+runID3+"/cancel", nil)
+	if err != nil {
+		t.Fatalf("creating POST request: %v", err)
+	}
+	respCancelSuccess, err := http.DefaultClient.Do(req3)
+	if err != nil {
+		t.Fatalf("POST /api/heartbeat/runs/{id}/cancel (success): %v", err)
+	}
+	defer respCancelSuccess.Body.Close()
+	if respCancelSuccess.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/heartbeat/runs/{id}/cancel (success) status = %d, want 200", respCancelSuccess.StatusCode)
+	}
+
+	var cancelledRun map[string]any
+	if err := json.NewDecoder(respCancelSuccess.Body).Decode(&cancelledRun); err != nil {
+		t.Fatalf("decoding cancel success response: %v", err)
+	}
+	if cancelledRun["status"] != "cancelled" {
+		t.Errorf("cancelled run status = %v, want \"cancelled\"", cancelledRun["status"])
+	}
+	if cancelledRun["finishedAt"] == nil {
+		t.Errorf("cancelled run finishedAt should not be nil")
 	}
 }
 
