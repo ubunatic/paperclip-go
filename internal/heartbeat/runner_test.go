@@ -15,6 +15,13 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
 
+// newErrorAdapter creates a MockAdapter that always returns the given error.
+func newErrorAdapter(err error) *heartbeat.MockAdapter {
+	return heartbeat.NewMockAdapter(func(agent *domain.Agent, issue *domain.Issue) (*domain.RunResult, error) {
+		return nil, err
+	})
+}
+
 func TestRunnerCreate(t *testing.T) {
 	s := testutil.NewStore(t)
 	ctx := context.Background()
@@ -375,7 +382,7 @@ func TestRunnerRunAdapterError(t *testing.T) {
 	}
 
 	// Create an error adapter that always fails
-	errorAdapter := &ErrorAdapter{}
+	errorAdapter := newErrorAdapter(errors.New("adapter error for testing"))
 
 	// Create heartbeat runner with the error adapter
 	actLog := activity.New(s)
@@ -410,14 +417,6 @@ func TestRunnerRunAdapterError(t *testing.T) {
 	if run.FinishedAt == nil {
 		t.Error("FinishedAt should not be nil after error")
 	}
-}
-
-// ErrorAdapter is a test adapter that always returns an error
-type ErrorAdapter struct{}
-
-// Run implements the Adapter interface for ErrorAdapter, always returning an error
-func (a *ErrorAdapter) Run(ctx context.Context, agent *domain.Agent, issue *domain.Issue) (*domain.RunResult, error) {
-	return nil, errors.New("adapter error for testing")
 }
 
 func TestRunnerCancel(t *testing.T) {
