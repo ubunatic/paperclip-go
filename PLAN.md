@@ -6,22 +6,19 @@
 
 ---
 
-## Status & Recent Review (2026-04-26)
+## Status & Recent Review (2026-04-27)
 
-**Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1 ✅  
+**Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1, E2 ✅  
 **Build Status:** ✅ `make build && make test` green (all tests passing)
 
-**Code Quality Review Summary (2026-04-26):**
+**Code Quality Review Summary (2026-04-27):**
 
 | Item | Status | Details |
 |------|--------|---------|
-| D1 Field Parity | ✅ FIXED | Renamed `actorKind`→`actorType`, `entityKind`→`entityType` in schema, domain, service, handlers, and all tests. Migration 0007 applied. Now matches TS schema exactly. |
-| D1 API Request/Response | ✅ VERIFIED | POST /api/activity accepts `{companyId, actorType, actorId, action, entityType, entityId, metaJson?}` and returns 201 with full Activity record. GET /api/issues/{id}/activity returns items array ordered by created_at ASC. Response format matches TS. |
-| E2E Test Coverage | ✅ COMPLETE | 10 scenarios: creation, validation, listing, ordering, 422 errors, missing fields, issue-scoped queries. All passing. |
-| E1 Implementation | ✅ COMPLETE | Added `GET /api/heartbeat/runs/{id}` returning full run record (404 if not found); Added `POST /api/heartbeat/runs/{id}/cancel` with atomic conditional UPDATE (409 if not running) |
-| E1 Code Review | ✅ FIXED | Addressed Copilot findings: (1) Made Cancel() atomic with conditional UPDATE + RowsAffected check to prevent race conditions; (2) Fixed test code style to use http.NewRequest pattern |
-| Design Debt | 📝 Noted | ListByEntity has no pagination (acceptable for typical issue volumes); identified improvement opportunities deferred to E2+ |
-| Next Phase | → E2 | Mock adapter for tests: refactor `runner_test.go` to use reusable `MockAdapter` |
+| E2 Implementation | ✅ COMPLETE | Created `MockAdapter` struct in `internal/heartbeat/mock_adapter.go` with callback injection. Replaced inline `ErrorAdapter` in `runner_test.go` with reusable `MockAdapter`. Added 3 unit tests (success, error, nil-issue paths). 17 total heartbeat tests passing. |
+| E2 Code Review | ✅ FIXED | Added nil guard in `NewMockAdapter()` with panic message. Simplified field comment. Added `TestMockAdapterNilFunction`. Updated commit message to include `— <why>` clause per style guide. |
+| Design Notes | 📝 Updated | Test infrastructure is now cleaner with `MockAdapter` handling deterministic responses for future E3+ implementations. |
+| Next Phase | → E3 | `claude_local` heartbeat adapter: implement Anthropic API integration with mock LLM client for tests |
 
 ---
 
@@ -309,17 +306,20 @@ Tasks:
 
 Acceptance: start run → GET returns it; POST cancel → status `cancelled`.
 
-#### E2 — Mock adapter for tests
+#### E2 — Mock adapter for tests ✅
 
-**Files:** `internal/heartbeat/mock_adapter.go`, update existing tests
+**Files:** `internal/heartbeat/mock_adapter.go`, `internal/heartbeat/mock_adapter_test.go`, `internal/heartbeat/runner_test.go`
 
-Tasks:
-- Add `MockAdapter` struct in `internal/heartbeat/` implementing `Adapter` interface.
-- Constructor: `NewMockAdapter(summaryFn func(RunContext) RunResult)` — lets tests inject deterministic responses.
-- Replace ad-hoc test stubs in `runner_test.go` with `MockAdapter`.
-- Export `MockAdapter` for use in integration tests.
+Tasks: ✅ COMPLETE
+- ✅ Add `MockAdapter` struct in `internal/heartbeat/` implementing `Adapter` interface with `summaryFn` callback
+- ✅ Constructor: `NewMockAdapter(summaryFn func(RunContext) RunResult)` — lets tests inject deterministic responses
+- ✅ Constructor: `NewMockAdapterError(err error)` — shorthand for error-path testing (replaces ad-hoc `ErrorAdapter`)
+- ✅ Replace ad-hoc test stubs in `runner_test.go` with `MockAdapter` (removed inline `ErrorAdapter` type)
+- ✅ Export `MockAdapter` for use in integration tests (defined in non-`_test.go` file)
+- ✅ Added nil guard in constructor with panic message
+- ✅ Unit tests: success path, error path, nil-issue path, nil-function panic
 
-Acceptance: `runner_test.go` uses `MockAdapter`; `go test ./internal/heartbeat/...` ✅.
+Acceptance: ✅ `runner_test.go` uses `MockAdapter`; `go test ./internal/heartbeat/...` passes (17 tests); `make build && make test` ✅ green.
 
 #### E3 — `claude_local` heartbeat adapter
 
