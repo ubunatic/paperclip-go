@@ -15,7 +15,7 @@
 
 | Item | Status | Details |
 |------|--------|---------|
-| E2 Implementation | ✅ COMPLETE | Created `MockAdapter` struct in `internal/heartbeat/mock_adapter.go` with callback injection. Replaced inline `ErrorAdapter` in `runner_test.go` with reusable `MockAdapter`. Added 3 unit tests (success, error, nil-issue paths). 17 total heartbeat tests passing. |
+| E2 Implementation | ✅ COMPLETE | Created `MockAdapter` struct in `internal/heartbeat/mock_adapter.go` with callback injection. Replaced inline `ErrorAdapter` in `runner_test.go` with reusable `MockAdapter`. Added 4 unit tests (success, error, nil-issue, nil-function panic paths). 17 total heartbeat tests passing. |
 | E2 Code Review | ✅ FIXED | Added nil guard in `NewMockAdapter()` with panic message. Simplified field comment. Added `TestMockAdapterNilFunction`. Updated commit message to include `— <why>` clause per style guide. |
 | Design Notes | 📝 Updated | Test infrastructure is now cleaner with `MockAdapter` handling deterministic responses for future E3+ implementations. |
 | Next Phase | → E3 | `claude_local` heartbeat adapter: implement Anthropic API integration with mock LLM client for tests |
@@ -311,13 +311,13 @@ Acceptance: start run → GET returns it; POST cancel → status `cancelled`.
 **Files:** `internal/heartbeat/mock_adapter.go`, `internal/heartbeat/mock_adapter_test.go`, `internal/heartbeat/runner_test.go`
 
 Tasks: ✅ COMPLETE
-- ✅ Add `MockAdapter` struct in `internal/heartbeat/` implementing `Adapter` interface with `summaryFn` callback
-- ✅ Constructor: `NewMockAdapter(summaryFn func(RunContext) RunResult)` — lets tests inject deterministic responses
-- ✅ Constructor: `NewMockAdapterError(err error)` — shorthand for error-path testing (replaces ad-hoc `ErrorAdapter`)
+- ✅ Add `MockAdapter` struct in `internal/heartbeat/` implementing `Adapter` interface with callback injection for deterministic test responses
+- ✅ Constructor: `NewMockAdapter(summaryFn func(*Agent, *Issue) (*RunResult, error))` — lets tests inject deterministic responses via callback
+- ✅ Error-path testing handled via callback behavior (local `newErrorAdapter` helper in tests; no separate public constructor needed)
 - ✅ Replace ad-hoc test stubs in `runner_test.go` with `MockAdapter` (removed inline `ErrorAdapter` type)
 - ✅ Export `MockAdapter` for use in integration tests (defined in non-`_test.go` file)
 - ✅ Added nil guard in constructor with panic message
-- ✅ Unit tests: success path, error path, nil-issue path, nil-function panic
+- ✅ Unit tests: success path, error path, nil-issue path, nil-function panic (4 tests total)
 
 Acceptance: ✅ `runner_test.go` uses `MockAdapter`; `go test ./internal/heartbeat/...` passes (17 tests); `make build && make test` ✅ green.
 
