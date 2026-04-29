@@ -340,32 +340,38 @@ func (r *Runner) ListByAgent(ctx context.Context, agentID string) ([]*domain.Hea
 // Cancel cancels a heartbeat run if it's not already in a terminal state.
 // Terminal statuses are: "success", "error", "cancelled".
 func (r *Runner) Cancel(ctx context.Context, id string) (*domain.HeartbeatRun, error) {
-	// Get the run to check if it exists and its current status
-	run, err := r.GetByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if the run is already in a terminal state
-	isTerminal := run.Status == "success" || run.Status == "error" || run.Status == "cancelled"
-	if isTerminal {
-		return nil, ErrAlreadyTerminal
-	}
-
-	// Update the run to cancelled status
 	finishedAt := time.Now().UTC().Truncate(time.Second)
 	finishedAtStr := finishedAt.Format(time.RFC3339)
 
-	_, err = r.store.DB.ExecContext(ctx,
+	result, err := r.store.DB.ExecContext(ctx,
 		`UPDATE heartbeat_runs SET status = 'cancelled', finished_at = ?
-		 WHERE id = ?`,
+		 WHERE id = ? AND status NOT IN ('success','error','cancelled')`,
 		finishedAtStr, id,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("cancelling heartbeat run: %w", err)
+		return nil, fmt.Errorf("updating heartbeat run: %w", err)
 	}
 
-	// Return the refreshed record
+	n, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("checking rows affected: %w", err)
+	}
+
+	if n == 0 {
+		// Either run doesn't exist or it's already terminal
+		existingRun, err := r.GetByID(ctx, id)
+		if errors.Is(err, ErrNotFound) {
+			return nil, ErrNotFound
+		}
+		if err != nil {
+			return nil, fmt.Errorf("getting run: %w", err)
+		}
+		// Run exists but is terminal
+		_ = existingRun // already terminal, not being returned
+		return nil, ErrAlreadyTerminal
+	}
+
+	// Run was successfully cancelled; return refreshed record
 	return r.GetByID(ctx, id)
 }
 

@@ -153,17 +153,10 @@ func TestCancel_AlreadyFinished(t *testing.T) {
 	ctx := context.Background()
 	handler := apiheartbeat.Handler(runner)
 
-	// Create a heartbeat run with success status
+	// Create a heartbeat run with success status (already terminal)
 	run, err := runner.Create(ctx, agentID, nil, "success")
 	if err != nil {
 		t.Fatalf("Create run: %v", err)
-	}
-
-	// Update the run to have a finished_at timestamp
-	summary := "completed"
-	_, err = runner.Update(ctx, run.ID, "success", &summary, nil)
-	if err != nil {
-		t.Fatalf("Update run: %v", err)
 	}
 
 	req, err := http.NewRequest("POST", "/runs/"+run.ID+"/cancel", nil)
@@ -185,5 +178,31 @@ func TestCancel_AlreadyFinished(t *testing.T) {
 	errObj, ok := resp["error"].(map[string]any)
 	if !ok || errObj["code"] != "already_terminal" {
 		t.Errorf("error code not already_terminal: %v", resp)
+	}
+}
+
+func TestCancel_NotFound(t *testing.T) {
+	runner, _, _, _ := newTestSetup(t)
+	handler := apiheartbeat.Handler(runner)
+
+	req, err := http.NewRequest("POST", "/runs/nonexistent-id/cancel", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	errObj, ok := resp["error"].(map[string]any)
+	if !ok || errObj["code"] != "not_found" {
+		t.Errorf("error code not not_found: %v", resp)
 	}
 }
