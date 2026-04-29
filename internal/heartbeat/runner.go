@@ -21,8 +21,8 @@ import (
 // ErrNotFound is returned when a heartbeat run is not found.
 var ErrNotFound = errors.New("heartbeat run not found")
 
-// ErrTerminalStatus is returned when attempting to cancel a run that is already terminal.
-var ErrTerminalStatus = errors.New("heartbeat run is not running")
+// ErrAlreadyTerminal is returned when attempting to cancel a run that is already in a terminal state.
+var ErrAlreadyTerminal = errors.New("heartbeat run already in terminal state")
 
 // Runner provides heartbeat run operations backed by the store.
 type Runner struct {
@@ -335,6 +335,38 @@ func (r *Runner) ListByAgent(ctx context.Context, agentID string) ([]*domain.Hea
 		return nil, fmt.Errorf("iterating heartbeat runs: %w", err)
 	}
 	return out, nil
+}
+
+// Cancel cancels a heartbeat run if it's not already in a terminal state.
+// Terminal statuses are: "success", "error", "cancelled".
+func (r *Runner) Cancel(ctx context.Context, id string) (*domain.HeartbeatRun, error) {
+	// Get the run to check if it exists and its current status
+	run, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the run is already in a terminal state
+	isTerminal := run.Status == "success" || run.Status == "error" || run.Status == "cancelled"
+	if isTerminal {
+		return nil, ErrAlreadyTerminal
+	}
+
+	// Update the run to cancelled status
+	finishedAt := time.Now().UTC().Truncate(time.Second)
+	finishedAtStr := finishedAt.Format(time.RFC3339)
+
+	_, err = r.store.DB.ExecContext(ctx,
+		`UPDATE heartbeat_runs SET status = 'cancelled', finished_at = ?
+		 WHERE id = ?`,
+		finishedAtStr, id,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("cancelling heartbeat run: %w", err)
+	}
+
+	// Return the refreshed record
+	return r.GetByID(ctx, id)
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.

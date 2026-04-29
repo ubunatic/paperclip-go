@@ -18,7 +18,7 @@ func Handler(r *svc.Runner) http.Handler {
 	router := chi.NewRouter()
 	router.Post("/runs", create(r))
 	router.Get("/runs", list(r))
-	router.Get("/runs/{id}", get(r))
+	router.Get("/runs/{id}", getByID(r))
 	router.Post("/runs/{id}/cancel", cancel(r))
 	return router
 }
@@ -72,14 +72,9 @@ func list(r *svc.Runner) http.HandlerFunc {
 	}
 }
 
-func get(r *svc.Runner) http.HandlerFunc {
+func getByID(r *svc.Runner) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		if id == "" {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "run id is required")
-			return
-		}
-
 		run, err := r.GetByID(req.Context(), id)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {
@@ -90,7 +85,6 @@ func get(r *svc.Runner) http.HandlerFunc {
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
-
 		respond.JSON(w, http.StatusOK, run)
 	}
 }
@@ -98,26 +92,20 @@ func get(r *svc.Runner) http.HandlerFunc {
 func cancel(r *svc.Runner) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		id := chi.URLParam(req, "id")
-		if id == "" {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "run id is required")
-			return
-		}
-
 		run, err := r.Cancel(req.Context(), id)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "heartbeat run not found")
 				return
 			}
-			if errors.Is(err, svc.ErrTerminalStatus) {
-				respond.Error(w, http.StatusConflict, "terminal_status", "heartbeat run is not running")
+			if errors.Is(err, svc.ErrAlreadyTerminal) {
+				respond.Error(w, http.StatusConflict, "already_terminal", "heartbeat run already in terminal state")
 				return
 			}
 			log.Printf("heartbeat: error cancelling run: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return
 		}
-
 		respond.JSON(w, http.StatusOK, run)
 	}
 }
