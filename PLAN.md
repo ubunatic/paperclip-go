@@ -6,41 +6,21 @@
 
 ---
 
-## Status & Recent Review (2026-04-27)
+## Status & Recent Review (2026-04-29)
 
-**Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1, E2 ✅  
-**Build Status:** ✅ `make build && make test` green (all tests passing)
+**Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1 ✅  
+**Build Status:** ✅ `make build && make test` green
 
-**Code Quality Review Summary (2026-04-27):**
+**Code Quality Review Summary (2026-04-29):**
 
 | Item | Status | Details |
 |------|--------|---------|
-| E2 Implementation | ✅ COMPLETE | Created `MockAdapter` struct in `internal/heartbeat/mock_adapter.go` with callback injection. Replaced inline `ErrorAdapter` in `runner_test.go` with reusable `MockAdapter`. Added 4 unit tests (success, error, nil-issue, nil-function panic paths). 17 total heartbeat tests passing. |
-| E2 Code Review | ✅ FIXED | Added nil guard in `NewMockAdapter()` with panic message. Simplified field comment. Added `TestMockAdapterNilFunction`. Updated commit message to include `— <why>` clause per style guide. |
-| Design Notes | 📝 Updated | Test infrastructure is now cleaner with `MockAdapter` handling deterministic responses for future E3+ implementations. |
-| Next Phase | → E3 | `claude_local` heartbeat adapter: implement Anthropic API integration with mock LLM client for tests |
-
----
-
-## Quality Audit Notes (2026-04-25)
-
-### 🐛 Minor Issues Identified
-
-1. **Activity.Record() return value not used** — Callers in `agents/service.go` (Pause/Resume/Terminate) and `heartbeat/runner.go` discard return via `_`. Document whether return is intentional for future use.
-2. **Agent error message breaking change** — Error code `"has_active_checkout"` renamed to `"has_active_dependents"` in Phase B1; clients need migration guidance.
-
-### 🏗️ Design Debt
-
-1. **Activity list pagination missing** — `ListByEntity()` queries all records with no LIMIT; should default to 100-500 with optional `?limit=N` query param. Concern: thousands of activities could cause memory issues.
-2. **documents/workProducts JSON normalization is redundant** — Normalized at Create, Update, and scanIssue layers; consolidate into single helper function.
-3. **SQL column coupling in scanIssue()** — Column list hardcoded across multiple SELECT statements; consider centralizing as constant.
-4. **Archive/unarchive missing activity logging** — No "issue_archived"/"issue_unarchived" events recorded; adds to audit trail debt.
-5. **Tenant isolation at handler level undocumented** — Archive/unarchive handlers lack company verification; depends on auth middleware (acceptable, but should document).
-
-### 🚀 Pre-E2 Improvements (Optional)
-
-- Add database index on `activity_log(entity_kind, entity_id, created_at)` for performance as activity volume grows.
-- Verify schema migrations (0005_issue_docs, 0006_issue_archived_at) are idempotent in production.
+| E1 Implementation | ✅ COMPLETE | `GET /api/heartbeat/runs/{id}` returns run by ID (200 or 404); `POST /api/heartbeat/runs/{id}/cancel` cancels running runs (200), returns 404 if not found, 409 if already terminal |
+| E1 Testing | ✅ COMPLETE | 5 unit tests: getByID happy path + 404, cancel running + already-finished + not-found; all scenarios covered |
+| E1 Code Review | ✅ FIXED | Address all findings: fixed TOCTOU race in Cancel with atomic conditional UPDATE (matches agents pattern); added missing TestCancel_NotFound test; simplified test setup |
+| Parity | ✅ Verified | GET /api/heartbeat/runs/{id} returns run; POST cancel returns updated run or error (409 for terminal); implementation atomic and race-free |
+| Design Debt | 📝 Noted | None new; pre-existing: Create method is exported but test-only, could move to export_test.go (low priority) |
+| Next Phase | → E2 | Mock adapter for tests: `internal/heartbeat/mock_adapter.go` with MockAdapter struct for test injection |
 
 ---
 
@@ -295,31 +275,31 @@ Acceptance: ✅ `POST /api/activity` creates a row (201); `GET /api/activity?com
 
 ### Phase E — Heartbeat Improvements
 
-#### E1 — Heartbeat run detail + cancel
+#### E1 — Heartbeat run detail + cancel ✅
 
-**Files:** `internal/api/heartbeat/handler.go`, `internal/heartbeat/runner.go`
-
-Tasks:
-- Add `GET /api/heartbeat/runs/{id}` returning full run record.
-- Add `POST /api/heartbeat/runs/{id}/cancel`: sets `status='cancelled'` if run is `running`; 409 if already terminal.
-- Unit tests: get existing run, get missing run (404), cancel running, cancel already finished (409).
-
-Acceptance: start run → GET returns it; POST cancel → status `cancelled`.
-
-#### E2 — Mock adapter for tests ✅
-
-**Files:** `internal/heartbeat/mock_adapter.go`, `internal/heartbeat/mock_adapter_test.go`, `internal/heartbeat/runner_test.go`
+**Files:** `internal/api/heartbeat/handler.go`, `internal/heartbeat/runner.go`, `internal/api/heartbeat/handler_test.go`
 
 Tasks: ✅ COMPLETE
-- ✅ Add `MockAdapter` struct in `internal/heartbeat/` implementing `Adapter` interface with callback injection for deterministic test responses
-- ✅ Constructor: `NewMockAdapter(summaryFn func(*Agent, *Issue) (*RunResult, error))` — lets tests inject deterministic responses via callback
-- ✅ Error-path testing handled via callback behavior (local `newErrorAdapter` helper in tests; no separate public constructor needed)
-- ✅ Replace ad-hoc test stubs in `runner_test.go` with `MockAdapter` (removed inline `ErrorAdapter` type)
-- ✅ Export `MockAdapter` for use in integration tests (defined in non-`_test.go` file)
-- ✅ Added nil guard in constructor with panic message
-- ✅ Unit tests: success path, error path, nil-issue path, nil-function panic (4 tests total)
+- ✅ Add `GET /api/heartbeat/runs/{id}` returning full run record (200 or 404)
+- ✅ Add `POST /api/heartbeat/runs/{id}/cancel`: sets `status='cancelled'` if running; 409 if already terminal; 404 if not found
+- ✅ Add `ErrAlreadyTerminal` sentinel error to runner.go
+- ✅ Add `Cancel` method to Runner with atomic conditional UPDATE (race-safe, matches agents pattern)
+- ✅ Unit tests: 5 comprehensive tests covering all scenarios (getByID found/not-found, cancel running/already-finished/not-found)
+- ✅ Code review fixed: TOCTOU race in Cancel using conditional UPDATE, added missing TestCancel_NotFound
 
-Acceptance: ✅ `runner_test.go` uses `MockAdapter`; `go test ./internal/heartbeat/...` passes (17 tests); `make build && make test` ✅ green.
+Acceptance: ✅ `GET /api/heartbeat/runs/{id}` returns 200 with run data or 404; `POST cancel` returns 200 (cancelled) or 409 (already_terminal) or 404 (not_found); atomic and race-free.
+
+#### E2 — Mock adapter for tests
+
+**Files:** `internal/heartbeat/mock_adapter.go`, update existing tests
+
+Tasks:
+- Add `MockAdapter` struct in `internal/heartbeat/` implementing `Adapter` interface.
+- Constructor: `NewMockAdapter(summaryFn func(RunContext) RunResult)` — lets tests inject deterministic responses.
+- Replace ad-hoc test stubs in `runner_test.go` with `MockAdapter`.
+- Export `MockAdapter` for use in integration tests.
+
+Acceptance: `runner_test.go` uses `MockAdapter`; `go test ./internal/heartbeat/...` ✅.
 
 #### E3 — `claude_local` heartbeat adapter
 
@@ -684,19 +664,3 @@ These remain deferred until there is a concrete need.
 - **Build**: `make build && make test` ✅ green
 - **Gaps**: Handler packages (agents, issues, companies) lack unit tests; only E2E coverage exists
 - **Recommendation**: Consider adding `handler_test.go` per package in next phase for 404/409/422 error cases
-
----
-
-## Code Quality Debt (Deferred, Post-MVP)
-
-Identified during 2026-04-26 audit of D1 implementation. All items are acceptable for MVP; prioritized for phases E1+.
-
-| Item | Severity | Location | Recommendation | Effort |
-|------|----------|----------|---|---|
-| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | Replace bare `log.Printf()` with structured logger (slog or wrapper) | 20 min |
-| Unbounded ListByEntity | MEDIUM | `internal/activity/log.go:92` | Add optional `limit` parameter (default 100, max 500). Pre-allocate slice. Prevents OOM on high-activity entities. | 15 min |
-| MaxBytesReader boilerplate | LOW | `internal/api/*/handler.go` (8 instances) | Extract `readJSONBody(r, maxBytes, &target)` helper to reduce repetition and centralize size limits | 20 min |
-| Request correlation in audit logs | LOW-MED | `internal/api/activity/handler.go` | Pass `X-Request-ID` header to activity service for audit trail. Aids debugging. | 20 min |
-| Validation pattern repetition | LOW | `internal/api/{issues,agents}/handler.go` | Define reusable validators or use lightweight validation library (go-playground/validator) | 30 min |
-
-**Estimated total effort for all deferred items:** ~2 hours. Recommended for Phase E2 (post-heartbeat work).
