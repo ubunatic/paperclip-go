@@ -6,18 +6,21 @@
 
 ---
 
-## Status & Recent Review (2026-04-27)
+## Status & Recent Review (2026-04-30)
 
 **Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1, E2 ✅  
 **Build Status:** ✅ `make build && make test` green (all tests passing)
+**Latest Sync:** Synced with upstream (preserving Go-specific core)
 
-**Code Quality Review Summary (2026-04-27):**
+**Code Quality Review Summary (2026-04-30):**
 
 | Item | Status | Details |
 |------|--------|---------|
+| E1 Implementation | ✅ COMPLETE | Added `GET /api/heartbeat/runs/{id}` and `POST /api/heartbeat/runs/{id}/cancel` endpoints. Implemented `Cancel()` method with atomic conditional UPDATE for race-safety. Added comprehensive E2E tests to `TestHeartbeatE2E`. |
+| E1 Code Quality | ✅ VERIFIED | Proper error handling (404 for not found, 409 for terminal status). Documented known limitation: `Update()` race condition if concurrent Cancel() occurs (acceptable for MVP). |
 | E2 Implementation | ✅ COMPLETE | Created `MockAdapter` struct in `internal/heartbeat/mock_adapter.go` with callback injection. Replaced inline `ErrorAdapter` in `runner_test.go` with reusable `MockAdapter`. Added 4 unit tests (success, error, nil-issue, nil-function panic paths). 17 total heartbeat tests passing. |
-| E2 Code Review | ✅ FIXED | Added nil guard in `NewMockAdapter()` with panic message. Simplified field comment. Added `TestMockAdapterNilFunction`. Updated commit message to include `— <why>` clause per style guide. |
-| Design Notes | 📝 Updated | Test infrastructure is now cleaner with `MockAdapter` handling deterministic responses for future E3+ implementations. |
+| Schema Sync | ✅ COMPLETE | Added migration `0007_activity_rename_kind_to_type.sql` to rename `actor_kind`/`entity_kind` → `actor_type`/`entity_type` for TS parity. Updated all Go code and tests accordingly. |
+| Design Notes | 📝 Updated | Test infrastructure is cleaner with `MockAdapter`. E1 Cancel() implementation uses atomic conditional UPDATE. Activity schema now matches TS (actorType, entityType). |
 | Next Phase | → E3 | `claude_local` heartbeat adapter: implement Anthropic API integration with mock LLM client for tests |
 
 ---
@@ -295,16 +298,17 @@ Acceptance: ✅ `POST /api/activity` creates a row (201); `GET /api/activity?com
 
 ### Phase E — Heartbeat Improvements
 
-#### E1 — Heartbeat run detail + cancel
+#### E1 — Heartbeat run detail + cancel ✅
 
 **Files:** `internal/api/heartbeat/handler.go`, `internal/heartbeat/runner.go`
 
-Tasks:
-- Add `GET /api/heartbeat/runs/{id}` returning full run record.
-- Add `POST /api/heartbeat/runs/{id}/cancel`: sets `status='cancelled'` if run is `running`; 409 if already terminal.
-- Unit tests: get existing run, get missing run (404), cancel running, cancel already finished (409).
+Tasks: ✅ COMPLETE
+- ✅ Add `GET /api/heartbeat/runs/{id}` returning full run record
+- ✅ Add `POST /api/heartbeat/runs/{id}/cancel`: sets `status='cancelled'` if run is `running`; 409 if already terminal
+- ✅ Unit tests: get existing run, get missing run (404), cancel running, cancel already finished (409)
+- ✅ E2E tests added to `TestHeartbeatE2E` validating all endpoints and error cases
 
-Acceptance: start run → GET returns it; POST cancel → status `cancelled`.
+Acceptance: ✅ start run → GET returns it; POST cancel → status `cancelled`; all tests passing.
 
 #### E2 — Mock adapter for tests ✅
 
