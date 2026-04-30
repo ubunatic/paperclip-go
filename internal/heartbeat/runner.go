@@ -354,6 +354,7 @@ func scanHeartbeatRun(s scanner) (*domain.HeartbeatRun, error) {
 
 	run.IssueID = issueID
 	run.Summary = summary
+	run.Error = errMsg
 
 	var err error
 	run.StartedAt, err = time.Parse(time.RFC3339, startedAtStr)
