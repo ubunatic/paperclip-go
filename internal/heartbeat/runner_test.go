@@ -460,10 +460,10 @@ func TestRunnerCancel(t *testing.T) {
 		t.Error("FinishedAt should be set after cancel")
 	}
 
-	// Try to cancel an already-cancelled run (should fail with ErrTerminalStatus)
+	// Try to cancel an already-cancelled run (should fail with ErrAlreadyTerminal)
 	_, err = runner.Cancel(ctx, run.ID)
-	if !errors.Is(err, heartbeat.ErrTerminalStatus) {
-		t.Errorf("Cancel already-cancelled run: expected ErrTerminalStatus, got %v", err)
+	if !errors.Is(err, heartbeat.ErrAlreadyTerminal) {
+		t.Errorf("Cancel already-cancelled run: expected ErrAlreadyTerminal, got %v", err)
 	}
 
 	// Try to cancel a non-existent run (should fail with ErrNotFound)
