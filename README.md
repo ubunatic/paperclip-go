@@ -8,3 +8,18 @@
 >
 > This fork is a work in progress. Expect breaking changes, incomplete features, and rough edges.
 > For the original project, see [README.orig.md](README.orig.md) or the upstream repo.
+
+## Who is this for?
+
+A single developer running Paperclip locally or in a VM — no Node.js, no npm, one self-contained Go binary.
+
+The assumption is a **trusted single-user environment**: no authentication, no multi-tenancy enforcement, no cloud deployment. If community interest grows, auth and multi-user features can be added later.
+
+## Quick start
+
+```sh
+make build
+./bin/paperclip-go serve
+```
+
+See [PLAN.md](PLAN.md) for implementation status and next steps.
