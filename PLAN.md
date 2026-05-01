@@ -21,9 +21,9 @@ This means:
 
 ## Status (2026-05-01)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1, E2  
-**Next:** E3 — `claude_local` heartbeat adapter  
-**Build:** ✅ green (all 26 test packages, 17 heartbeat tests)  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E3  
+**Next:** E4 — `heartbeat_runs` extended fields  
+**Build:** ✅ green (all 26 test packages, 21 heartbeat tests)  
 **Latest migration:** `0007_activity_rename_kind_to_type.sql`
 
 ---
@@ -164,7 +164,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 |---|---|---|---|
 | Stub adapter | ✅ | ✅ | — |
 | Mock adapter (test-only) | — | ✅ | E2 |
-| `claude_local` adapter | ✅ | 🔲 | E3 |
+| `claude_local` adapter | ✅ | ✅ | E3 |
 | Build version via ldflags | ✅ | ✅ | A4 |
 
 ---
@@ -225,18 +225,9 @@ Cancel uses atomic conditional UPDATE; 409 if already terminal.
 `MockAdapter` with callback injection lives in `internal/heartbeat/mock_adapter.go`.  
 All 17 heartbeat tests pass.
 
-#### E3 — `claude_local` heartbeat adapter
+#### E3 — `claude_local` heartbeat adapter ✅
 
-**Files:** `internal/heartbeat/claude_adapter.go`, `internal/heartbeat/llm_client.go`, `internal/heartbeat/claude_adapter_test.go`
-
-Tasks:
-- Add `LLMClient` interface (`Do(req *http.Request) (*http.Response, error)`) in `internal/heartbeat/llm_client.go`.
-- Add `ClaudeAdapter` implementing `Adapter`; constructor: `NewClaudeAdapter(apiKey, model string, client LLMClient)`.
-- `Run()`: calls Anthropic Messages API with the issue title/body as user prompt; returns response text as `Summary`.
-- Register `"claude_local"` in the adapter registry in `app.go` when `ANTHROPIC_API_KEY` env var is set.
-- Unit tests using `mockLLMClient` (defined in `_test.go`): success, API error (→ `RunResult` with error status), empty response.
-
-Acceptance: with `ANTHROPIC_API_KEY` set, heartbeat calls Claude; `go test ./internal/heartbeat/...` passes without a real key.
+Implemented: LLMClient interface for testable HTTP transport, ClaudeAdapter calling Anthropic Messages API, adapter registration in NewDefaultRegistry() when ANTHROPIC_API_KEY env var is set. Unit tests cover success, API errors, empty responses, and transport failures. All tests pass without a real API key.
 
 #### E4 — `heartbeat_runs` extended fields (upstream sync HI-1)
 
