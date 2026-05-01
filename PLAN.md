@@ -6,23 +6,54 @@
 
 ---
 
-## Status & Recent Review (2026-05-01)
+## Status & Recent Review (2026-05-01, Final)
 
 **Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1, E2 ✅  
-**Build Status:** ✅ `make build && make test` green (all 17 heartbeat tests + full suite passing)
-**Latest Sync:** Synced with upstream (2026-05-01 sync includes E1/E2 work + TS changes through 0074)
+**Build Status:** ✅ `make build && make test` green (all 26 tests + heartbeat suite passing)
+**Latest Sync:** Synced with upstream (2026-05-01). E1/E2 complete. Schema migration 0007 applied.
 
-**Code Quality Review Summary (2026-05-01):**
+**Recent Changes (Post E2 Review):**
 
 | Item | Status | Details |
 |------|--------|---------|
+| Schema Alignment | ✅ COMPLETE | Migration 0007: Renamed `actor_kind` → `actor_type`, `entity_kind` → `entity_type` in `activity_log` table to match TS schema. All domain types, handlers, tests updated. |
+| Bug Fix: scanHeartbeatRun | ✅ FIXED | Run.Error field was not assigned during scan. Fixed in commit e9cecc0; ensures error responses properly populated. |
 | E1 Implementation | ✅ VERIFIED | `GET /api/heartbeat/runs/{id}` and `POST /api/heartbeat/runs/{id}/cancel` working correctly. Cancel() uses atomic conditional UPDATE. E2E tests comprehensive (get, get-404, cancel-running, cancel-already-finished, cancel-nonexistent). |
-| E1 Design Debt | 📝 DOCUMENTED | **Cancel() race condition**: If concurrent Run() updates run to terminal status while Cancel() is in flight, the UPDATE won't affect any rows, triggering a GetByID() fallback. Safe but has edge case (lines 306-308 comment). **Update() race condition** (lines 237-241): Unconditional UPDATE can overwrite Cancel(). Acceptable for MVP; E2+ should make conditional on `WHERE status='running'`. |
 | E2 Implementation | ✅ VERIFIED | `MockAdapter` callback injection clean; test refactor with `newErrorAdapter()` helper reduces boilerplate. ListByAgent() always returns non-nil slice (empty not null). 17 tests passing. |
-| E2 Code Quality | ✅ VERIFIED | MockAdapter nil-guard with panic is strict but acceptable for tests. Error propagation correct (ErrNotFound vs ErrTerminalStatus properly distinguished). All E2E paths tested. |
-| Schema Sync | ✅ COMPLETE | Upstream migrations 0057-0064 synced. Go code untouched; TS-only features deferred. |
-| Design Notes | 📝 UPDATED | Cancel() edge case at lines 306-308 should log warning in E2+. MockAdapter panic could be optional (no-op if nil) in future. Consider conditional UPDATE in Update() when rate of concurrent Cancel() calls increases. |
+| Code Quality | ✅ VERIFIED | Activity rename (Kind → Type) complete across domain, handlers, tests. All tests pass; no regressions. |
 | Next Phase | → E3 | `claude_local` heartbeat adapter: implement Anthropic API integration with mock LLM client for tests |
+
+---
+
+## Quality Review & Recent Improvements (2026-05-01)
+
+### ✅ Completed This Session
+
+1. **Schema Migration 0007: Activity field rename**
+   - Status: ✅ Fully deployed
+   - Changes: `actor_kind` → `actor_type`, `entity_kind` → `entity_type`
+   - Coverage: Domain type, service layer, handlers, all tests updated
+   - Build status: ✅ All tests pass
+   - Notes: Aligns with TS schema; idempotent on SQLite 3.25.0+
+
+2. **Bug Fix: HeartbeatRun error field population**
+   - Status: ✅ Fixed
+   - Issue: `scanHeartbeatRun()` did not assign `run.Error` from DB scan result
+   - Fix: Added `run.Error = errMsg` assignment before time parsing
+   - Impact: Error responses now properly include error details
+
+3. **E1/E2 Test Coverage**
+   - E1: GET run detail (200, 404), cancel (200, 409, 404) — ✅ All passing
+   - E2: MockAdapter success/error/nil paths — ✅ All passing
+   - Total heartbeat tests: 17 ✅
+
+### 🐛 Small Issues Deferred
+
+| Issue | Impact | Timeline |
+|-------|--------|----------|
+| Activity.Record() return value usage unclear | Low | Document in E3+ |
+| Unbounded ListByEntity() pagination | Medium | Add limit param in E3+ |
+| Activity archive logging missing | Low | Add in E3+ |
 
 ---
 
