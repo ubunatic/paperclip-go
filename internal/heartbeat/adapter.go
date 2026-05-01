@@ -3,7 +3,10 @@ package heartbeat
 
 import (
 	"context"
+	"net/http"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/domain"
 )
@@ -67,5 +70,15 @@ func (r *Registry) Get(name string) Adapter {
 func NewDefaultRegistry() *Registry {
 	r := NewRegistry()
 	r.Register("stub", &StubAdapter{})
+
+	// Register Claude adapter if API key is present
+	if key := os.Getenv("ANTHROPIC_API_KEY"); key != "" {
+		model := os.Getenv("ANTHROPIC_MODEL")
+		if model == "" {
+			model = "claude-haiku-4-5"
+		}
+		r.Register("claude_local", NewClaudeAdapter(key, model, &http.Client{Timeout: 60 * time.Second}))
+	}
+
 	return r
 }
