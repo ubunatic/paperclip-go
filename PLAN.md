@@ -5,12 +5,65 @@
 
 ---
 
+## Scope & Audience
+
+**Target:** A single developer running Paperclip locally or in a VM.  
+**Assumption:** Trusted single-user environment — no authentication required, no multi-tenancy enforcement.  
+**Auth & multi-user:** Explicitly out of scope unless community interest grows beyond solo use.
+
+This means:
+- No auth middleware or RBAC in the near-term phases
+- Cross-tenant isolation is defensive/informational, not a hard security boundary
+- Secrets can be stored with lightweight protection (env-var reference pattern preferred over mandatory encryption)
+- WebSocket, workspaces, and approvals are useful but not blockers to a working system
+
+---
+
 ## Status (2026-05-01)
 
 **Completed:** A1–A4, B1–B2, C1–C3, D1, E1, E2  
 **Next:** E3 — `claude_local` heartbeat adapter  
 **Build:** ✅ green (all 26 test packages, 17 heartbeat tests)  
 **Latest migration:** `0007_activity_rename_kind_to_type.sql`
+
+---
+
+## Priority Tiers (road to a running version)
+
+Phases grouped by what actually matters for a single-developer working system.
+
+### Tier 1 — Minimum Running Version
+
+| Phase | What | Why |
+|---|---|---|
+| E3 | `claude_local` heartbeat adapter | Heartbeat calls Claude; the system actually does something |
+| F1 | Secrets (lightweight) | Store `ANTHROPIC_API_KEY` and other agent keys; plaintext+env-ref is fine for single dev |
+| F2 | Instance settings | Configure server behaviour (deployment mode, origins) |
+
+### Tier 2 — Useful for Daily Operation
+
+| Phase | What | Why |
+|---|---|---|
+| E4 | `heartbeat_runs` extended fields | Upstream schema sync; liveness + retry state |
+| E5 | `issues.origin_fingerprint` | Unlocks routine dedup (needed before G2) |
+| G2 | Routines + cron scheduler | Schedule regular heartbeats without manual triggering |
+| F4 | `db:backup` CLI | Data safety on VM |
+
+### Tier 3 — Useful but Deferrable
+
+| Phase | What | Why |
+|---|---|---|
+| G1 | Approvals | Human-in-loop gates; not critical solo |
+| F3 | `env` CLI | Convenience wrapper over F1 API |
+| I1 | Issue thread interactions | Agent continuation loop; complex |
+
+### Tier 4 — Deferred (community interest)
+
+| Phase | What | When |
+|---|---|---|
+| H1 | Execution workspaces | If workspace isolation becomes needed |
+| H2 | WebSocket live events | If a UI consumer exists |
+| Auth / RBAC | Multi-user access control | If others join |
 
 ---
 
@@ -227,12 +280,11 @@ Acceptance: `GET /api/issues/{id}` → `originFingerprint` field present; existi
 **Files:** `internal/store/migrations/0010_secrets.sql`, `internal/domain/secret.go`, `internal/secrets/service.go`, `internal/api/secrets/handler.go`
 
 Tasks:
-- Migration: `secrets(id, company_id, name, value_encrypted TEXT, created_at, updated_at)`.  
-  Store AES-GCM ciphertext (nonce + ciphertext + tag, base64-encoded) keyed from `config.SecretKey`.  
-  **Do not use XOR or plaintext fallback.** If `config.SecretKey` is missing, write endpoints fail closed; startup emits a warning.
+- Migration: `secrets(id, company_id, name, value TEXT, created_at, updated_at)`.  
+  Single-dev / trusted-VM scope: store values as plaintext. Encryption can be added if multi-user support is needed later.
 - CRUD: `GET /api/secrets?companyId=`, `POST /api/secrets`, `GET /api/secrets/{id}`, `PATCH /api/secrets/{id}`, `DELETE /api/secrets/{id}`.
-- `GET` responses omit the value field (`{"id","name","createdAt"}`); `POST` returns value once.
-- Unit tests: create, list (no values), get (no value), update, delete, 404, encrypt/decrypt round-trip, tampered ciphertext rejection, missing-key rejection.
+- `GET` list responses omit the value field (`{"id","name","createdAt"}`); `POST` and `GET /{id}` return the value.
+- Unit tests: create, list (no values in list), get (value present), update, delete, 404.
 
 Acceptance: `POST /api/secrets` → 201 with value; `GET /api/secrets` → list without values.
 
@@ -423,10 +475,14 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 
 ---
 
-## Deferred (explicit non-goals)
+## Deferred
 
-- BetterAuth / RBAC / board-claim flow
-- Embedded Postgres
-- Plugin host / external adapter processes
-- Full Drizzle-schema parity (`goals`, `projects`, `costs`, `budgets`)
-- Data sharing with the TS instance
+These are out of scope for a single-developer deployment. Revisit if community interest grows.
+
+- **Auth / RBAC / multi-user** — BetterAuth, board-claim flow, permission checks
+- **Embedded Postgres** — SQLite is fine for a single-dev VM
+- **Plugin host / external adapter processes** — useful at scale, not needed solo
+- **Full schema parity** — `goals`, `projects`, `costs`, `budgets` (deferred until needed)
+- **Data sharing with the TS instance** — migration path TBD if ever needed
+- **WebSocket live events (H2)** — only matters with a live UI consumer
+- **Execution workspaces (H1)** — only needed when sandboxing agent execution
