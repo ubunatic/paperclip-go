@@ -47,13 +47,16 @@
    - E2: MockAdapter success/error/nil paths — ✅ All passing
    - Total heartbeat tests: 17 ✅
 
-### 🐛 Small Issues Deferred
+### 🐛 Small Issues Identified (Acceptable for MVP)
 
-| Issue | Impact | Timeline |
-|-------|--------|----------|
-| Activity.Record() return value usage unclear | Low | Document in E3+ |
-| Unbounded ListByEntity() pagination | Medium | Add limit param in E3+ |
-| Activity archive logging missing | Low | Add in E3+ |
+| Issue | Severity | Impact | Timeline | Status |
+|-------|----------|--------|----------|--------|
+| Bare logging in handlers (activity, issues, agents) | Low | Not structured; errors lack request correlation | E3+ | 📝 Documented |
+| Unbounded ListByEntity() pagination | Medium | Could OOM on very high-volume entities (1000s activities) | E3+ | ✅ Documented with comment |
+| Activity.Record() return value usage | Low | Callers discard return; unclear intent | E3+ | 📝 Documented |
+| Response wrapping inconsistency | Low | GET returns `{items}`, POST returns raw object | E3+ | 📝 Design debt |
+
+**MVP Status:** All issues acceptable for shipping; documented for post-launch optimization.
 
 ---
 
