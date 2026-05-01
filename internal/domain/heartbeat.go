@@ -14,6 +14,15 @@ type HeartbeatRun struct {
 	FinishedAt *time.Time `json:"finishedAt"`
 	Summary    *string    `json:"summary"`
 	Error      *string    `json:"error"`
+	// Extended fields (upstream schema sync — E4)
+	LivenessState          *string `json:"livenessState"`
+	LivenessReason         *string `json:"livenessReason"`
+	ContinuationAttempt    int     `json:"continuationAttempt"`
+	LastUsefulActionAt     *string `json:"lastUsefulActionAt"`
+	NextAction             *string `json:"nextAction"`
+	ScheduledRetryAt       *string `json:"scheduledRetryAt"`
+	ScheduledRetryAttempt  int     `json:"scheduledRetryAttempt"`
+	ScheduledRetryReason   *string `json:"scheduledRetryReason"`
 }
 
 // RunContext holds information about the current agent and issue during a heartbeat run.

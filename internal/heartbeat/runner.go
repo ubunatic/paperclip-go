@@ -258,7 +258,9 @@ func (r *Runner) Update(ctx context.Context, id, status string, summary, errMsg 
 // GetByID returns the heartbeat run with the given ID, or ErrNotFound if it doesn't exist.
 func (r *Runner) GetByID(ctx context.Context, id string) (*domain.HeartbeatRun, error) {
 	row := r.store.DB.QueryRowContext(ctx,
-		`SELECT id, agent_id, issue_id, status, started_at, finished_at, summary, error
+		`SELECT id, agent_id, issue_id, status, started_at, finished_at, summary, error,
+		        liveness_state, liveness_reason, continuation_attempt, last_useful_action_at,
+		        next_action, scheduled_retry_at, scheduled_retry_attempt, scheduled_retry_reason
 		 FROM heartbeat_runs WHERE id = ?`,
 		id,
 	)
@@ -314,7 +316,9 @@ func (r *Runner) Cancel(ctx context.Context, id string) (*domain.HeartbeatRun, e
 // ListByAgent returns all heartbeat runs for a given agent, ordered by started_at descending.
 func (r *Runner) ListByAgent(ctx context.Context, agentID string) ([]*domain.HeartbeatRun, error) {
 	rows, err := r.store.DB.QueryContext(ctx,
-		`SELECT id, agent_id, issue_id, status, started_at, finished_at, summary, error
+		`SELECT id, agent_id, issue_id, status, started_at, finished_at, summary, error,
+		        liveness_state, liveness_reason, continuation_attempt, last_useful_action_at,
+		        next_action, scheduled_retry_at, scheduled_retry_attempt, scheduled_retry_reason
 		 FROM heartbeat_runs WHERE agent_id = ? ORDER BY started_at DESC`,
 		agentID,
 	)
@@ -347,14 +351,31 @@ func scanHeartbeatRun(s scanner) (*domain.HeartbeatRun, error) {
 	var startedAtStr string
 	var finishedAtStr *string
 	var issueID, summary, errMsg *string
+	var livenessState, livenessReason *string
+	var continuationAttempt int
+	var lastUsefulActionAt *string
+	var nextAction *string
+	var scheduledRetryAt *string
+	var scheduledRetryAttempt int
+	var scheduledRetryReason *string
 
-	if err := s.Scan(&run.ID, &run.AgentID, &issueID, &run.Status, &startedAtStr, &finishedAtStr, &summary, &errMsg); err != nil {
+	if err := s.Scan(&run.ID, &run.AgentID, &issueID, &run.Status, &startedAtStr, &finishedAtStr, &summary, &errMsg,
+		&livenessState, &livenessReason, &continuationAttempt, &lastUsefulActionAt,
+		&nextAction, &scheduledRetryAt, &scheduledRetryAttempt, &scheduledRetryReason); err != nil {
 		return nil, err
 	}
 
 	run.IssueID = issueID
 	run.Summary = summary
 	run.Error = errMsg
+	run.LivenessState = livenessState
+	run.LivenessReason = livenessReason
+	run.ContinuationAttempt = continuationAttempt
+	run.LastUsefulActionAt = lastUsefulActionAt
+	run.NextAction = nextAction
+	run.ScheduledRetryAt = scheduledRetryAt
+	run.ScheduledRetryAttempt = scheduledRetryAttempt
+	run.ScheduledRetryReason = scheduledRetryReason
 
 	var err error
 	run.StartedAt, err = time.Parse(time.RFC3339, startedAtStr)

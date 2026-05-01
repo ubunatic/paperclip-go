@@ -21,10 +21,10 @@ This means:
 
 ## Status (2026-05-01)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E3  
-**Next:** E4 — `heartbeat_runs` extended fields  
-**Build:** ✅ green (all 26 test packages, 21 heartbeat tests)  
-**Latest migration:** `0007_activity_rename_kind_to_type.sql`
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E4  
+**Next:** E5 — `issues.origin_fingerprint`  
+**Build:** ✅ green (all 26 test packages, 23 heartbeat tests)  
+**Latest migration:** `0008_heartbeat_runs_ext.sql`
 
 ---
 
@@ -229,26 +229,17 @@ All 17 heartbeat tests pass.
 
 Implemented: LLMClient interface for testable HTTP transport, ClaudeAdapter calling Anthropic Messages API, adapter registration in NewDefaultRegistry() when ANTHROPIC_API_KEY env var is set. Unit tests cover success, API errors, empty responses, and transport failures. All tests pass without a real API key.
 
-#### E4 — `heartbeat_runs` extended fields (upstream sync HI-1)
+#### E4 — `heartbeat_runs` extended fields (upstream sync HI-1) ✅
 
-**Files:** `internal/store/migrations/0008_heartbeat_runs_ext.sql`, `internal/domain/heartbeat.go`
+**Files:** `internal/store/migrations/0008_heartbeat_runs_ext.sql`, `internal/domain/heartbeat.go`, `internal/heartbeat/runner.go`
 
-Tasks:
-- Migration (all nullable/defaulted):
-  ```sql
-  ALTER TABLE heartbeat_runs ADD COLUMN liveness_state TEXT;
-  ALTER TABLE heartbeat_runs ADD COLUMN liveness_reason TEXT;
-  ALTER TABLE heartbeat_runs ADD COLUMN continuation_attempt INTEGER NOT NULL DEFAULT 0;
-  ALTER TABLE heartbeat_runs ADD COLUMN last_useful_action_at TEXT;
-  ALTER TABLE heartbeat_runs ADD COLUMN next_action TEXT;
-  ALTER TABLE heartbeat_runs ADD COLUMN scheduled_retry_at TEXT;
-  ALTER TABLE heartbeat_runs ADD COLUMN scheduled_retry_attempt INTEGER NOT NULL DEFAULT 0;
-  ALTER TABLE heartbeat_runs ADD COLUMN scheduled_retry_reason TEXT;
-  ```
-- Add nullable fields to `domain.HeartbeatRun`; update `scanHeartbeatRun()`.
-- Existing tests must stay green (no API changes needed yet).
+Completed:
+- Migration: 8 new nullable/defaulted columns added
+- Domain: 8 new fields added to `HeartbeatRun` struct
+- Runner: `scanHeartbeatRun()` and SELECT queries updated
+- Tests: All 23 heartbeat tests pass; `make test` green
 
-Acceptance: `make test` ✅; GET run response includes new fields (null by default).
+Result: GET run response includes new fields (null/0 by default).
 
 #### E5 — `issues.origin_fingerprint` (upstream sync HI-2)
 
