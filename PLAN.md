@@ -6,21 +6,22 @@
 
 ---
 
-## Status & Recent Review (2026-04-30)
+## Status & Recent Review (2026-05-01)
 
 **Phases Completed:** A1-A4, B1-B2, C1-C3, D1, E1, E2 ✅  
-**Build Status:** ✅ `make build && make test` green (all tests passing)
-**Latest Sync:** Synced with upstream (preserving Go-specific core)
+**Build Status:** ✅ `make build && make test` green (all 17 heartbeat tests + full suite passing)
+**Latest Sync:** Synced with upstream (2026-05-01 sync includes E1/E2 work + TS changes through 0074)
 
-**Code Quality Review Summary (2026-04-30):**
+**Code Quality Review Summary (2026-05-01):**
 
 | Item | Status | Details |
 |------|--------|---------|
-| E1 Implementation | ✅ COMPLETE | Added `GET /api/heartbeat/runs/{id}` and `POST /api/heartbeat/runs/{id}/cancel` endpoints. Implemented `Cancel()` method with atomic conditional UPDATE for race-safety. Added comprehensive E2E tests to `TestHeartbeatE2E`. |
-| E1 Code Quality | ✅ VERIFIED | Proper error handling (404 for not found, 409 for terminal status). Documented known limitation: `Update()` race condition if concurrent Cancel() occurs (acceptable for MVP). |
-| E2 Implementation | ✅ COMPLETE | Created `MockAdapter` struct in `internal/heartbeat/mock_adapter.go` with callback injection. Replaced inline `ErrorAdapter` in `runner_test.go` with reusable `MockAdapter`. Added 4 unit tests (success, error, nil-issue, nil-function panic paths). 17 total heartbeat tests passing. |
-| Schema Sync | ✅ COMPLETE | Added migration `0007_activity_rename_kind_to_type.sql` to rename `actor_kind`/`entity_kind` → `actor_type`/`entity_type` for TS parity. Updated all Go code and tests accordingly. |
-| Design Notes | 📝 Updated | Test infrastructure is cleaner with `MockAdapter`. E1 Cancel() implementation uses atomic conditional UPDATE. Activity schema now matches TS (actorType, entityType). |
+| E1 Implementation | ✅ VERIFIED | `GET /api/heartbeat/runs/{id}` and `POST /api/heartbeat/runs/{id}/cancel` working correctly. Cancel() uses atomic conditional UPDATE. E2E tests comprehensive (get, get-404, cancel-running, cancel-already-finished, cancel-nonexistent). |
+| E1 Design Debt | 📝 DOCUMENTED | **Cancel() race condition**: If concurrent Run() updates run to terminal status while Cancel() is in flight, the UPDATE won't affect any rows, triggering a GetByID() fallback. Safe but has edge case (lines 306-308 comment). **Update() race condition** (lines 237-241): Unconditional UPDATE can overwrite Cancel(). Acceptable for MVP; E2+ should make conditional on `WHERE status='running'`. |
+| E2 Implementation | ✅ VERIFIED | `MockAdapter` callback injection clean; test refactor with `newErrorAdapter()` helper reduces boilerplate. ListByAgent() always returns non-nil slice (empty not null). 17 tests passing. |
+| E2 Code Quality | ✅ VERIFIED | MockAdapter nil-guard with panic is strict but acceptable for tests. Error propagation correct (ErrNotFound vs ErrTerminalStatus properly distinguished). All E2E paths tested. |
+| Schema Sync | ✅ COMPLETE | Upstream migrations 0057-0064 synced. Go code untouched; TS-only features deferred. |
+| Design Notes | 📝 UPDATED | Cancel() edge case at lines 306-308 should log warning in E2+. MockAdapter panic could be optional (no-op if nil) in future. Consider conditional UPDATE in Update() when rate of concurrent Cancel() calls increases. |
 | Next Phase | → E3 | `claude_local` heartbeat adapter: implement Anthropic API integration with mock LLM client for tests |
 
 ---
@@ -34,11 +35,17 @@
 
 ### 🏗️ Design Debt
 
-1. **Activity list pagination missing** — `ListByEntity()` queries all records with no LIMIT; should default to 100-500 with optional `?limit=N` query param. Concern: thousands of activities could cause memory issues.
-2. **documents/workProducts JSON normalization is redundant** — Normalized at Create, Update, and scanIssue layers; consolidate into single helper function.
-3. **SQL column coupling in scanIssue()** — Column list hardcoded across multiple SELECT statements; consider centralizing as constant.
-4. **Archive/unarchive missing activity logging** — No "issue_archived"/"issue_unarchived" events recorded; adds to audit trail debt.
-5. **Tenant isolation at handler level undocumented** — Archive/unarchive handlers lack company verification; depends on auth middleware (acceptable, but should document).
+1. **Heartbeat Cancel/Update race conditions (E1/E2)** — 
+   - `Update()` (runner.go:237-241): Unconditional UPDATE can overwrite concurrent Cancel(). Should be `WHERE status='running'`.
+   - `Cancel()` (runner.go:306-308): Edge case where UPDATE affects 0 rows but GetByID() returns running status (race with concurrent Run()). Currently returns ErrTerminalStatus; could log warning.
+   - **Impact**: Low for MVP; increases with high heartbeat concurrency.
+   - **Fix timeline**: E2+ (post-MVP optimization).
+
+2. **Activity list pagination missing** — `ListByEntity()` queries all records with no LIMIT; should default to 100-500 with optional `?limit=N` query param. Concern: thousands of activities could cause memory issues.
+3. **documents/workProducts JSON normalization is redundant** — Normalized at Create, Update, and scanIssue layers; consolidate into single helper function.
+4. **SQL column coupling in scanIssue()** — Column list hardcoded across multiple SELECT statements; consider centralizing as constant.
+5. **Archive/unarchive missing activity logging** — No "issue_archived"/"issue_unarchived" events recorded; adds to audit trail debt.
+6. **Tenant isolation at handler level undocumented** — Archive/unarchive handlers lack company verification; depends on auth middleware (acceptable, but should document).
 
 ### 🚀 Pre-E2 Improvements (Optional)
 
