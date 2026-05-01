@@ -2444,3 +2444,152 @@ func TestActivityD1E2E(t *testing.T) {
 		t.Errorf("POST /api/activity (invalid meta) status = %d, want 400", respInvalidMeta.StatusCode)
 	}
 }
+
+func TestIssueOriginFingerprintE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Create a company first
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	respCompany.Body.Close()
+	companyID, _ := company["id"].(string)
+
+	// Test 1: Create issue with custom originFingerprint
+	issueBody1, _ := json.Marshal(map[string]any{
+		"companyId":        companyID,
+		"title":            "Issue with fingerprint",
+		"body":             "Test issue with custom fingerprint",
+		"originFingerprint": "custom-fp-123",
+	})
+	resp1, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody1))
+	if err != nil {
+		t.Fatalf("POST /api/issues (with fingerprint): %v", err)
+	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/issues (with fingerprint) status = %d, want 201", resp1.StatusCode)
+	}
+
+	var created1 map[string]any
+	if err := json.NewDecoder(resp1.Body).Decode(&created1); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	issueID1, _ := created1["id"].(string)
+	fp1, _ := created1["originFingerprint"].(string)
+	if fp1 != "custom-fp-123" {
+		t.Errorf("POST /api/issues originFingerprint = %q, want 'custom-fp-123'", fp1)
+	}
+
+	// Test 2: Verify originFingerprint appears in GET response
+	resp2, err := http.Get(srv.URL + "/api/issues/" + issueID1)
+	if err != nil {
+		t.Fatalf("GET /api/issues/%s: %v", issueID1, err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/issues/%s status = %d, want 200", issueID1, resp2.StatusCode)
+	}
+
+	var getResp map[string]any
+	if err := json.NewDecoder(resp2.Body).Decode(&getResp); err != nil {
+		t.Fatalf("decoding GET response: %v", err)
+	}
+	fpFromGet, _ := getResp["originFingerprint"].(string)
+	if fpFromGet != "custom-fp-123" {
+		t.Errorf("GET /api/issues/%s originFingerprint = %q, want 'custom-fp-123'", issueID1, fpFromGet)
+	}
+
+	// Test 3: Create issue without originFingerprint (should default to "default")
+	issueBody2, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Issue without fingerprint",
+		"body":      "Test issue without fingerprint",
+	})
+	resp3, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody2))
+	if err != nil {
+		t.Fatalf("POST /api/issues (no fingerprint): %v", err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/issues (no fingerprint) status = %d, want 201", resp3.StatusCode)
+	}
+
+	var created2 map[string]any
+	if err := json.NewDecoder(resp3.Body).Decode(&created2); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	fp2, _ := created2["originFingerprint"].(string)
+	if fp2 != "default" {
+		t.Errorf("POST /api/issues (no fingerprint) originFingerprint = %q, want 'default'", fp2)
+	}
+
+	// Test 4: Create issue with empty originFingerprint string (should normalize to "default")
+	issueBody3, _ := json.Marshal(map[string]any{
+		"companyId":         companyID,
+		"title":             "Issue with empty fingerprint",
+		"body":              "Test issue with empty fingerprint",
+		"originFingerprint": "",
+	})
+	resp4, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody3))
+	if err != nil {
+		t.Fatalf("POST /api/issues (empty fingerprint): %v", err)
+	}
+	defer resp4.Body.Close()
+	if resp4.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/issues (empty fingerprint) status = %d, want 201", resp4.StatusCode)
+	}
+
+	var created3 map[string]any
+	if err := json.NewDecoder(resp4.Body).Decode(&created3); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	fp3, _ := created3["originFingerprint"].(string)
+	if fp3 != "default" {
+		t.Errorf("POST /api/issues (empty fingerprint) originFingerprint = %q, want 'default'", fp3)
+	}
+
+	// Test 5: Verify originFingerprint appears in list response
+	resp5, err := http.Get(srv.URL + "/api/issues?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/issues (list): %v", err)
+	}
+	defer resp5.Body.Close()
+	if resp5.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/issues (list) status = %d, want 200", resp5.StatusCode)
+	}
+
+	var listResp map[string]any
+	if err := json.NewDecoder(resp5.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decoding list response: %v", err)
+	}
+	items, _ := listResp["items"].([]any)
+	if len(items) < 3 {
+		t.Errorf("GET /api/issues (list) items count = %d, want at least 3", len(items))
+	}
+
+	// Verify the custom fingerprint issue is in the list and has the right value
+	foundCustomFP := false
+	for _, item := range items {
+		if issueMap, ok := item.(map[string]any); ok {
+			if id, ok := issueMap["id"].(string); ok && id == issueID1 {
+				if fp, ok := issueMap["originFingerprint"].(string); ok && fp == "custom-fp-123" {
+					foundCustomFP = true
+				}
+			}
+		}
+	}
+	if !foundCustomFP {
+		t.Errorf("custom originFingerprint not found in list response")
+	}
+}

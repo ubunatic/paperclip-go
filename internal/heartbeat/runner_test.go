@@ -298,7 +298,7 @@ func TestRunnerRunWithIssue(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test issue", "Issue body", "", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test issue", "Issue body", "default", "open", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}

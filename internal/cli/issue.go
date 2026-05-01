@@ -86,7 +86,7 @@ func runIssueCreate(cmd *cobra.Command, args []string) error {
 		assigneeID = &flagIssueAssignee
 	}
 
-	issue, err := svc.Create(ctx, companyID, flagIssueTitle, flagIssueBody, "", assigneeID)
+	issue, err := svc.Create(ctx, companyID, flagIssueTitle, flagIssueBody, "", "", assigneeID)
 	if err != nil {
 		return err
 	}
