@@ -21,10 +21,10 @@ This means:
 
 ## Status (2026-05-01)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5  
-**Next:** F1 — `secrets` (Tier 1 minimum running version)  
-**Build:** ✅ green (all 26 test packages)  
-**Latest migration:** `0009_issue_origin_fingerprint.sql`
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1  
+**Next:** F2 — `instance_settings` (Tier 1 minimum running version)  
+**Build:** ✅ green (all 27 test packages)  
+**Latest migration:** `0010_secrets.sql`
 
 ---
 
@@ -107,7 +107,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | Heartbeat run detail GET + cancel | 2 | ✅ | E1 |
 | `/api/skills` GET | 1 | ✅ | — |
 | Dashboard / sidebar stubs | 4 | ✅ | — |
-| `/api/secrets` CRUD | 8+ | 🔲 | F1 |
+| `/api/secrets` CRUD | 8+ | ✅ | F1 |
 | `/api/instance-settings` CRUD | 5+ | 🔲 | F2 |
 | `/api/approvals` | 10+ | 🔲 | G1 |
 | `/api/routines` CRUD + trigger | 15+ | 🔲 | G2 |
@@ -147,7 +147,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `issues.execution_policy` | ✅ | 🔲 | C2+ |
 | `heartbeat_runs` extended fields | ✅ | ✅ | E4 |
 | `issues.origin_fingerprint` | ✅ | ✅ | E5 |
-| `secrets` table | ✅ | 🔲 | F1 |
+| `secrets` table | ✅ | ✅ | F1 |
 | `instance_settings` table | ✅ | 🔲 | F2 |
 | `approvals` table | ✅ | 🔲 | G1 |
 | `routines` table | ✅ | 🔲 | G2 |
@@ -269,6 +269,10 @@ Tasks:
 - Unit tests: create, list (no values in list), get (value present), update, delete, 404.
 
 Acceptance: `POST /api/secrets` → 201 with value; `GET /api/secrets` → list without values.
+
+**Status: ✅ DONE (2026-05-01)**
+
+Implemented: Migration 0010, domain types (Secret, SecretSummary), service CRUD with error handling, HTTP handlers for all endpoints, 13 unit tests + E2E test, router integration. All tests pass; code review passed cleanly.
 
 #### F2 — Instance settings table + API
 
