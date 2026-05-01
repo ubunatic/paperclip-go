@@ -2593,3 +2593,220 @@ func TestIssueOriginFingerprintE2E(t *testing.T) {
 		t.Errorf("custom originFingerprint not found in list response")
 	}
 }
+
+func TestSecretsE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t) // store managed by t.Cleanup
+
+	// Create company first
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "testcorp",
+		"description": "test company",
+	})
+	resp, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/companies status = %d, want 201", resp.StatusCode)
+	}
+
+	var company map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	companyID := company["id"].(string)
+
+	// Test 1: POST /api/secrets {companyId, name: "DB_URL", value: "postgres://..."} → 201 with value
+	secretBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"name":      "DB_URL",
+		"value":     "postgres://localhost:5432/db",
+	})
+	resp1, err := http.Post(srv.URL+"/api/secrets", "application/json", bytes.NewReader(secretBody))
+	if err != nil {
+		t.Fatalf("POST /api/secrets: %v", err)
+	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != http.StatusCreated {
+		t.Errorf("POST /api/secrets status = %d, want 201", resp1.StatusCode)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp1.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST /api/secrets response: %v", err)
+	}
+	secretID := created["id"].(string)
+	if secretID == "" {
+		t.Errorf("POST /api/secrets response missing id")
+	}
+	if created["name"] != "DB_URL" {
+		t.Errorf("POST /api/secrets name = %v, want 'DB_URL'", created["name"])
+	}
+	if created["value"] != "postgres://localhost:5432/db" {
+		t.Errorf("POST /api/secrets value = %v, want 'postgres://localhost:5432/db'", created["value"])
+	}
+
+	// Test 2: GET /api/secrets?companyId=X → 200, items len == 1, no "value" key in response
+	resp2, err := http.Get(srv.URL + "/api/secrets?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/secrets?companyId=%s: %v", companyID, err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/secrets?companyId=%s status = %d, want 200", companyID, resp2.StatusCode)
+	}
+
+	var listResp map[string]any
+	if err := json.NewDecoder(resp2.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decoding GET /api/secrets response: %v", err)
+	}
+	items := listResp["items"].([]any)
+	if len(items) != 1 {
+		t.Errorf("GET /api/secrets items len = %d, want 1", len(items))
+	}
+
+	// Check that "value" key is not present in the item
+	item := items[0].(map[string]any)
+	if _, ok := item["value"]; ok {
+		t.Errorf("GET /api/secrets list item should not have 'value' key")
+	}
+	if item["name"] != "DB_URL" {
+		t.Errorf("GET /api/secrets list item name = %v, want 'DB_URL'", item["name"])
+	}
+
+	// Test 3: GET /api/secrets/{id} → 200 with value field
+	resp3, err := http.Get(srv.URL + "/api/secrets/" + secretID)
+	if err != nil {
+		t.Fatalf("GET /api/secrets/%s: %v", secretID, err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/secrets/%s status = %d, want 200", secretID, resp3.StatusCode)
+	}
+
+	var getResp map[string]any
+	if err := json.NewDecoder(resp3.Body).Decode(&getResp); err != nil {
+		t.Fatalf("decoding GET /api/secrets/%s response: %v", secretID, err)
+	}
+	if getResp["value"] != "postgres://localhost:5432/db" {
+		t.Errorf("GET /api/secrets/%s value = %v, want 'postgres://localhost:5432/db'", secretID, getResp["value"])
+	}
+
+	// Test 4: PATCH /api/secrets/{id} {name: "DATABASE_URL"} → 200, name updated, value unchanged
+	patchBody, _ := json.Marshal(map[string]string{
+		"name": "DATABASE_URL",
+	})
+	patchReq, _ := http.NewRequest("PATCH", srv.URL+"/api/secrets/"+secretID, bytes.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	resp4, err := http.DefaultClient.Do(patchReq)
+	if err != nil {
+		t.Fatalf("PATCH /api/secrets/%s: %v", secretID, err)
+	}
+	defer resp4.Body.Close()
+	if resp4.StatusCode != http.StatusOK {
+		t.Errorf("PATCH /api/secrets/%s status = %d, want 200", secretID, resp4.StatusCode)
+	}
+
+	var patchResp1 map[string]any
+	if err := json.NewDecoder(resp4.Body).Decode(&patchResp1); err != nil {
+		t.Fatalf("decoding PATCH response: %v", err)
+	}
+	if patchResp1["name"] != "DATABASE_URL" {
+		t.Errorf("PATCH /api/secrets/%s name = %v, want 'DATABASE_URL'", secretID, patchResp1["name"])
+	}
+	if patchResp1["value"] != "postgres://localhost:5432/db" {
+		t.Errorf("PATCH /api/secrets/%s value = %v, want 'postgres://localhost:5432/db'", secretID, patchResp1["value"])
+	}
+
+	// Test 5: PATCH /api/secrets/{id} {value: "new"} → 200, value updated, name unchanged
+	patchBody2, _ := json.Marshal(map[string]string{
+		"value": "new_connection_string",
+	})
+	patchReq2, _ := http.NewRequest("PATCH", srv.URL+"/api/secrets/"+secretID, bytes.NewReader(patchBody2))
+	patchReq2.Header.Set("Content-Type", "application/json")
+	resp5, err := http.DefaultClient.Do(patchReq2)
+	if err != nil {
+		t.Fatalf("PATCH /api/secrets/%s (value): %v", secretID, err)
+	}
+	defer resp5.Body.Close()
+	if resp5.StatusCode != http.StatusOK {
+		t.Errorf("PATCH /api/secrets/%s (value) status = %d, want 200", secretID, resp5.StatusCode)
+	}
+
+	var patchResp2 map[string]any
+	if err := json.NewDecoder(resp5.Body).Decode(&patchResp2); err != nil {
+		t.Fatalf("decoding PATCH response: %v", err)
+	}
+	if patchResp2["name"] != "DATABASE_URL" {
+		t.Errorf("PATCH /api/secrets/%s (value) name = %v, want 'DATABASE_URL'", secretID, patchResp2["name"])
+	}
+	if patchResp2["value"] != "new_connection_string" {
+		t.Errorf("PATCH /api/secrets/%s (value) value = %v, want 'new_connection_string'", secretID, patchResp2["value"])
+	}
+
+	// Test 6: POST duplicate name → 409 duplicate_secret
+	dupBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"name":      "DATABASE_URL",
+		"value":     "another_value",
+	})
+	resp6, err := http.Post(srv.URL+"/api/secrets", "application/json", bytes.NewReader(dupBody))
+	if err != nil {
+		t.Fatalf("POST /api/secrets (duplicate): %v", err)
+	}
+	defer resp6.Body.Close()
+	if resp6.StatusCode != http.StatusConflict {
+		t.Errorf("POST /api/secrets (duplicate) status = %d, want 409", resp6.StatusCode)
+	}
+
+	var dupErr map[string]any
+	if err := json.NewDecoder(resp6.Body).Decode(&dupErr); err == nil {
+		if errObj, ok := dupErr["error"].(map[string]any); ok {
+			if errObj["code"] != "duplicate_secret" {
+				t.Errorf("POST /api/secrets (duplicate) error code = %v, want 'duplicate_secret'", errObj["code"])
+			}
+		}
+	}
+
+	// Test 7: DELETE /api/secrets/{id} → 204
+	delReq, _ := http.NewRequest("DELETE", srv.URL+"/api/secrets/"+secretID, nil)
+	resp7, err := http.DefaultClient.Do(delReq)
+	if err != nil {
+		t.Fatalf("DELETE /api/secrets/%s: %v", secretID, err)
+	}
+	resp7.Body.Close()
+	if resp7.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE /api/secrets/%s status = %d, want 204", secretID, resp7.StatusCode)
+	}
+
+	// Test 8: GET /api/secrets/{id} after delete → 404
+	resp8, err := http.Get(srv.URL + "/api/secrets/" + secretID)
+	if err != nil {
+		t.Fatalf("GET /api/secrets/%s (after delete): %v", secretID, err)
+	}
+	defer resp8.Body.Close()
+	if resp8.StatusCode != http.StatusNotFound {
+		t.Errorf("GET /api/secrets/%s (after delete) status = %d, want 404", secretID, resp8.StatusCode)
+	}
+
+	// Test 9: GET /api/secrets?companyId=X after delete → 200, items len == 0
+	resp9, err := http.Get(srv.URL + "/api/secrets?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/secrets?companyId=%s (after delete): %v", companyID, err)
+	}
+	defer resp9.Body.Close()
+	if resp9.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/secrets?companyId=%s (after delete) status = %d, want 200", companyID, resp9.StatusCode)
+	}
+
+	var listResp2 map[string]any
+	if err := json.NewDecoder(resp9.Body).Decode(&listResp2); err != nil {
+		t.Fatalf("decoding GET /api/secrets response: %v", err)
+	}
+	items2 := listResp2["items"].([]any)
+	if len(items2) != 0 {
+		t.Errorf("GET /api/secrets (after delete) items len = %d, want 0", len(items2))
+	}
+}
