@@ -24,7 +24,7 @@ func TestCreateComment(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Test body", "", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Test body", "default", "open", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestCreateCommentWithAgent(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Test body", "", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Test body", "default", "open", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestListByIssue(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Test body", "", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Test body", "default", "open", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestListByIssueEmpty(t *testing.T) {
 	}
 
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Test body", "", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Test body", "default", "open", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}

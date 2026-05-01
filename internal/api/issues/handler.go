@@ -88,11 +88,12 @@ func create(s *isvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
-			CompanyID  string  `json:"companyId"`
-			Title      string  `json:"title"`
-			Body       string  `json:"body"`
-			Status     string  `json:"status"`
-			AssigneeID *string `json:"assigneeId"`
+			CompanyID         string  `json:"companyId"`
+			Title             string  `json:"title"`
+			Body              string  `json:"body"`
+			Status            string  `json:"status"`
+			OriginFingerprint string  `json:"originFingerprint"`
+			AssigneeID        *string `json:"assigneeId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
@@ -102,7 +103,7 @@ func create(s *isvc.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId and title are required")
 			return
 		}
-		issue, err := s.Create(r.Context(), body.CompanyID, body.Title, body.Body, body.Status, body.AssigneeID)
+		issue, err := s.Create(r.Context(), body.CompanyID, body.Title, body.Body, body.OriginFingerprint, body.Status, body.AssigneeID)
 		if err != nil {
 			if errors.Is(err, isvc.ErrInvalidStatus) {
 				respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "invalid status value")

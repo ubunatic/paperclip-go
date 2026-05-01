@@ -41,7 +41,7 @@ func New(s *store.Store) *Service {
 }
 
 // Create inserts a new issue and returns the created entity.
-func (s *Service) Create(ctx context.Context, companyID, title, body, status string, assigneeID *string) (*domain.Issue, error) {
+func (s *Service) Create(ctx context.Context, companyID, title, body, originFingerprint, status string, assigneeID *string) (*domain.Issue, error) {
 	// Default to "open" if status is empty
 	if status == "" {
 		status = "open"
@@ -52,24 +52,30 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, status str
 		return nil, ErrInvalidStatus
 	}
 
+	// Normalize empty originFingerprint to "default"
+	if originFingerprint == "" {
+		originFingerprint = "default"
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	i := &domain.Issue{
-		ID:           ids.NewUUID(),
-		CompanyID:    companyID,
-		Title:        title,
-		Body:         body,
-		Status:       status,
-		AssigneeID:   assigneeID,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		Documents:    []any{},
-		WorkProducts: []any{},
+		ID:                ids.NewUUID(),
+		CompanyID:         companyID,
+		Title:             title,
+		Body:              body,
+		Status:            status,
+		AssigneeID:        assigneeID,
+		OriginFingerprint: originFingerprint,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+		Documents:         []any{},
+		WorkProducts:      []any{},
 	}
 	_, err := s.store.DB.ExecContext(ctx,
-		`INSERT INTO issues(id, company_id, title, body, status, assignee_id, created_at, updated_at, documents, work_products)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		i.ID, i.CompanyID, i.Title, i.Body, i.Status, i.AssigneeID, ts, ts, "[]", "[]",
+		`INSERT INTO issues(id, company_id, title, body, status, assignee_id, origin_fingerprint, created_at, updated_at, documents, work_products)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		i.ID, i.CompanyID, i.Title, i.Body, i.Status, i.AssigneeID, i.OriginFingerprint, ts, ts, "[]", "[]",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("inserting issue: %w", err)
@@ -80,7 +86,7 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, status str
 // Get returns the issue with the given ID, or ErrNotFound if it doesn't exist.
 func (s *Service) Get(ctx context.Context, id string) (*domain.Issue, error) {
 	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, archived_at, documents, work_products
+		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products
 		 FROM issues WHERE id = ?`, id,
 	)
 	i, err := scanIssue(row)
@@ -93,7 +99,7 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Issue, error) {
 // ListByCompany returns all issues for a given company, ordered by creation time descending.
 // If includeArchived is false, archived issues (archived_at IS NOT NULL) are excluded.
 func (s *Service) ListByCompany(ctx context.Context, companyID string, includeArchived bool) ([]*domain.Issue, error) {
-	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, archived_at, documents, work_products
+	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products
 	          FROM issues WHERE company_id = ?`
 	args := []interface{}{companyID}
 
@@ -126,7 +132,7 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string, includeAr
 // ListWithFilters returns issues for a company with optional status and assignee filters, ordered by creation time descending.
 // If includeArchived is false, archived issues (archived_at IS NOT NULL) are excluded.
 func (s *Service) ListWithFilters(ctx context.Context, companyID, status string, assigneeID *string, includeArchived bool) ([]*domain.Issue, error) {
-	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, created_at, updated_at, archived_at, documents, work_products
+	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products
 	          FROM issues WHERE company_id = ?`
 	args := []interface{}{companyID}
 
@@ -499,7 +505,7 @@ func scanIssue(s scanner) (*domain.Issue, error) {
 	var checkedOutBy, assigneeID, parentIssueID *string
 	var documentsStr, workProductsStr string
 
-	if err := s.Scan(&i.ID, &i.CompanyID, &i.Title, &i.Body, &i.Status, &assigneeID, &checkedOutBy, &checkedOutAt, &parentIssueID, &createdAt, &updatedAt, &archivedAt, &documentsStr, &workProductsStr); err != nil {
+	if err := s.Scan(&i.ID, &i.CompanyID, &i.Title, &i.Body, &i.Status, &assigneeID, &checkedOutBy, &checkedOutAt, &parentIssueID, &i.OriginFingerprint, &createdAt, &updatedAt, &archivedAt, &documentsStr, &workProductsStr); err != nil {
 		return nil, err
 	}
 

@@ -21,10 +21,10 @@ This means:
 
 ## Status (2026-05-01)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E4  
-**Next:** E5 — `issues.origin_fingerprint`  
-**Build:** ✅ green (all 26 test packages, 23 heartbeat tests)  
-**Latest migration:** `0008_heartbeat_runs_ext.sql`
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5  
+**Next:** F1 — `secrets` (Tier 1 minimum running version)  
+**Build:** ✅ green (all 26 test packages)  
+**Latest migration:** `0009_issue_origin_fingerprint.sql`
 
 ---
 
@@ -145,8 +145,8 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `agents.configuration` (YAML/JSON) | ✅ | ✅ | B2 |
 | `agents.runtime_state` | ✅ | ✅ | B1 |
 | `issues.execution_policy` | ✅ | 🔲 | C2+ |
-| `heartbeat_runs` extended fields | ✅ | 🔲 | E4 |
-| `issues.origin_fingerprint` | ✅ | 🔲 | E5 |
+| `heartbeat_runs` extended fields | ✅ | ✅ | E4 |
+| `issues.origin_fingerprint` | ✅ | ✅ | E5 |
 | `secrets` table | ✅ | 🔲 | F1 |
 | `instance_settings` table | ✅ | 🔲 | F2 |
 | `approvals` table | ✅ | 🔲 | G1 |
