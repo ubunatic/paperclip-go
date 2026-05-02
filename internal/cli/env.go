@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -171,7 +171,7 @@ func setViaHTTP(ctx context.Context, client *HTTPClient, companyID, name, value 
 
 	req, err := http.NewRequestWithContext(ctx, "POST",
 		client.BaseURL()+"/api/secrets",
-		strings.NewReader(string(bodyBytes)))
+		bytes.NewReader(bodyBytes))
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}
@@ -274,7 +274,7 @@ func getViaHTTP(ctx context.Context, client *HTTPClient, companyID, name string)
 
 	// Get the full secret with value
 	req2, err := http.NewRequestWithContext(ctx, "GET",
-		client.BaseURL()+"/api/secrets/"+url.QueryEscape(secretID), nil)
+		client.BaseURL()+"/api/secrets/"+url.PathEscape(secretID), nil)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}

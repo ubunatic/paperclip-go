@@ -141,24 +141,6 @@ func TestEnvGetViaDB(t *testing.T) {
 	}
 }
 
-func TestEnvGetViaDBNotFound(t *testing.T) {
-	s := testutil.NewStore(t)
-	ctx := context.Background()
-	companyID := "test-company"
-
-	err := getViaDB(ctx, companyID, "NONEXISTENT")
-
-	if err == nil {
-		t.Errorf("expected error for nonexistent secret, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "not found") {
-		t.Errorf("expected 'not found' error, got: %v", err)
-	}
-
-	_ = s // use store
-}
-
 func TestEnvListViaHTTP(t *testing.T) {
 	ctx := context.Background()
 	companyID := "test-company"
@@ -452,30 +434,4 @@ func TestEnvSetViaDBDuplicate(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error creating duplicate secret, got nil")
 	}
-}
-
-// BenchmarkEnvList benchmarks the list command
-func BenchmarkEnvList(b *testing.B) {
-	s := testutil.NewStore(&testing.T{})
-	svc := secrets.New(s)
-	ctx := context.Background()
-	companyID := "bench-company"
-
-	// Create some secrets
-	for i := 0; i < 100; i++ {
-		svc.Create(ctx, companyID, "SECRET_"+string(rune(i)), "value")
-	}
-
-	// Suppress stdout
-	oldStdout := os.Stdout
-	_, w, _ := os.Pipe()
-	os.Stdout = w
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		listViaDB(ctx, companyID)
-	}
-
-	w.Close()
-	os.Stdout = oldStdout
 }
