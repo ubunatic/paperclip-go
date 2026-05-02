@@ -21,9 +21,9 @@ This means:
 
 ## Status (2026-05-02)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F2  
-**Next:** F3 — `env` CLI subcommand  
-**Build:** ✅ green (all 27+ test packages)  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F3  
+**Next:** F4 — `db:backup` CLI command  
+**Build:** ✅ green (all 27+ test packages, 10 CLI tests)  
 **Latest migration:** `0011_instance_settings.sql`
 
 ---
@@ -288,17 +288,21 @@ Implemented: Migration 0010, domain types (Secret, SecretSummary), service CRUD 
 
 Acceptance: `GET /api/instance-settings` returns `{"deployment_mode":"local_trusted","allowed_origins":"localhost"}`. ✅
 
-#### F3 — `env` CLI subcommand
+#### F3 — `env` CLI subcommand ✅
 
-**Files:** `internal/cli/env.go`
+**Files:** `internal/cli/client.go`, `internal/cli/env.go`, `internal/cli/env_test.go`
 
-Tasks:
-- `paperclip-go env list --company <id>` — calls `GET /api/secrets`, pretty-prints names.
-- `paperclip-go env set KEY VALUE --company <id>` — calls `POST /api/secrets`.
-- `paperclip-go env get KEY --company <id>` — resolves by name, calls `GET /api/secrets/{id}`.
-- Uses `internal/cli/client.go` (remote HTTP) by default; `--db` flag for direct DB access.
+**Completed (2026-05-02):**
+- Migration: None (uses F1 secrets table)
+- HTTP client wrapper: `HTTPClient` with base URL from config, PAPERCLIP_API_URL env override
+- CLI commands: `env list|set|get` with three subcommands
+  - `list --company <id>`: Lists secrets via `GET /api/secrets?companyId=X`, tabwriter output with name and creation date
+  - `set KEY VALUE --company <id>`: Creates secret via `POST /api/secrets`, prints ID and name
+  - `get KEY --company <id>`: Lists all secrets by company, finds by name, fetches full secret via `GET /api/secrets/{id}`, prints value to stdout
+- Fallback behavior: Default HTTP client, auto-fallback to DB on `NewHTTPClient()` failure; optional `--db` flag for explicit DB use
+- Tests: 10 unit tests covering HTTP and DB paths, mock HTTP servers, error cases (duplicates, not found)
 
-Acceptance: `paperclip-go env set FOO bar --company acme` creates secret; `paperclip-go env list` shows `FOO`.
+Acceptance: ✅ `paperclip-go env set FOO bar --company acme` creates secret; `paperclip-go env list --company acme` shows FOO. All tests passing.
 
 #### F4 — `db:backup` CLI command
 
