@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -18,6 +19,7 @@ import (
 	apilabels "github.com/ubunatic/paperclip-go/internal/api/labels"
 	apiskills "github.com/ubunatic/paperclip-go/internal/api/skills"
 	apisecrets "github.com/ubunatic/paperclip-go/internal/api/secrets"
+	apisettings "github.com/ubunatic/paperclip-go/internal/api/settings"
 	apistubs "github.com/ubunatic/paperclip-go/internal/api/stubs"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
@@ -26,6 +28,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/labels"
 	"github.com/ubunatic/paperclip-go/internal/secrets"
+	"github.com/ubunatic/paperclip-go/internal/settings"
 	"github.com/ubunatic/paperclip-go/internal/skills"
 	"github.com/ubunatic/paperclip-go/internal/store"
 	"github.com/ubunatic/paperclip-go/internal/ui"
@@ -47,8 +50,17 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 	commentSvc := comments.New(s)
 	labelSvc := labels.New(s)
 	secretSvc := secrets.New(s)
+	settingSvc := settings.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
 	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
+
+	// Seed instance settings defaults
+	if err := settingSvc.SeedDefaults(context.Background(), map[string]string{
+		"deployment_mode": "local_trusted",
+		"allowed_origins": "localhost",
+	}); err != nil {
+		log.Printf("api: error seeding instance settings defaults: %v", err)
+	}
 
 	// Load skills
 	skillsList, err := skills.Load(skillsDir)
@@ -83,7 +95,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 		r.Get("/sidebar-badges", apistubs.EmptyList())
 		r.Get("/sidebar-preferences", apistubs.EmptyList())
 		r.Get("/inbox-dismissals", apistubs.EmptyList())
-		r.Get("/instance-settings", apistubs.EmptyList())
+		r.Mount("/instance-settings", apisettings.Handler(settingSvc))
 		r.Get("/llms", apistubs.EmptyList())
 		r.Get("/access", apistubs.EmptyList())
 

@@ -2810,3 +2810,81 @@ func TestSecretsE2E(t *testing.T) {
 		t.Errorf("GET /api/secrets (after delete) items len = %d, want 0", len(items2))
 	}
 }
+
+func TestInstanceSettingsE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Test 1: GET /api/instance-settings → 200, flat JSON map, contains defaults
+	resp1, err := http.Get(srv.URL + "/api/instance-settings")
+	if err != nil {
+		t.Fatalf("GET /api/instance-settings: %v", err)
+	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/instance-settings status = %d, want 200", resp1.StatusCode)
+	}
+
+	var settings1 map[string]string
+	if err := json.NewDecoder(resp1.Body).Decode(&settings1); err != nil {
+		t.Fatalf("decoding GET /api/instance-settings response: %v", err)
+	}
+
+	// Verify defaults are present
+	if settings1["deployment_mode"] != "local_trusted" {
+		t.Errorf("deployment_mode = %q, want 'local_trusted'", settings1["deployment_mode"])
+	}
+	if settings1["allowed_origins"] != "localhost" {
+		t.Errorf("allowed_origins = %q, want 'localhost'", settings1["allowed_origins"])
+	}
+
+	// Test 2: PATCH /api/instance-settings → 200, updates persisted
+	patchBody, _ := json.Marshal(map[string]string{
+		"deployment_mode": "cloud",
+	})
+	patchReq, _ := http.NewRequest("PATCH", srv.URL+"/api/instance-settings", bytes.NewReader(patchBody))
+	patchReq.Header.Set("Content-Type", "application/json")
+	resp2, err := http.DefaultClient.Do(patchReq)
+	if err != nil {
+		t.Fatalf("PATCH /api/instance-settings: %v", err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("PATCH /api/instance-settings status = %d, want 200", resp2.StatusCode)
+	}
+
+	var settings2 map[string]string
+	if err := json.NewDecoder(resp2.Body).Decode(&settings2); err != nil {
+		t.Fatalf("decoding PATCH /api/instance-settings response: %v", err)
+	}
+
+	// Verify update reflected in response
+	if settings2["deployment_mode"] != "cloud" {
+		t.Errorf("patched deployment_mode = %q, want 'cloud'", settings2["deployment_mode"])
+	}
+	if settings2["allowed_origins"] != "localhost" {
+		t.Errorf("patched allowed_origins = %q, want 'localhost'", settings2["allowed_origins"])
+	}
+
+	// Test 3: GET /api/instance-settings again → 200, reflects changes
+	resp3, err := http.Get(srv.URL + "/api/instance-settings")
+	if err != nil {
+		t.Fatalf("GET /api/instance-settings (after patch): %v", err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/instance-settings (after patch) status = %d, want 200", resp3.StatusCode)
+	}
+
+	var settings3 map[string]string
+	if err := json.NewDecoder(resp3.Body).Decode(&settings3); err != nil {
+		t.Fatalf("decoding GET /api/instance-settings (after patch) response: %v", err)
+	}
+
+	// Verify persisted change
+	if settings3["deployment_mode"] != "cloud" {
+		t.Errorf("persisted deployment_mode = %q, want 'cloud'", settings3["deployment_mode"])
+	}
+	if settings3["allowed_origins"] != "localhost" {
+		t.Errorf("persisted allowed_origins = %q, want 'localhost'", settings3["allowed_origins"])
+	}
+}
