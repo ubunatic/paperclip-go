@@ -72,6 +72,11 @@ func runEnvList(cmd *cobra.Command, args []string) error {
 		return listViaHTTP(ctx, client, flagEnvCompany)
 	}
 
+	// If context is cancelled, respect it rather than falling back
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	// Fallback to database
 	return listViaDB(ctx, flagEnvCompany)
 }
@@ -145,6 +150,10 @@ func runEnvSet(cmd *cobra.Command, args []string) error {
 
 	client, err := NewHTTPClient()
 	if err != nil {
+		// If context is cancelled, respect it rather than falling back
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		// If HTTP client setup fails, fall back to DB
 		return setViaDB(ctx, flagEnvCompany, name, value)
 	}
@@ -224,6 +233,10 @@ func runEnvGet(cmd *cobra.Command, args []string) error {
 
 	client, err := NewHTTPClient()
 	if err != nil {
+		// If context is cancelled, respect it rather than falling back
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		// If HTTP client setup fails, fall back to DB
 		return getViaDB(ctx, flagEnvCompany, name)
 	}
