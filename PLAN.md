@@ -21,10 +21,10 @@ This means:
 
 ## Status (2026-05-02)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1  
-**Next:** F2 — `instance_settings` (Tier 1 minimum running version)  
-**Build:** ✅ green (all 27 test packages)  
-**Latest migration:** `0010_secrets.sql`
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F2  
+**Next:** F3 — `env` CLI subcommand  
+**Build:** ✅ green (all 27+ test packages)  
+**Latest migration:** `0011_instance_settings.sql`
 
 ---
 
@@ -108,7 +108,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/skills` GET | 1 | ✅ | — |
 | Dashboard / sidebar stubs | 4 | ✅ | — |
 | `/api/secrets` CRUD | 8+ | ✅ | F1 |
-| `/api/instance-settings` CRUD | 5+ | 🔲 | F2 |
+| `/api/instance-settings` CRUD | 5+ | ✅ | F2 |
 | `/api/approvals` | 10+ | 🔲 | G1 |
 | `/api/routines` CRUD + trigger | 15+ | 🔲 | G2 |
 | `/api/issues/{id}/interactions` | 5+ | 🔲 | I1 |
@@ -148,7 +148,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `heartbeat_runs` extended fields | ✅ | ✅ | E4 |
 | `issues.origin_fingerprint` | ✅ | ✅ | E5 |
 | `secrets` table | ✅ | ✅ | F1 |
-| `instance_settings` table | ✅ | 🔲 | F2 |
+| `instance_settings` table | ✅ | ✅ | F2 |
 | `approvals` table | ✅ | 🔲 | G1 |
 | `routines` table | ✅ | 🔲 | G2 |
 | `issue_thread_interactions` table | ✅ | 🔲 | I1 |
@@ -274,18 +274,19 @@ Acceptance: `POST /api/secrets` → 201 with value; `GET /api/secrets` → list 
 
 Implemented: Migration 0010, domain types (Secret, SecretSummary), service CRUD with error handling, HTTP handlers for all endpoints, 13 unit tests + E2E test, router integration. All tests pass; code review passed cleanly.
 
-#### F2 — Instance settings table + API
+#### F2 — Instance settings table + API ✅
 
-**Files:** `internal/store/migrations/0011_instance_settings.sql`, `internal/domain/setting.go`, `internal/settings/service.go`, `internal/api/settings/handler.go`
+**Files:** `internal/store/migrations/0011_instance_settings.sql`, `internal/settings/service.go`, `internal/api/settings/handler.go`
 
-Tasks:
-- Migration: `instance_settings(key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`.
-- `GET /api/instance-settings` → map of all settings.
-- `PATCH /api/instance-settings` → merge-update settings.
-- Seed defaults at startup: `deployment_mode=local_trusted`, `allowed_origins=localhost`.
-- Unit tests: get defaults, patch, get updated.
+**Completed (2026-05-02):**
+- Migration: `instance_settings(key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)` — singleton KV store.
+- Service: `GetAll()`, `Patch()`, `SeedDefaults()` — transactional UPSERT, empty-map return on empty table.
+- HTTP handlers: `GET /api/instance-settings` and `PATCH /api/instance-settings` — flat JSON map response (no wrapper).
+- Startup seeding: `deployment_mode=local_trusted`, `allowed_origins=localhost`.
+- Tests: 6 service tests + 4 handler tests + 1 E2E test; all passing.
+- Code review: Clean, idiomatic Go, no critical issues. (Removed dead domain type post-review.)
 
-Acceptance: `GET /api/instance-settings` returns `{"deployment_mode":"local_trusted",...}`.
+Acceptance: `GET /api/instance-settings` returns `{"deployment_mode":"local_trusted","allowed_origins":"localhost"}`. ✅
 
 #### F3 — `env` CLI subcommand
 
