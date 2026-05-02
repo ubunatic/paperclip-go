@@ -2630,7 +2630,7 @@ func TestSecretsE2E(t *testing.T) {
 	}
 	defer resp1.Body.Close()
 	if resp1.StatusCode != http.StatusCreated {
-		t.Errorf("POST /api/secrets status = %d, want 201", resp1.StatusCode)
+		t.Fatalf("POST /api/secrets status = %d, want 201", resp1.StatusCode)
 	}
 
 	var created map[string]any
@@ -2655,7 +2655,7 @@ func TestSecretsE2E(t *testing.T) {
 	}
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusOK {
-		t.Errorf("GET /api/secrets?companyId=%s status = %d, want 200", companyID, resp2.StatusCode)
+		t.Fatalf("GET /api/secrets?companyId=%s status = %d, want 200", companyID, resp2.StatusCode)
 	}
 
 	var listResp map[string]any
@@ -2683,7 +2683,7 @@ func TestSecretsE2E(t *testing.T) {
 	}
 	defer resp3.Body.Close()
 	if resp3.StatusCode != http.StatusOK {
-		t.Errorf("GET /api/secrets/%s status = %d, want 200", secretID, resp3.StatusCode)
+		t.Fatalf("GET /api/secrets/%s status = %d, want 200", secretID, resp3.StatusCode)
 	}
 
 	var getResp map[string]any
@@ -2706,7 +2706,7 @@ func TestSecretsE2E(t *testing.T) {
 	}
 	defer resp4.Body.Close()
 	if resp4.StatusCode != http.StatusOK {
-		t.Errorf("PATCH /api/secrets/%s status = %d, want 200", secretID, resp4.StatusCode)
+		t.Fatalf("PATCH /api/secrets/%s status = %d, want 200", secretID, resp4.StatusCode)
 	}
 
 	var patchResp1 map[string]any
@@ -2732,7 +2732,7 @@ func TestSecretsE2E(t *testing.T) {
 	}
 	defer resp5.Body.Close()
 	if resp5.StatusCode != http.StatusOK {
-		t.Errorf("PATCH /api/secrets/%s (value) status = %d, want 200", secretID, resp5.StatusCode)
+		t.Fatalf("PATCH /api/secrets/%s (value) status = %d, want 200", secretID, resp5.StatusCode)
 	}
 
 	var patchResp2 map[string]any
@@ -2758,7 +2758,7 @@ func TestSecretsE2E(t *testing.T) {
 	}
 	defer resp6.Body.Close()
 	if resp6.StatusCode != http.StatusConflict {
-		t.Errorf("POST /api/secrets (duplicate) status = %d, want 409", resp6.StatusCode)
+		t.Fatalf("POST /api/secrets (duplicate) status = %d, want 409", resp6.StatusCode)
 	}
 
 	var dupErr map[string]any
@@ -2788,7 +2788,7 @@ func TestSecretsE2E(t *testing.T) {
 	}
 	defer resp8.Body.Close()
 	if resp8.StatusCode != http.StatusNotFound {
-		t.Errorf("GET /api/secrets/%s (after delete) status = %d, want 404", secretID, resp8.StatusCode)
+		t.Fatalf("GET /api/secrets/%s (after delete) status = %d, want 404", secretID, resp8.StatusCode)
 	}
 
 	// Test 9: GET /api/secrets?companyId=X after delete → 200, items len == 0
@@ -2798,7 +2798,7 @@ func TestSecretsE2E(t *testing.T) {
 	}
 	defer resp9.Body.Close()
 	if resp9.StatusCode != http.StatusOK {
-		t.Errorf("GET /api/secrets?companyId=%s (after delete) status = %d, want 200", companyID, resp9.StatusCode)
+		t.Fatalf("GET /api/secrets?companyId=%s (after delete) status = %d, want 200", companyID, resp9.StatusCode)
 	}
 
 	var listResp2 map[string]any

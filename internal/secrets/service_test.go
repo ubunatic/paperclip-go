@@ -345,3 +345,26 @@ func TestDeleteNotFound(t *testing.T) {
 		t.Errorf("deleting nonexistent secret: got %v, want ErrNotFound", err)
 	}
 }
+
+func TestUpdateNoFields(t *testing.T) {
+	s := testutil.NewStore(t)
+	svc := secrets.New(s)
+	companySvc := companies.New(s)
+	ctx := context.Background()
+
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "test company")
+	if err != nil {
+		t.Fatalf("creating company: %v", err)
+	}
+
+	created, err := svc.Create(ctx, company.ID, "API_KEY", "secret123")
+	if err != nil {
+		t.Fatalf("creating secret: %v", err)
+	}
+
+	// Try to update with no fields provided
+	_, err = svc.Update(ctx, created.ID, nil, nil)
+	if err == nil {
+		t.Errorf("updating with no fields: expected error, got nil")
+	}
+}
