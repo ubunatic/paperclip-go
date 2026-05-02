@@ -19,7 +19,7 @@ This means:
 
 ---
 
-## Status (2026-05-01)
+## Status (2026-05-02)
 
 **Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1  
 **Next:** F2 — `instance_settings` (Tier 1 minimum running version)  
