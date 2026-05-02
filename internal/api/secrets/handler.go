@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	secretssvc "github.com/ubunatic/paperclip-go/internal/secrets"
@@ -63,6 +64,11 @@ func create(svc *secretssvc.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId, name, and value are required and must be non-empty")
 			return
 		}
+		// Validate name is not just whitespace
+		if len(strings.TrimSpace(body.Name)) == 0 {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be only whitespace")
+			return
+		}
 
 		secret, err := svc.Create(r.Context(), body.CompanyID, body.Name, body.Value)
 		if err != nil {
@@ -115,6 +121,11 @@ func update(svc *secretssvc.Service) http.HandlerFunc {
 		// Reject empty name
 		if body.Name != nil && *body.Name == "" {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be empty")
+			return
+		}
+		// Reject whitespace-only name
+		if body.Name != nil && len(strings.TrimSpace(*body.Name)) == 0 {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be only whitespace")
 			return
 		}
 		// Reject empty value
