@@ -85,3 +85,8 @@ func (c *Config) Write(path string) error {
 func (c *Config) DBPath() string {
 	return filepath.Join(c.DataDir, "paperclip.db")
 }
+
+// BackupsDir returns the backups directory path derived from DataDir.
+func (c *Config) BackupsDir() string {
+	return filepath.Join(c.DataDir, "backups")
+}

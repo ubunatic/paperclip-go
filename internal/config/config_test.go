@@ -187,3 +187,13 @@ func TestDBPath(t *testing.T) {
 		t.Errorf("expected %s, got %s", expected, cfg.DBPath())
 	}
 }
+
+func TestBackupsDir(t *testing.T) {
+	cfg := &Config{
+		DataDir: "/var/data",
+	}
+	expected := filepath.Join("/var/data", "backups")
+	if cfg.BackupsDir() != expected {
+		t.Errorf("expected %s, got %s", expected, cfg.BackupsDir())
+	}
+}
