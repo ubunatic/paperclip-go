@@ -19,12 +19,16 @@ This means:
 
 ---
 
-## Status (2026-05-02)
+## Status (2026-05-02, post-review)
 
 **Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1  
 **Next:** G2 — Routines table + API + CLI + cron scheduler  
 **Build:** ✅ green (all 28+ test packages, 10+ CLI tests)  
 **Latest migration:** `0012_approvals.sql`
+**Recent fixes (2026-05-02):**
+- **F4 (db:backup):** Fixed SQL injection vulnerability in VACUUM INTO; now validates absolute paths against allowed parent directory, prevents directory traversal
+- **F3 (env CLI):** Added context cancellation checks in HTTP fallback paths; respects user Ctrl+C instead of silently falling back to DB
+- **Tests:** All updates to account for path validation in db:backup (5 tests updated)
 
 ---
 
@@ -292,7 +296,7 @@ Acceptance: `GET /api/instance-settings` returns `{"deployment_mode":"local_trus
 
 **Files:** `internal/cli/client.go`, `internal/cli/env.go`, `internal/cli/env_test.go`
 
-**Completed (2026-05-02):**
+**Completed (2026-05-02, post-review):**
 - Migration: None (uses F1 secrets table)
 - HTTP client wrapper: `HTTPClient` with base URL from config, PAPERCLIP_API_URL env override
 - CLI commands: `env list|set|get` with three subcommands
@@ -300,25 +304,26 @@ Acceptance: `GET /api/instance-settings` returns `{"deployment_mode":"local_trus
   - `set KEY VALUE --company <id>`: Creates secret via `POST /api/secrets`, prints ID and name
   - `get KEY --company <id>`: Lists all secrets by company, finds by name, fetches full secret via `GET /api/secrets/{id}`, prints value to stdout
 - Fallback behavior: Default HTTP client, auto-fallback to DB on `NewHTTPClient()` failure; optional `--db` flag for explicit DB use
+- Context handling: Checks context cancellation before falling back to DB (respects user Ctrl+C)
 - Tests: 10 unit tests covering HTTP and DB paths, mock HTTP servers, error cases (duplicates, not found)
 
-Acceptance: ✅ `paperclip-go env set FOO bar --company acme` creates secret; `paperclip-go env list --company acme` shows FOO. All tests passing.
+Acceptance: ✅ `paperclip-go env set FOO bar --company acme` creates secret; `paperclip-go env list --company acme` shows FOO. All tests passing. Context cancellation respected.
 
 #### F4 — `db:backup` CLI command ✅
 
 **Files:** `internal/cli/dbbackup.go`, `internal/cli/dbbackup_test.go`, `internal/config/config.go` (BackupsDir() method)
 
-**Completed (2026-05-02):**
+**Completed (2026-05-02, post-review):**
 - Migration: None (uses existing store)
 - Command: `db:backup [--out path]` with optional destination flag
 - Default behavior: Creates timestamped backup in `<data_dir>/backups/YYYY-MM-DD_HH-MM-SS.db`
 - Implementation: Uses `VACUUM INTO` for safe online copy with zero reader/writer blocking
-- Security: Path validation (rejects single-quote chars), file permissions 0o600 (owner-only access)
+- Security: Path validation with `filepath.Abs()` + `Clean()` to prevent directory traversal; custom paths restricted to data dir; file permissions 0o600 (owner-only access)
 - Context handling: Proper `cmd.Context()` and `ExecContext` usage
-- Tests: 5 comprehensive unit tests covering default path, custom path, permissions, data integrity, integration
-- Code review: All 8 issues fixed (critical SQL injection, file permissions, test coverage, context handling, etc.)
+- Tests: 5 comprehensive unit tests covering default path, custom path, permissions, data integrity, integration (updated for allowedParent validation)
+- Code review: Initial review + security fixes applied (SQL injection mitigation via strict path validation)
 
-Acceptance: ✅ `paperclip-go db:backup` creates a secure, timestamped `.db` file in backups dir; `paperclip-go db:backup --out /custom/path.db` works correctly.
+Acceptance: ✅ `paperclip-go db:backup` creates a secure, timestamped `.db` file in backups dir; `paperclip-go db:backup --out /custom/path.db` validates path within data directory; directory traversal attempts are rejected.
 
 ---
 
@@ -462,15 +467,20 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 
 ## Quality Debt (post-MVP)
 
-| Item | Severity | Location | Effort |
-|------|----------|----------|--------|
-| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | 20 min |
-| Unbounded `ListByEntity()` pagination | MEDIUM | `internal/activity/log.go` | 15 min |
-| `MaxBytesReader` boilerplate (8 sites) | LOW | `internal/api/*/handler.go` | 20 min |
-| Response wrapping inconsistency | LOW | GET returns `{items}`, POST returns raw object | 30 min |
-| Handler unit tests missing | MEDIUM | agents, issues, companies packages | 1–2 h |
-| Cross-tenant isolation at route level | MEDIUM | DELETE/PATCH/state endpoints | Phase F+ |
-| State machine RBAC | MEDIUM | pause/resume/terminate handlers | Phase F+ |
+| Item | Severity | Location | Status | Effort |
+|------|----------|----------|--------|--------|
+| ✅ SQL injection in db:backup VACUUM INTO | CRITICAL | `internal/cli/dbbackup.go:37` | FIXED | — |
+| ✅ Context cancellation in env CLI | MEDIUM | `internal/cli/env.go:65-233` | FIXED | — |
+| Redundant validation in secrets handler | LOW | `internal/api/secrets/handler.go:31` | Acceptable | <1 min |
+| Inconsistent error handling in env CLI | LOW | `internal/cli/env.go:200+` | Minor | 2 min |
+| HTTP client lifecycle inefficiency | LOW | `internal/cli/env.go` | Minor | 5 min |
+| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | Deferred | 20 min |
+| Unbounded `ListByEntity()` pagination | MEDIUM | `internal/activity/log.go` | Deferred | 15 min |
+| `MaxBytesReader` boilerplate (8 sites) | LOW | `internal/api/*/handler.go` | Deferred | 20 min |
+| Response wrapping inconsistency | LOW | GET returns `{items}`, POST returns raw object | Deferred | 30 min |
+| Handler unit tests missing | MEDIUM | agents, issues, companies packages | Deferred | 1–2 h |
+| Cross-tenant isolation at route level | MEDIUM | DELETE/PATCH/state endpoints | Phase F+ | — |
+| State machine RBAC | MEDIUM | pause/resume/terminate handlers | Phase F+ | — |
 
 ---
 
