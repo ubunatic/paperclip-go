@@ -12,6 +12,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/agents"
 	apiactivity "github.com/ubunatic/paperclip-go/internal/api/activity"
 	apiagents "github.com/ubunatic/paperclip-go/internal/api/agents"
+	apiapprovals "github.com/ubunatic/paperclip-go/internal/api/approvals"
 	apicompanies "github.com/ubunatic/paperclip-go/internal/api/companies"
 	"github.com/ubunatic/paperclip-go/internal/api/health"
 	apiheartbeat "github.com/ubunatic/paperclip-go/internal/api/heartbeat"
@@ -21,6 +22,7 @@ import (
 	apisecrets "github.com/ubunatic/paperclip-go/internal/api/secrets"
 	apisettings "github.com/ubunatic/paperclip-go/internal/api/settings"
 	apistubs "github.com/ubunatic/paperclip-go/internal/api/stubs"
+	"github.com/ubunatic/paperclip-go/internal/approvals"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/domain"
@@ -51,6 +53,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 	labelSvc := labels.New(s)
 	secretSvc := secrets.New(s)
 	settingSvc := settings.New(s)
+	approvalSvc := approvals.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
 	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
 
@@ -82,7 +85,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 		r.Get("/skills", apiskills.Handler(skillsList))
 
 		// Stub endpoints
-		r.Get("/approvals", apistubs.EmptyList())
+		r.Mount("/approvals", apiapprovals.Handler(approvalSvc))
 		r.Get("/costs", apistubs.EmptyList())
 		r.Mount("/secrets", apisecrets.Handler(secretSvc))
 		r.Get("/adapters", apistubs.EmptyList())

@@ -1202,9 +1202,8 @@ func TestIssueArchiveE2E(t *testing.T) {
 func TestStubEndpointsE2E(t *testing.T) {
 	srv, _ := testutil.SpawnTestServer(t)
 
-	// Test each stub endpoint
+	// Test each stub endpoint (excluding /api/approvals which is now a real handler)
 	endpoints := []string{
-		"/api/approvals",
 		"/api/costs",
 		"/api/goals",
 		"/api/projects",
@@ -2886,5 +2885,203 @@ func TestInstanceSettingsE2E(t *testing.T) {
 	}
 	if settings3["allowed_origins"] != "localhost" {
 		t.Errorf("persisted allowed_origins = %q, want 'localhost'", settings3["allowed_origins"])
+	}
+}
+
+func TestApprovalsE2E(t *testing.T) {
+	srv, store := testutil.SpawnTestServer(t)
+
+	// Setup: create company, agent, and issue
+	ctx := context.Background()
+	companyID := uuid.New().String()
+	agentID := uuid.New().String()
+	issueID := uuid.New().String()
+
+	_, err := store.DB.ExecContext(ctx,
+		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		companyID, "Test Company", "test", "Test", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("create company: %v", err)
+	}
+
+	_, err = store.DB.ExecContext(ctx,
+		`INSERT INTO agents(id, company_id, shortname, display_name, role, adapter, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		agentID, companyID, "test-agent", "Test Agent", "test", "stub", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	_, err = store.DB.ExecContext(ctx,
+		`INSERT INTO issues(id, company_id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		issueID, companyID, "Test Issue", "open", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("create issue: %v", err)
+	}
+
+	// Test 1: POST /api/approvals → 201
+	createBody, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"agentId":     agentID,
+		"issueId":     issueID,
+		"kind":        "delete_file",
+		"requestBody": `{"file": "secrets.env"}`,
+	})
+	resp1, err := http.Post(srv.URL+"/api/approvals", "application/json", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("POST /api/approvals: %v", err)
+	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/approvals status = %d, want 201", resp1.StatusCode)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp1.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	approvalID, _ := created["id"].(string)
+	if approvalID == "" {
+		t.Fatalf("expected id in POST response, got %v", created)
+	}
+	if created["status"] != "pending" {
+		t.Errorf("POST status = %q, want 'pending'", created["status"])
+	}
+
+	// Test 2: POST with missing fields → 422
+	badBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"agentId":   agentID,
+		// Missing issueId and kind
+	})
+	resp2, err := http.Post(srv.URL+"/api/approvals", "application/json", bytes.NewReader(badBody))
+	if err != nil {
+		t.Fatalf("POST bad body: %v", err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST bad body status = %d, want 422", resp2.StatusCode)
+	}
+
+	// Test 3: GET /api/approvals?companyId=X → list with 1 item
+	resp3, err := http.Get(srv.URL + "/api/approvals?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/approvals?companyId=%s: %v", companyID, err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/approvals?companyId=%s status = %d, want 200", companyID, resp3.StatusCode)
+	}
+
+	var list map[string]any
+	if err := json.NewDecoder(resp3.Body).Decode(&list); err != nil {
+		t.Fatalf("decoding list response: %v", err)
+	}
+	items, _ := list["items"].([]any)
+	if len(items) != 1 {
+		t.Errorf("list items len = %d, want 1", len(items))
+	}
+
+	// Test 4: GET /api/approvals/{id} → 200
+	resp4, err := http.Get(srv.URL + "/api/approvals/" + approvalID)
+	if err != nil {
+		t.Fatalf("GET /api/approvals/%s: %v", approvalID, err)
+	}
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusOK {
+		t.Errorf("GET by id status = %d, want 200", resp4.StatusCode)
+	}
+
+	// Test 5: GET /api/approvals/nonexistent → 404
+	resp5, err := http.Get(srv.URL + "/api/approvals/nonexistent-id")
+	if err != nil {
+		t.Fatalf("GET nonexistent: %v", err)
+	}
+	resp5.Body.Close()
+	if resp5.StatusCode != http.StatusNotFound {
+		t.Errorf("GET nonexistent status = %d, want 404", resp5.StatusCode)
+	}
+
+	// Test 6: POST /api/approvals/{id}/approve → 200, status changes to approved
+	resp6, err := http.Post(srv.URL+"/api/approvals/"+approvalID+"/approve", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /api/approvals/{id}/approve: %v", err)
+	}
+	defer resp6.Body.Close()
+	if resp6.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/approvals/{id}/approve status = %d, want 200", resp6.StatusCode)
+	}
+
+	var approved map[string]any
+	if err := json.NewDecoder(resp6.Body).Decode(&approved); err != nil {
+		t.Fatalf("decoding approve response: %v", err)
+	}
+	if approved["status"] != "approved" {
+		t.Errorf("approve status = %q, want 'approved'", approved["status"])
+	}
+	if approved["resolvedAt"] == nil {
+		t.Error("expected resolvedAt to be set after approval")
+	}
+
+	// Test 7: POST /api/approvals/{id}/approve again → 409 (already resolved)
+	resp7, err := http.Post(srv.URL+"/api/approvals/"+approvalID+"/approve", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /api/approvals/{id}/approve (double): %v", err)
+	}
+	resp7.Body.Close()
+	if resp7.StatusCode != http.StatusConflict {
+		t.Errorf("POST /api/approvals/{id}/approve (double) status = %d, want 409", resp7.StatusCode)
+	}
+
+	// Test 8: Create another approval and test reject
+	createBody2, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"agentId":   agentID,
+		"issueId":   issueID,
+		"kind":      "delete_all",
+	})
+	resp8, err := http.Post(srv.URL+"/api/approvals", "application/json", bytes.NewReader(createBody2))
+	if err != nil {
+		t.Fatalf("POST /api/approvals (2): %v", err)
+	}
+	defer resp8.Body.Close()
+
+	var created2 map[string]any
+	if err := json.NewDecoder(resp8.Body).Decode(&created2); err != nil {
+		t.Fatalf("decoding POST response (2): %v", err)
+	}
+	approvalID2, _ := created2["id"].(string)
+
+	// Test 9: POST /api/approvals/{id}/reject → 200, status changes to rejected
+	resp9, err := http.Post(srv.URL+"/api/approvals/"+approvalID2+"/reject", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /api/approvals/{id}/reject: %v", err)
+	}
+	defer resp9.Body.Close()
+	if resp9.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/approvals/{id}/reject status = %d, want 200", resp9.StatusCode)
+	}
+
+	var rejected map[string]any
+	if err := json.NewDecoder(resp9.Body).Decode(&rejected); err != nil {
+		t.Fatalf("decoding reject response: %v", err)
+	}
+	if rejected["status"] != "rejected" {
+		t.Errorf("reject status = %q, want 'rejected'", rejected["status"])
+	}
+	if rejected["resolvedAt"] == nil {
+		t.Error("expected resolvedAt to be set after rejection")
+	}
+
+	// Test 10: POST /api/approvals/{id}/reject again → 409 (already resolved)
+	resp10, err := http.Post(srv.URL+"/api/approvals/"+approvalID2+"/reject", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /api/approvals/{id}/reject (double): %v", err)
+	}
+	resp10.Body.Close()
+	if resp10.StatusCode != http.StatusConflict {
+		t.Errorf("POST /api/approvals/{id}/reject (double) status = %d, want 409", resp10.StatusCode)
 	}
 }
