@@ -21,9 +21,9 @@ This means:
 
 ## Status (2026-05-02)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F3  
-**Next:** F4 — `db:backup` CLI command  
-**Build:** ✅ green (all 27+ test packages, 10 CLI tests)  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4  
+**Next:** G1 — Approvals table + API + CLI  
+**Build:** ✅ green (all 27+ test packages, 10+ CLI tests)  
 **Latest migration:** `0011_instance_settings.sql`
 
 ---
@@ -129,8 +129,8 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | heartbeat run | ✅ | ✅ | — |
 | `configure` | ✅ | ✅ | A3 |
 | `onboard` (interactive setup) | ✅ | ✅ | A3 |
-| `env list/set/get` | ✅ | 🔲 | F3 |
-| `db:backup` | ✅ | 🔲 | F4 |
+| `env list/set/get` | ✅ | ✅ | F3 |
+| `db:backup` | ✅ | ✅ | F4 |
 | `approval list/get` | ✅ | 🔲 | G1 |
 | `routine create/list` | ✅ | 🔲 | G2 |
 | `plugin install/list/remove` | ✅ | 🟡 | — (deferred) |
@@ -304,16 +304,21 @@ Acceptance: `GET /api/instance-settings` returns `{"deployment_mode":"local_trus
 
 Acceptance: ✅ `paperclip-go env set FOO bar --company acme` creates secret; `paperclip-go env list --company acme` shows FOO. All tests passing.
 
-#### F4 — `db:backup` CLI command
+#### F4 — `db:backup` CLI command ✅
 
-**Files:** `internal/cli/dbbackup.go`
+**Files:** `internal/cli/dbbackup.go`, `internal/cli/dbbackup_test.go`, `internal/config/config.go` (BackupsDir() method)
 
-Tasks:
-- `paperclip-go db:backup [--out path]` — copies SQLite file to `<data_dir>/backups/YYYY-MM-DD_HH-MM-SS.db`.
-- Uses `VACUUM INTO` SQL for a clean online copy.
-- Prints the backup path on success.
+**Completed (2026-05-02):**
+- Migration: None (uses existing store)
+- Command: `db:backup [--out path]` with optional destination flag
+- Default behavior: Creates timestamped backup in `<data_dir>/backups/YYYY-MM-DD_HH-MM-SS.db`
+- Implementation: Uses `VACUUM INTO` for safe online copy with zero reader/writer blocking
+- Security: Path validation (rejects single-quote chars), file permissions 0o600 (owner-only access)
+- Context handling: Proper `cmd.Context()` and `ExecContext` usage
+- Tests: 5 comprehensive unit tests covering default path, custom path, permissions, data integrity, integration
+- Code review: All 8 issues fixed (critical SQL injection, file permissions, test coverage, context handling, etc.)
 
-Acceptance: `paperclip-go db:backup` creates a `.db` file in the backups dir.
+Acceptance: ✅ `paperclip-go db:backup` creates a secure, timestamped `.db` file in backups dir; `paperclip-go db:backup --out /custom/path.db` works correctly.
 
 ---
 
