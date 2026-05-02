@@ -30,7 +30,7 @@ func TestDBBackupDefaultPath(t *testing.T) {
 	backupPath := filepath.Join(backupsDir, timestamp+".db")
 
 	// Perform backup
-	if err := backupDB(context.Background(), testStore, backupPath); err != nil {
+	if err := backupDB(context.Background(), testStore, backupPath, backupsDir); err != nil {
 		t.Fatalf("backupDB failed: %v", err)
 	}
 
@@ -65,7 +65,7 @@ func TestDBBackupCustomOut(t *testing.T) {
 	customBackupPath := filepath.Join(customBackupDir, "my_backup.db")
 
 	// Run backup with custom output path
-	if err := backupDB(context.Background(), testStore, customBackupPath); err != nil {
+	if err := backupDB(context.Background(), testStore, customBackupPath, tmpDir); err != nil {
 		t.Fatalf("backupDB failed: %v", err)
 	}
 
@@ -96,7 +96,7 @@ func TestDBBackupWritesToExistingDir(t *testing.T) {
 	backupPath := filepath.Join(backupsDir, "test.db")
 
 	// Run backup
-	if err := backupDB(context.Background(), testStore, backupPath); err != nil {
+	if err := backupDB(context.Background(), testStore, backupPath, backupsDir); err != nil {
 		t.Fatalf("backupDB failed: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestDBBackupVACUUMINTO(t *testing.T) {
 	backupPath := filepath.Join(tmpDir, "backup.db")
 
 	// Perform backup using VACUUM INTO
-	if err := backupDB(ctx, s, backupPath); err != nil {
+	if err := backupDB(ctx, s, backupPath, tmpDir); err != nil {
 		t.Fatalf("backupDB failed: %v", err)
 	}
 
@@ -197,7 +197,7 @@ func TestRunDBBackupIntegration(t *testing.T) {
 
 	// Perform the backup
 	ctx := context.Background()
-	if err := backupDB(ctx, s, backupPath); err != nil {
+	if err := backupDB(ctx, s, backupPath, backupsDir); err != nil {
 		t.Fatalf("backupDB failed: %v", err)
 	}
 
