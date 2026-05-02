@@ -21,10 +21,10 @@ This means:
 
 ## Status (2026-05-02)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4  
-**Next:** G1 — Approvals table + API + CLI  
-**Build:** ✅ green (all 27+ test packages, 10+ CLI tests)  
-**Latest migration:** `0011_instance_settings.sql`
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1  
+**Next:** G2 — Routines table + API + CLI + cron scheduler  
+**Build:** ✅ green (all 28+ test packages, 10+ CLI tests)  
+**Latest migration:** `0012_approvals.sql`
 
 ---
 
@@ -109,7 +109,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | Dashboard / sidebar stubs | 4 | ✅ | — |
 | `/api/secrets` CRUD | 8+ | ✅ | F1 |
 | `/api/instance-settings` CRUD | 5+ | ✅ | F2 |
-| `/api/approvals` | 10+ | 🔲 | G1 |
+| `/api/approvals` | 10+ | ✅ | G1 |
 | `/api/routines` CRUD + trigger | 15+ | 🔲 | G2 |
 | `/api/issues/{id}/interactions` | 5+ | 🔲 | I1 |
 | `/api/execution-workspaces` | 20+ | 🔲 | H1 |
@@ -131,7 +131,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `onboard` (interactive setup) | ✅ | ✅ | A3 |
 | `env list/set/get` | ✅ | ✅ | F3 |
 | `db:backup` | ✅ | ✅ | F4 |
-| `approval list/get` | ✅ | 🔲 | G1 |
+| `approval list/get` | ✅ | ✅ | G1 |
 | `routine create/list` | ✅ | 🔲 | G2 |
 | `plugin install/list/remove` | ✅ | 🟡 | — (deferred) |
 
@@ -149,7 +149,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `issues.origin_fingerprint` | ✅ | ✅ | E5 |
 | `secrets` table | ✅ | ✅ | F1 |
 | `instance_settings` table | ✅ | ✅ | F2 |
-| `approvals` table | ✅ | 🔲 | G1 |
+| `approvals` table | ✅ | ✅ | G1 |
 | `routines` table | ✅ | 🔲 | G2 |
 | `issue_thread_interactions` table | ✅ | 🔲 | I1 |
 | `heartbeat_runs.workspace_id` | ✅ | 🔲 | H1 |
@@ -326,18 +326,21 @@ Acceptance: ✅ `paperclip-go db:backup` creates a secure, timestamped `.db` fil
 
 > **Design note (G1):** Upstream TS uses `issue_thread_interactions` as the common substrate for approvals and agent continuation (see I1). Decide before starting G1 whether approvals should be a separate table or a thin layer over `issue_thread_interactions`. The simpler path for MVP is a standalone `approvals` table; refactor to interactions-backed if needed post-I1.
 
-#### G1 — Approvals table + API + CLI
+#### G1 — Approvals table + API + CLI ✅
 
 **Files:** `internal/store/migrations/0012_approvals.sql`, `internal/domain/approval.go`, `internal/approvals/service.go`, `internal/api/approvals/handler.go`, `internal/cli/approval.go`
 
-Tasks:
-- Migration: `approvals(id, company_id, agent_id, issue_id, kind, status [pending|approved|rejected], request_body TEXT, response_body TEXT, created_at, resolved_at)`.
-- `GET /api/approvals?companyId=`, `POST /api/approvals`, `GET /api/approvals/{id}`, `POST /api/approvals/{id}/approve`, `POST /api/approvals/{id}/reject`.
-- CLI: `paperclip-go approval list --company <id>`, `paperclip-go approval get <id>`.
-- Replace the existing `/api/approvals` stub.
-- Unit tests: create, list, approve, reject, 409 on double-resolve.
+**Completed (2026-05-02):**
+- Migration: `approvals(id, company_id, agent_id, issue_id, kind, status [pending|approved|rejected], request_body TEXT, response_body TEXT, created_at, resolved_at)` with efficient indexes
+- Domain: `ApprovalStatus` enum (pending, approved, rejected) and `Approval` struct with all fields
+- Service: CRUD operations (Create, GetByID, ListByCompany), atomic state transitions (Approve, Reject) with 409 conflict on double-resolve
+- HTTP handlers: All 5 endpoints implemented — GET list, POST create, GET detail, POST approve, POST reject
+- CLI: `approval list --company <id>` and `approval get <id>` commands with table/JSON output
+- Router: Replaced stub endpoint with Mount to real handler
+- Tests: 13 unit tests (service) + 10 E2E test cases; all passing; code review findings fixed (error handling, validation consolidation)
+- Code quality: `errors.Is()` for error comparisons, removed redundant constraints, added symmetric test coverage
 
-Acceptance: `POST /api/approvals` → 201; `POST /api/approvals/$ID/approve` → `status: "approved"`.
+Acceptance: ✅ `POST /api/approvals` → 201; `POST /api/approvals/$ID/approve` → `status: "approved"`; `make test` green.
 
 #### G2 — Routines table + API + CLI
 
