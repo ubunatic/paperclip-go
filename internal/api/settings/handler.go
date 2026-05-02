@@ -43,8 +43,6 @@ func patch(svc *settingssvc.Service) http.HandlerFunc {
 
 		var body map[string]string
 		decoder := json.NewDecoder(r.Body)
-		// Require a JSON object (not array, null, string, etc.)
-		decoder.UseNumber() // Avoid unmarshaling numbers as floats
 		if err := decoder.Decode(&body); err != nil {
 			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body or not an object")
 			return
