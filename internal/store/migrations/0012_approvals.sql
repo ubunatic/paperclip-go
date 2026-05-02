@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS approvals (
     response_body   TEXT,
     created_at      TEXT NOT NULL,
     resolved_at     TEXT,
-    UNIQUE(id),
     CHECK (status IN ('pending', 'approved', 'rejected'))
 );
 

@@ -3,6 +3,7 @@ package approvals
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -27,7 +28,7 @@ func Handler(svc *approvals.Service) http.Handler {
 func list(svc *approvals.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		companyID := r.URL.Query().Get("companyId")
-		if companyID == "" || len(strings.TrimSpace(companyID)) == 0 {
+		if strings.TrimSpace(companyID) == "" {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId query parameter is required and must not be blank")
 			return
 		}
@@ -62,26 +63,8 @@ func create(svc *approvals.Service) http.HandlerFunc {
 			return
 		}
 
-		if body.CompanyID == "" || body.AgentID == "" || body.IssueID == "" || body.Kind == "" {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId, agentId, issueId, and kind are required and must be non-empty")
-			return
-		}
-
-		// Validate fields are not just whitespace
-		if len(strings.TrimSpace(body.CompanyID)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId cannot be only whitespace")
-			return
-		}
-		if len(strings.TrimSpace(body.AgentID)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "agentId cannot be only whitespace")
-			return
-		}
-		if len(strings.TrimSpace(body.IssueID)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "issueId cannot be only whitespace")
-			return
-		}
-		if len(strings.TrimSpace(body.Kind)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "kind cannot be only whitespace")
+		if strings.TrimSpace(body.CompanyID) == "" || strings.TrimSpace(body.AgentID) == "" || strings.TrimSpace(body.IssueID) == "" || strings.TrimSpace(body.Kind) == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId, agentId, issueId, and kind are required and must not be blank")
 			return
 		}
 
@@ -99,14 +82,14 @@ func create(svc *approvals.Service) http.HandlerFunc {
 func get(svc *approvals.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		if id == "" || len(strings.TrimSpace(id)) == 0 {
+		if strings.TrimSpace(id) == "" {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "id is required and must not be blank")
 			return
 		}
 
 		approval, err := svc.GetByID(r.Context(), id)
 		if err != nil {
-			if err == approvals.ErrNotFound {
+			if errors.Is(err, approvals.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "approval not found")
 				return
 			}
@@ -122,18 +105,18 @@ func get(svc *approvals.Service) http.HandlerFunc {
 func approve(svc *approvals.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		if id == "" || len(strings.TrimSpace(id)) == 0 {
+		if strings.TrimSpace(id) == "" {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "id is required and must not be blank")
 			return
 		}
 
 		approval, err := svc.Approve(r.Context(), id)
 		if err != nil {
-			if err == approvals.ErrNotFound {
+			if errors.Is(err, approvals.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "approval not found")
 				return
 			}
-			if err == approvals.ErrAlreadyResolved {
+			if errors.Is(err, approvals.ErrAlreadyResolved) {
 				respond.Error(w, http.StatusConflict, "conflict", "approval is already resolved")
 				return
 			}
@@ -149,18 +132,18 @@ func approve(svc *approvals.Service) http.HandlerFunc {
 func reject(svc *approvals.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		if id == "" || len(strings.TrimSpace(id)) == 0 {
+		if strings.TrimSpace(id) == "" {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "id is required and must not be blank")
 			return
 		}
 
 		approval, err := svc.Reject(r.Context(), id)
 		if err != nil {
-			if err == approvals.ErrNotFound {
+			if errors.Is(err, approvals.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "approval not found")
 				return
 			}
-			if err == approvals.ErrAlreadyResolved {
+			if errors.Is(err, approvals.ErrAlreadyResolved) {
 				respond.Error(w, http.StatusConflict, "conflict", "approval is already resolved")
 				return
 			}

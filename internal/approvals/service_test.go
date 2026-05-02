@@ -2,10 +2,12 @@ package approvals_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/ubunatic/paperclip-go/internal/approvals"
 	"github.com/ubunatic/paperclip-go/internal/domain"
+	"github.com/ubunatic/paperclip-go/internal/ids"
 	"github.com/ubunatic/paperclip-go/internal/store"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
@@ -106,7 +108,7 @@ func TestGetByIDNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := svc.GetByID(ctx, "nonexistent-id")
-	if err != approvals.ErrNotFound {
+	if !errors.Is(err, approvals.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -130,22 +132,22 @@ func TestListByCompany(t *testing.T) {
 	}
 
 	// List approvals
-	approvals, err := svc.ListByCompany(ctx, companyID)
+	list, err := svc.ListByCompany(ctx, companyID)
 	if err != nil {
 		t.Fatalf("ListByCompany: %v", err)
 	}
 
-	if len(approvals) != 2 {
-		t.Errorf("expected 2 approvals, got %d", len(approvals))
+	if len(list) != 2 {
+		t.Errorf("expected 2 approvals, got %d", len(list))
 	}
 
 	// Check both approvals are present (order may vary for same-second creation)
 	ids := map[string]bool{
-		approvals[0].ID: true,
-		approvals[1].ID: true,
+		list[0].ID: true,
+		list[1].ID: true,
 	}
 	if !ids[a1.ID] || !ids[a2.ID] {
-		t.Errorf("expected approvals %s and %s, got %s and %s", a1.ID, a2.ID, approvals[0].ID, approvals[1].ID)
+		t.Errorf("expected approvals %s and %s, got %s and %s", a1.ID, a2.ID, list[0].ID, list[1].ID)
 	}
 }
 
@@ -154,13 +156,13 @@ func TestListByCompanyEmpty(t *testing.T) {
 	svc := approvals.New(store)
 	ctx := context.Background()
 
-	approvals, err := svc.ListByCompany(ctx, "nonexistent-company")
+	list, err := svc.ListByCompany(ctx, "nonexistent-company")
 	if err != nil {
 		t.Fatalf("ListByCompany: %v", err)
 	}
 
-	if len(approvals) != 0 {
-		t.Errorf("expected empty list, got %d approvals", len(approvals))
+	if len(list) != 0 {
+		t.Errorf("expected empty list, got %d approvals", len(list))
 	}
 }
 
@@ -236,7 +238,7 @@ func TestDoubleApproveReturnsError(t *testing.T) {
 
 	// Second approve should fail
 	_, err = svc.Approve(ctx, created.ID)
-	if err != approvals.ErrAlreadyResolved {
+	if !errors.Is(err, approvals.ErrAlreadyResolved) {
 		t.Errorf("expected ErrAlreadyResolved, got %v", err)
 	}
 }
@@ -261,7 +263,7 @@ func TestDoubleRejectReturnsError(t *testing.T) {
 
 	// Second reject should fail
 	_, err = svc.Reject(ctx, created.ID)
-	if err != approvals.ErrAlreadyResolved {
+	if !errors.Is(err, approvals.ErrAlreadyResolved) {
 		t.Errorf("expected ErrAlreadyResolved, got %v", err)
 	}
 }
@@ -286,7 +288,7 @@ func TestApproveAfterRejectReturnsError(t *testing.T) {
 
 	// Then try to approve
 	_, err = svc.Approve(ctx, created.ID)
-	if err != approvals.ErrAlreadyResolved {
+	if !errors.Is(err, approvals.ErrAlreadyResolved) {
 		t.Errorf("expected ErrAlreadyResolved, got %v", err)
 	}
 }
@@ -297,7 +299,18 @@ func TestApproveNonexistentReturnsNotFound(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := svc.Approve(ctx, "nonexistent-id")
-	if err != approvals.ErrNotFound {
+	if !errors.Is(err, approvals.ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestRejectNonexistentReturnsNotFound(t *testing.T) {
+	store := testutil.NewStore(t)
+	svc := approvals.New(store)
+	ctx := context.Background()
+
+	_, err := svc.Reject(ctx, "nonexistent-id")
+	if !errors.Is(err, approvals.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -308,7 +321,7 @@ func setupTestData(t *testing.T, s *store.Store) (companyID, agentID, issueID st
 	ctx := context.Background()
 
 	// Create company
-	companyID = "company-test-" + randomID()
+	companyID = "company-test-" + ids.NewUUID()
 	_, err := s.DB.ExecContext(ctx,
 		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		companyID, "Test Company", "test", "Test", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
@@ -318,7 +331,7 @@ func setupTestData(t *testing.T, s *store.Store) (companyID, agentID, issueID st
 	}
 
 	// Create agent
-	agentID = "agent-test-" + randomID()
+	agentID = "agent-test-" + ids.NewUUID()
 	_, err = s.DB.ExecContext(ctx,
 		`INSERT INTO agents(id, company_id, shortname, display_name, role, adapter, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		agentID, companyID, "test-agent", "Test Agent", "test", "stub", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
@@ -328,7 +341,7 @@ func setupTestData(t *testing.T, s *store.Store) (companyID, agentID, issueID st
 	}
 
 	// Create issue
-	issueID = "issue-test-" + randomID()
+	issueID = "issue-test-" + ids.NewUUID()
 	_, err = s.DB.ExecContext(ctx,
 		`INSERT INTO issues(id, company_id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
 		issueID, companyID, "Test Issue", "open", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
@@ -338,20 +351,4 @@ func setupTestData(t *testing.T, s *store.Store) (companyID, agentID, issueID st
 	}
 
 	return companyID, agentID, issueID
-}
-
-// randomID generates a simple random ID for testing.
-func randomID() string {
-	// Use a simple deterministic ID for testing
-	return "id" + randomString()
-}
-
-// randomString generates a simple random string.
-func randomString() string {
-	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
-	result := ""
-	for i := 0; i < 8; i++ {
-		result += string(alphabet[i%len(alphabet)])
-	}
-	return result
 }

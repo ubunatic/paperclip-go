@@ -68,7 +68,7 @@ func (s *Service) GetByID(ctx context.Context, id string) (*domain.Approval, err
 		id,
 	)
 	approval, err := scanApproval(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
@@ -120,7 +120,7 @@ func (s *Service) Reject(ctx context.Context, id string) (*domain.Approval, erro
 }
 
 // setState updates the status of an approval atomically.
-// Returns 409 (conflict) status via ErrAlreadyResolved if already resolved.
+// Returns ErrAlreadyResolved if already resolved.
 func (s *Service) setState(ctx context.Context, id string, newStatus domain.ApprovalStatus) (*domain.Approval, error) {
 	// Validate status
 	if newStatus != domain.ApprovalStatusApproved && newStatus != domain.ApprovalStatusRejected {
@@ -151,7 +151,7 @@ func (s *Service) setState(ctx context.Context, id string, newStatus domain.Appr
 		// Check if it exists at all
 		existing, err := s.GetByID(ctx, id)
 		if err != nil {
-			if err == ErrNotFound {
+			if errors.Is(err, ErrNotFound) {
 				return nil, ErrNotFound
 			}
 			return nil, err
