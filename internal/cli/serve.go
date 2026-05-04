@@ -13,6 +13,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/ubunatic/paperclip-go/internal/api"
 	"github.com/ubunatic/paperclip-go/internal/config"
+	"github.com/ubunatic/paperclip-go/internal/heartbeat"
+	"github.com/ubunatic/paperclip-go/internal/issues"
+	"github.com/ubunatic/paperclip-go/internal/routines"
 )
 
 var serveCmd = &cobra.Command{
@@ -42,6 +45,15 @@ func serveRun() error {
 		Handler: router,
 	}
 
+	// Start the routine scheduler in background
+	routineSvc := routines.New(s)
+	registry := heartbeat.NewDefaultRegistry()
+	heartbeatRunner := heartbeat.New(s, nil, nil, nil, nil, registry) // Minimal init; services not needed for scheduler
+	issueSvc := issues.New(s)
+	scheduler := routines.NewScheduler(routineSvc, heartbeatRunner, issueSvc)
+	schedulerCtx, schedulerCancel := context.WithCancel(context.Background())
+	go scheduler.Start(schedulerCtx)
+
 	done := make(chan error, 1)
 	go func() {
 		fmt.Fprintf(os.Stdout, "server listening on %s\n", cfg.ListenAddr)
@@ -51,6 +63,7 @@ func serveRun() error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
+	defer schedulerCancel() // Stop scheduler on shutdown
 
 	select {
 	case <-sigChan:
