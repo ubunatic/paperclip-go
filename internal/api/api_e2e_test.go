@@ -1202,12 +1202,11 @@ func TestIssueArchiveE2E(t *testing.T) {
 func TestStubEndpointsE2E(t *testing.T) {
 	srv, _ := testutil.SpawnTestServer(t)
 
-	// Test each stub endpoint (excluding /api/approvals which is now a real handler)
+	// Test each stub endpoint (excluding /api/approvals and /api/routines which are now real handlers)
 	endpoints := []string{
 		"/api/costs",
 		"/api/goals",
 		"/api/projects",
-		"/api/routines",
 		"/api/plugins",
 	}
 
@@ -3083,5 +3082,204 @@ func TestApprovalsE2E(t *testing.T) {
 	resp10.Body.Close()
 	if resp10.StatusCode != http.StatusConflict {
 		t.Errorf("POST /api/approvals/{id}/reject (double) status = %d, want 409", resp10.StatusCode)
+	}
+}
+
+func TestRoutinesE2E(t *testing.T) {
+	srv, store := testutil.SpawnTestServer(t)
+
+	// Setup: create company and agent
+	ctx := context.Background()
+	companyID := uuid.New().String()
+	agentID := uuid.New().String()
+
+	_, err := store.DB.ExecContext(ctx,
+		`INSERT INTO companies(id, name, shortname, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		companyID, "Test Company", "test", "Test", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("create company: %v", err)
+	}
+
+	_, err = store.DB.ExecContext(ctx,
+		`INSERT INTO agents(id, company_id, shortname, display_name, role, adapter, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		agentID, companyID, "test-agent", "Test Agent", "test", "stub", "2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	// Test 1: POST /api/routines → 201, id set
+	createBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"agentId":   agentID,
+		"name":      "daily-task",
+		"cronExpr":  "0 9 * * *",
+	})
+	resp1, err := http.Post(srv.URL+"/api/routines", "application/json", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("POST /api/routines: %v", err)
+	}
+	defer resp1.Body.Close()
+	if resp1.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/routines status = %d, want 201", resp1.StatusCode)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp1.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	routineID, _ := created["id"].(string)
+	if routineID == "" {
+		t.Fatalf("expected id in POST response, got %v", created)
+	}
+	if enabled, ok := created["enabled"].(bool); !ok || !enabled {
+		t.Errorf("POST enabled = %v, want true", created["enabled"])
+	}
+
+	// Test 2: GET /api/routines?companyId=X → list with {"items": [...]}
+	resp2, err := http.Get(srv.URL + "/api/routines?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/routines?companyId=%s: %v", companyID, err)
+	}
+	defer resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/routines?companyId=%s status = %d, want 200", companyID, resp2.StatusCode)
+	}
+
+	var list map[string]any
+	if err := json.NewDecoder(resp2.Body).Decode(&list); err != nil {
+		t.Fatalf("decoding list response: %v", err)
+	}
+	items, ok := list["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Errorf("list items len = %d, want 1", len(items))
+	}
+
+	// Test 3: GET /api/routines/{id} → 200
+	resp3, err := http.Get(srv.URL + "/api/routines/" + routineID)
+	if err != nil {
+		t.Fatalf("GET /api/routines/%s: %v", routineID, err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/routines/%s status = %d, want 200", routineID, resp3.StatusCode)
+	}
+
+	var detail map[string]any
+	if err := json.NewDecoder(resp3.Body).Decode(&detail); err != nil {
+		t.Fatalf("decoding detail response: %v", err)
+	}
+	if detail["name"] != "daily-task" {
+		t.Errorf("detail name = %v, want 'daily-task'", detail["name"])
+	}
+
+	// Test 4: PATCH /api/routines/{id} → 200, enabled=false
+	patchBody, _ := json.Marshal(map[string]any{
+		"enabled": false,
+	})
+	req4, _ := http.NewRequest("PATCH", srv.URL+"/api/routines/"+routineID, bytes.NewReader(patchBody))
+	req4.Header.Set("Content-Type", "application/json")
+	resp4, err := http.DefaultClient.Do(req4)
+	if err != nil {
+		t.Fatalf("PATCH /api/routines/%s: %v", routineID, err)
+	}
+	defer resp4.Body.Close()
+	if resp4.StatusCode != http.StatusOK {
+		t.Fatalf("PATCH /api/routines/%s status = %d, want 200", routineID, resp4.StatusCode)
+	}
+
+	var patched map[string]any
+	if err := json.NewDecoder(resp4.Body).Decode(&patched); err != nil {
+		t.Fatalf("decoding PATCH response: %v", err)
+	}
+	if enabled, ok := patched["enabled"].(bool); !ok || enabled {
+		t.Errorf("PATCH enabled = %v, want false", patched["enabled"])
+	}
+
+	// Test 5: GET after patch → enabled=false
+	resp5, err := http.Get(srv.URL + "/api/routines/" + routineID)
+	if err != nil {
+		t.Fatalf("GET /api/routines/%s (after patch): %v", routineID, err)
+	}
+	defer resp5.Body.Close()
+
+	var afterPatch map[string]any
+	if err := json.NewDecoder(resp5.Body).Decode(&afterPatch); err != nil {
+		t.Fatalf("decoding after-patch response: %v", err)
+	}
+	if enabled, ok := afterPatch["enabled"].(bool); !ok || enabled {
+		t.Errorf("after-patch enabled = %v, want false", afterPatch["enabled"])
+	}
+
+	// Test 6: POST /api/routines/{id}/trigger → 200, lastRunAt is set
+	resp6, err := http.Post(srv.URL+"/api/routines/"+routineID+"/trigger", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST /api/routines/%s/trigger: %v", routineID, err)
+	}
+	defer resp6.Body.Close()
+	if resp6.StatusCode != http.StatusOK {
+		t.Fatalf("POST /api/routines/%s/trigger status = %d, want 200", routineID, resp6.StatusCode)
+	}
+
+	var triggered map[string]any
+	if err := json.NewDecoder(resp6.Body).Decode(&triggered); err != nil {
+		t.Fatalf("decoding trigger response: %v", err)
+	}
+	if triggered["lastRunAt"] == nil {
+		t.Error("expected lastRunAt to be set after trigger")
+	}
+
+	// Test 7: POST duplicate name → 409 (before delete, so routine still exists)
+	dupNameBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"agentId":   agentID,
+		"name":      "daily-task",
+		"cronExpr":  "0 10 * * *",
+	})
+	resp7, err := http.Post(srv.URL+"/api/routines", "application/json", bytes.NewReader(dupNameBody))
+	if err != nil {
+		t.Fatalf("POST /api/routines (duplicate): %v", err)
+	}
+	resp7.Body.Close()
+	if resp7.StatusCode != http.StatusConflict {
+		t.Errorf("POST /api/routines (duplicate) status = %d, want 409", resp7.StatusCode)
+	}
+
+	// Test 8: POST with invalid cronExpr → 422
+	badCronBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"agentId":   agentID,
+		"name":      "bad-cron",
+		"cronExpr":  "invalid cron expression",
+	})
+	resp8, err := http.Post(srv.URL+"/api/routines", "application/json", bytes.NewReader(badCronBody))
+	if err != nil {
+		t.Fatalf("POST /api/routines (bad cron): %v", err)
+	}
+	resp8.Body.Close()
+	if resp8.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST /api/routines (bad cron) status = %d, want 422", resp8.StatusCode)
+	}
+
+	// Test 9: DELETE /api/routines/{id} → 204
+	req9, _ := http.NewRequest("DELETE", srv.URL+"/api/routines/"+routineID, nil)
+	resp9, err := http.DefaultClient.Do(req9)
+	if err != nil {
+		t.Fatalf("DELETE /api/routines/%s: %v", routineID, err)
+	}
+	resp9.Body.Close()
+	if resp9.StatusCode != http.StatusNoContent {
+		t.Fatalf("DELETE /api/routines/%s status = %d, want 204", routineID, resp9.StatusCode)
+	}
+
+	// Test 10: GET after delete → 404
+	resp10, err := http.Get(srv.URL + "/api/routines/" + routineID)
+	if err != nil {
+		t.Fatalf("GET /api/routines/%s (after delete): %v", routineID, err)
+	}
+	resp10.Body.Close()
+	if resp10.StatusCode != http.StatusNotFound {
+		t.Fatalf("GET /api/routines/%s (after delete) status = %d, want 404", routineID, resp10.StatusCode)
 	}
 }
