@@ -11,7 +11,10 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/ubunatic/paperclip-go/internal/activity"
+	"github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/api"
+	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/config"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
 	"github.com/ubunatic/paperclip-go/internal/issues"
@@ -46,10 +49,14 @@ func serveRun() error {
 	}
 
 	// Start the routine scheduler in background
+	// Create services needed for scheduler
 	routineSvc := routines.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	heartbeatRunner := heartbeat.New(s, nil, nil, nil, nil, registry) // Minimal init; services not needed for scheduler
+	agentSvc := agents.New(s, activity.New(s))
 	issueSvc := issues.New(s)
+	commentSvc := comments.New(s)
+	actLog := activity.New(s)
+	registry := heartbeat.NewDefaultRegistry()
+	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
 	scheduler := routines.NewScheduler(routineSvc, heartbeatRunner, issueSvc)
 	schedulerCtx, schedulerCancel := context.WithCancel(context.Background())
 	go scheduler.Start(schedulerCtx)
