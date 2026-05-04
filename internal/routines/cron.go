@@ -68,7 +68,7 @@ func matchesField(field string, value, min, max int) bool {
 		if err != nil || n <= 0 {
 			return false
 		}
-		return value%n == 0 || (min > 0 && (value-min)%n == 0)
+		return (value - min) % n == 0
 	}
 
 	// Check for range (n-m)

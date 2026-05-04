@@ -185,11 +185,11 @@ func TestListByCompany(t *testing.T) {
 	}
 
 	// Check both routines are present
-	ids := map[string]bool{
+	seen := map[string]bool{
 		list[0].ID: true,
 		list[1].ID: true,
 	}
-	if !ids[r1.ID] || !ids[r2.ID] {
+	if !seen[r1.ID] || !seen[r2.ID] {
 		t.Errorf("expected routines %s and %s, got %s and %s", r1.ID, r2.ID, list[0].ID, list[1].ID)
 	}
 }
@@ -497,5 +497,88 @@ func TestDisabledRoutineNotDue(t *testing.T) {
 	}
 	if len(due) != 0 {
 		t.Errorf("expected disabled routine to not be due, got %d", len(due))
+	}
+}
+
+func TestDispatchCycle_MultiDay(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companyID, agentID := setupTestData(t, s)
+
+	// Create routine that runs at 09:00 every day
+	time1 := time.Date(2024, 5, 4, 8, 0, 0, 0, time.UTC)
+	svc := routines.NewWithClock(s, func() time.Time { return time1 })
+
+	routine, err := svc.Create(ctx, companyID, agentID, "Daily Task", "0 9 * * *")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	// Day 1, 09:00 - routine should be due
+	day1_0900 := time.Date(2024, 5, 4, 9, 0, 0, 0, time.UTC)
+	svc1 := routines.NewWithClock(s, func() time.Time { return day1_0900 })
+
+	due, err := svc1.DueRoutines(ctx, day1_0900)
+	if err != nil {
+		t.Fatalf("DueRoutines day1: %v", err)
+	}
+	if len(due) != 1 {
+		t.Errorf("expected 1 due routine on day1 at 09:00, got %d", len(due))
+	}
+
+	// Mark as dispatched on day 1
+	marked, err := svc1.MarkDispatched(ctx, routine.ID, "day1-fingerprint", day1_0900)
+	if err != nil {
+		t.Fatalf("MarkDispatched day1: %v", err)
+	}
+	if !marked {
+		t.Error("expected MarkDispatched to succeed on day1")
+	}
+
+	// Verify dispatch_fingerprint was set
+	retrieved, err := svc1.GetByID(ctx, routine.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if retrieved.DispatchFingerprint == nil || *retrieved.DispatchFingerprint != "day1-fingerprint" {
+		t.Errorf("expected dispatch_fingerprint to be set, got %v", retrieved.DispatchFingerprint)
+	}
+
+	// Day 2, 09:00 - clear dispatch_fingerprint first
+	day2_0900 := time.Date(2024, 5, 5, 9, 0, 0, 0, time.UTC)
+	svc2 := routines.NewWithClock(s, func() time.Time { return day2_0900 })
+
+	// Clear the fingerprint to allow the routine to fire again
+	err = svc2.ClearDispatched(ctx, routine.ID)
+	if err != nil {
+		t.Fatalf("ClearDispatched: %v", err)
+	}
+
+	// Day 2, 09:00 - routine should be due again
+	due, err = svc2.DueRoutines(ctx, day2_0900)
+	if err != nil {
+		t.Fatalf("DueRoutines day2: %v", err)
+	}
+	if len(due) != 1 {
+		t.Errorf("expected 1 due routine on day2 at 09:00 after ClearDispatched, got %d", len(due))
+	}
+
+	// Mark as dispatched on day 2
+	marked, err = svc2.MarkDispatched(ctx, routine.ID, "day2-fingerprint", day2_0900)
+	if err != nil {
+		t.Fatalf("MarkDispatched day2: %v", err)
+	}
+	if !marked {
+		t.Error("expected MarkDispatched to succeed on day2")
+	}
+
+	// Verify new dispatch_fingerprint was set
+	retrieved, err = svc2.GetByID(ctx, routine.ID)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if retrieved.DispatchFingerprint == nil || *retrieved.DispatchFingerprint != "day2-fingerprint" {
+		t.Errorf("expected dispatch_fingerprint to be day2-fingerprint, got %v", retrieved.DispatchFingerprint)
 	}
 }

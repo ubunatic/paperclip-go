@@ -126,6 +126,11 @@ type UpdateInput struct {
 
 // Update patches a routine (name, cronExpr, enabled).
 func (s *Service) Update(ctx context.Context, id string, patch UpdateInput) (*domain.Routine, error) {
+	// Guard: if patch is empty, return current routine unchanged
+	if patch.Name == nil && patch.CronExpr == nil && patch.Enabled == nil {
+		return s.GetByID(ctx, id)
+	}
+
 	// Get current routine
 	current, err := s.GetByID(ctx, id)
 	if err != nil {
@@ -214,7 +219,7 @@ func (s *Service) Trigger(ctx context.Context, id string) (*domain.Routine, erro
 	now := s.now()
 	ts := now.Format(time.RFC3339)
 
-	_, err := s.store.DB.ExecContext(ctx,
+	result, err := s.store.DB.ExecContext(ctx,
 		`UPDATE routines SET last_run_at = ?, updated_at = ? WHERE id = ?`,
 		ts, ts, id,
 	)
@@ -222,6 +227,12 @@ func (s *Service) Trigger(ctx context.Context, id string) (*domain.Routine, erro
 		return nil, fmt.Errorf("trigger routine: %w", err)
 	}
 
+	// Check rows affected first
+	if n, _ := result.RowsAffected(); n == 0 {
+		return nil, ErrNotFound
+	}
+
+	// Now fetch the updated routine
 	return s.GetByID(ctx, id)
 }
 
@@ -251,7 +262,7 @@ func (s *Service) DueRoutines(ctx context.Context, now time.Time) ([]*domain.Rou
 		// Check if routine is due
 		due, err := IsDue(r.CronExpr, truncatedNow)
 		if err != nil {
-			// Skip routines with invalid cron expressions
+			// Skip routines with invalid cron expressions (should not happen in production).
 			continue
 		}
 
@@ -289,9 +300,22 @@ func (s *Service) MarkDispatched(ctx context.Context, id, fingerprint string, ru
 	return rowsAffected == 1, nil
 }
 
+// ClearDispatched resets the dispatch fingerprint to allow the routine to fire again.
+func (s *Service) ClearDispatched(ctx context.Context, id string) error {
+	result, err := s.store.DB.ExecContext(ctx,
+		`UPDATE routines SET dispatch_fingerprint = NULL WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // validateCronExpr validates a single routine's cron expression.
 func (s *Service) validateCronExpr(expr string) error {
-	_, err := IsDue(expr, time.Now().UTC())
+	_, err := IsDue(expr, s.now())
 	if err != nil {
 		return ErrInvalidCron
 	}
