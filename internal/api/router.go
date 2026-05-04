@@ -14,6 +14,7 @@ import (
 	apiagents "github.com/ubunatic/paperclip-go/internal/api/agents"
 	apiapprovals "github.com/ubunatic/paperclip-go/internal/api/approvals"
 	apicompanies "github.com/ubunatic/paperclip-go/internal/api/companies"
+	aproutines "github.com/ubunatic/paperclip-go/internal/api/routines"
 	"github.com/ubunatic/paperclip-go/internal/api/health"
 	apiheartbeat "github.com/ubunatic/paperclip-go/internal/api/heartbeat"
 	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
@@ -25,6 +26,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/approvals"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/routines"
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
 	"github.com/ubunatic/paperclip-go/internal/issues"
@@ -93,7 +95,8 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 		r.Get("/dashboard", apistubs.EmptyList())
 		r.Get("/goals", apistubs.EmptyList())
 		r.Get("/projects", apistubs.EmptyList())
-		r.Get("/routines", apistubs.EmptyList())
+		routineSvc := routines.New(s)
+		r.Mount("/routines", aproutines.Handler(routineSvc))
 		r.Get("/plugins", apistubs.EmptyList())
 		r.Get("/sidebar-badges", apistubs.EmptyList())
 		r.Get("/sidebar-preferences", apistubs.EmptyList())
