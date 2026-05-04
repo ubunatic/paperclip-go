@@ -19,16 +19,20 @@ This means:
 
 ---
 
-## Status (2026-05-02, post-review)
+## Status (2026-05-04, G2 complete)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1  
-**Next:** G2 — Routines table + API + CLI + cron scheduler  
-**Build:** ✅ green (all 28+ test packages, 10+ CLI tests)  
-**Latest migration:** `0012_approvals.sql`
-**Recent fixes (2026-05-02):**
-- **F4 (db:backup):** Fixed SQL injection vulnerability in VACUUM INTO; now validates absolute paths against allowed parent directory, prevents directory traversal
-- **F3 (env CLI):** Added context cancellation checks in HTTP fallback paths; respects user Ctrl+C instead of silently falling back to DB
-- **Tests:** All updates to account for path validation in db:backup (5 tests updated)
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2  
+**Next:** H1 — Execution workspaces (deferred) or I1 — Issue thread interactions  
+**Build:** ✅ green (all 30+ test packages, comprehensive E2E coverage)  
+**Latest migration:** `0013_routines.sql`
+**G2 implementation (2026-05-04):**
+- **Migration:** `routines` table with `dispatch_fingerprint` for dedup, `last_run_at` tracking, `enabled` flag, unique constraint on (company_id, name)
+- **Service:** Full CRUD + `DueRoutines()` (cron matching), `MarkDispatched()` (atomic dedup), `ClearDispatched()` (reset for recurring cycles)
+- **Cron parser:** 5-field stdlib-only parser with `IsDue()` and `NextAfter()`, handles `*`, `n`, `n-m`, `*/n`, `n,m,...`, fixed `*/n` logic for min > 0 fields (months, days)
+- **Scheduler:** Background goroutine (60s tick), fires heartbeat.Run() for due routines, uses fingerprints for dedup, proper context cancellation
+- **API handlers:** GET/POST/PATCH/DELETE/trigger endpoints, proper error mapping (404/409/422), E2E test coverage
+- **CLI:** `routine create` and `routine list` commands with flag validation
+- **Tests:** 30+ unit tests (service, cron edge cases, scheduler mocks), 10-step E2E test, all passing
 
 ---
 
