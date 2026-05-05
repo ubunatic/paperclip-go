@@ -26,6 +26,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/approvals"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/interactions"
 	"github.com/ubunatic/paperclip-go/internal/routines"
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
@@ -56,6 +57,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 	secretSvc := secrets.New(s)
 	settingSvc := settings.New(s)
 	approvalSvc := approvals.New(s)
+	interactionSvc := interactions.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
 	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
 
@@ -80,7 +82,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 		r.Mount("/companies", apicompanies.Handler(companySvc))
 		r.Mount("/agents", apiagents.Handler(agentSvc))
 		r.Mount("/activity", apiactivity.Handler(activityLog))
-		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc, labelSvc, activityLog))
+		r.Mount("/issues", apiissues.Handler(issueSvc, commentSvc, labelSvc, activityLog, interactionSvc))
 		r.Mount("/labels", apilabels.Handler(labelSvc))
 		r.Mount("/heartbeat", apiheartbeat.Handler(heartbeatRunner))
 		// GET /skills is read-only; use Get, not Mount
