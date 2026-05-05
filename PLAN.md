@@ -19,12 +19,12 @@ This means:
 
 ---
 
-## Status (2026-05-05, G1–G2 complete with code review & fixes)
+## Status (2026-05-05, I1 complete — agent continuation loop)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2  
-**Next:** I1 — Issue thread interactions (or H1 if workspace isolation needed)  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, I1  
+**Next:** H1 — Execution workspaces (or I2+ if agent loop features needed)  
 **Build:** ✅ green (all 30+ test packages, comprehensive E2E coverage)  
-**Latest migration:** `0013_routines.sql`
+**Latest migration:** `0014_issue_thread_interactions.sql`
 
 **G1 & G2 Code Review Findings (2026-05-05):**
 - ✅ **Fixed issues:**
@@ -44,6 +44,19 @@ This means:
 - **API handlers:** GET/POST/PATCH/DELETE/trigger endpoints, standardized error codes, E2E test coverage
 - **CLI:** `routine create` and `routine list` commands with flag validation
 - **Tests:** 30+ unit tests (service, cron edge cases, scheduler mocks), 10-step E2E test, all passing
+
+#### I1 — `issue_thread_interactions` table + API ✅
+
+**Files:** `internal/store/migrations/0014_issue_thread_interactions.sql`, `internal/domain/interaction.go`, `internal/interactions/service.go`, `internal/api/issues/handler.go`, `internal/api/router.go`, `internal/api/api_e2e_test.go`
+
+**Completed (2026-05-05):**
+- Migration: `issue_thread_interactions(id, company_id, issue_id, agent_id, comment_id, run_id, kind, status, idempotency_key, result, resolved_at, resolved_by_agent_id, created_at, updated_at)` with UNIQUE(issue_id, idempotency_key) for dedup
+- Domain: `InteractionStatus` enum (pending, resolved) and `Interaction` struct with all 12 fields
+- Service: Create (with idempotency dedup), GetByID, GetByIdempotencyKey, ListByIssue, Resolve (atomic UPDATE with conflict detection)
+- HTTP handlers: 3 routes integrated into issues handler — GET/POST /api/issues/{id}/interactions, POST /api/issues/{id}/interactions/{iid}/resolve
+- Router: `interactionSvc` instantiated and wired to issues.Handler()
+- Tests: 13 unit tests (service) + comprehensive E2E test (7 cases); all passing
+- Acceptance: ✅ Agent can post an interaction on an issue and resolve it atomically; idempotency keys prevent duplicate requests.
 
 ---
 
@@ -130,7 +143,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/instance-settings` CRUD | 5+ | ✅ | F2 |
 | `/api/approvals` | 10+ | ✅ | G1 |
 | `/api/routines` CRUD + trigger | 15+ | 🔲 | G2 |
-| `/api/issues/{id}/interactions` | 5+ | 🔲 | I1 |
+| `/api/issues/{id}/interactions` | 5+ | ✅ | I1 |
 | `/api/execution-workspaces` | 20+ | 🔲 | H1 |
 | `/api/costs` | 20+ | 🟡 | — (deferred) |
 | `/api/goals` | 6 | 🟡 | — (deferred) |
@@ -170,7 +183,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `instance_settings` table | ✅ | ✅ | F2 |
 | `approvals` table | ✅ | ✅ | G1 |
 | `routines` table | ✅ | 🔲 | G2 |
-| `issue_thread_interactions` table | ✅ | 🔲 | I1 |
+| `issue_thread_interactions` table | ✅ | ✅ | I1 |
 | `heartbeat_runs.workspace_id` | ✅ | 🔲 | H1 |
 | `execution_workspaces` table | ✅ | 🔲 | H1 |
 | WebSocket live events | ✅ | 🔲 | H2 |
