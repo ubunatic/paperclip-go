@@ -228,7 +228,9 @@ func (s *Service) Trigger(ctx context.Context, id string) (*domain.Routine, erro
 	}
 
 	// Check rows affected first
-	if n, _ := result.RowsAffected(); n == 0 {
+	if n, err := result.RowsAffected(); err != nil {
+		return nil, fmt.Errorf("rows affected: %w", err)
+	} else if n == 0 {
 		return nil, ErrNotFound
 	}
 
@@ -307,7 +309,9 @@ func (s *Service) ClearDispatched(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if n, _ := result.RowsAffected(); n == 0 {
+	if n, err := result.RowsAffected(); err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	} else if n == 0 {
 		return ErrNotFound
 	}
 	return nil
