@@ -19,18 +19,29 @@ This means:
 
 ---
 
-## Status (2026-05-04, G2 complete)
+## Status (2026-05-05, G1–G2 complete with code review & fixes)
 
 **Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2  
-**Next:** H1 — Execution workspaces (deferred) or I1 — Issue thread interactions  
+**Next:** I1 — Issue thread interactions (or H1 if workspace isolation needed)  
 **Build:** ✅ green (all 30+ test packages, comprehensive E2E coverage)  
 **Latest migration:** `0013_routines.sql`
+
+**G1 & G2 Code Review Findings (2026-05-05):**
+- ✅ **Fixed issues:**
+  - `RowsAffected()` error handling: Now explicitly checks for DB driver errors in `Trigger()` and `ClearDispatched()` (was silently ignoring errors).
+  - HTTP status codes: Standardized on `StatusUnprocessableEntity` (422) for all validation errors (list/create required-field validation). Was inconsistent (400 vs 422).
+- 🏗️ **Design debt (defer to post-MVP):**
+  - `DispatchFingerprint` exposed in JSON responses: Verify with TS API if this is client-facing or should be omitted (likely internal-only implementation detail).
+  - API path parity deviation: Go uses query params (`?companyId=X`), TS uses path params (`/companies/{id}/routines`). This is acceptable for Go simplification but should be documented.
+- 🚀 **Test coverage gap:**
+  - Handler unit tests missing for approvals & routines packages (only E2E coverage exists; handler edge cases like concurrent requests untested).
+
 **G2 implementation (2026-05-04):**
 - **Migration:** `routines` table with `dispatch_fingerprint` for dedup, `last_run_at` tracking, `enabled` flag, unique constraint on (company_id, name)
 - **Service:** Full CRUD + `DueRoutines()` (cron matching), `MarkDispatched()` (atomic dedup), `ClearDispatched()` (reset for recurring cycles)
 - **Cron parser:** 5-field stdlib-only parser with `IsDue()` and `NextAfter()`, handles `*`, `n`, `n-m`, `*/n`, `n,m,...`, fixed `*/n` logic for min > 0 fields (months, days)
 - **Scheduler:** Background goroutine (60s tick), fires heartbeat.Run() for due routines, uses fingerprints for dedup, proper context cancellation
-- **API handlers:** GET/POST/PATCH/DELETE/trigger endpoints, proper error mapping (404/409/422), E2E test coverage
+- **API handlers:** GET/POST/PATCH/DELETE/trigger endpoints, standardized error codes, E2E test coverage
 - **CLI:** `routine create` and `routine list` commands with flag validation
 - **Tests:** 30+ unit tests (service, cron edge cases, scheduler mocks), 10-step E2E test, all passing
 
@@ -475,6 +486,10 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 |------|----------|----------|--------|--------|
 | ✅ SQL injection in db:backup VACUUM INTO | CRITICAL | `internal/cli/dbbackup.go:37` | FIXED | — |
 | ✅ Context cancellation in env CLI | MEDIUM | `internal/cli/env.go:65-233` | FIXED | — |
+| ✅ RowsAffected() error handling in routines | MEDIUM | `internal/routines/service.go:231,310` | FIXED (2026-05-05) | — |
+| ✅ HTTP status code consistency (G1/G2) | LOW | `internal/api/routines,approvals/handler.go` | FIXED (2026-05-05) | — |
+| DispatchFingerprint exposure in API | LOW | `internal/domain/routine.go:15` | Review needed | <5 min |
+| Handler unit tests missing (G1/G2) | MEDIUM | `internal/api/approvals,routines/` | Deferred | 1–2 h |
 | Redundant validation in secrets handler | LOW | `internal/api/secrets/handler.go:31` | Acceptable | <1 min |
 | Inconsistent error handling in env CLI | LOW | `internal/cli/env.go:200+` | Minor | 2 min |
 | HTTP client lifecycle inefficiency | LOW | `internal/cli/env.go` | Minor | 5 min |

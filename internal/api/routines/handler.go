@@ -30,7 +30,7 @@ func list(svc *routines.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		companyID := r.URL.Query().Get("companyId")
 		if strings.TrimSpace(companyID) == "" {
-			respond.Error(w, http.StatusBadRequest, "validation_error", "companyId query parameter is required")
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId query parameter is required")
 			return
 		}
 
@@ -65,7 +65,7 @@ func create(svc *routines.Service) http.HandlerFunc {
 
 		if strings.TrimSpace(body.CompanyID) == "" || strings.TrimSpace(body.AgentID) == "" ||
 			strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.CronExpr) == "" {
-			respond.Error(w, http.StatusBadRequest, "validation_error",
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error",
 				"companyId, agentId, name, and cronExpr are required and must not be blank")
 			return
 		}
