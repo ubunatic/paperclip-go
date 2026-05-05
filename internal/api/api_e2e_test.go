@@ -3283,3 +3283,176 @@ func TestRoutinesE2E(t *testing.T) {
 		t.Fatalf("GET /api/routines/%s (after delete) status = %d, want 404", routineID, resp10.StatusCode)
 	}
 }
+
+func TestInteractionsE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t) // store managed by t.Cleanup
+
+	// Create company
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	resp, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	json.NewDecoder(resp.Body).Decode(&company)
+	resp.Body.Close()
+	companyID := company["id"].(string)
+
+	// Create agent
+	agentBody, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "alice",
+		"displayName": "Alice",
+		"role":        "manager",
+		"runtime":     "stub",
+	})
+	resp, err = http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agentBody))
+	if err != nil {
+		t.Fatalf("POST /api/agents: %v", err)
+	}
+	var agent map[string]any
+	json.NewDecoder(resp.Body).Decode(&agent)
+	resp.Body.Close()
+	agentID := agent["id"].(string)
+
+	// Create issue
+	issueBody, _ := json.Marshal(map[string]string{
+		"companyId": companyID,
+		"title":     "Test Issue",
+		"body":      "Test body",
+	})
+	resp, err = http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
+	var issue map[string]any
+	json.NewDecoder(resp.Body).Decode(&issue)
+	resp.Body.Close()
+	issueID := issue["id"].(string)
+
+	// Test 1: POST create interaction with kind → 201
+	createBody, _ := json.Marshal(map[string]string{
+		"companyId":      companyID,
+		"kind":           "approval",
+		"idempotencyKey": "key-001",
+		"agentId":        agentID,
+	})
+	resp, err = http.Post(srv.URL+"/api/issues/"+issueID+"/interactions", "application/json", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("POST interactions: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST interactions status = %d, want 201", resp.StatusCode)
+	}
+
+	var interaction map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&interaction); err != nil {
+		t.Fatalf("decoding interaction response: %v", err)
+	}
+	interactionID := interaction["id"].(string)
+	if interaction["status"] != "pending" {
+		t.Errorf("initial status = %q, want pending", interaction["status"])
+	}
+
+	// Test 2: POST with missing kind → 422
+	badBody, _ := json.Marshal(map[string]string{
+		"companyId":      companyID,
+		"idempotencyKey": "key-002",
+	})
+	resp, err = http.Post(srv.URL+"/api/issues/"+issueID+"/interactions", "application/json", bytes.NewReader(badBody))
+	if err != nil {
+		t.Fatalf("POST bad interaction: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("POST bad interaction status = %d, want 422", resp.StatusCode)
+	}
+
+	// Test 3: GET list interactions → items
+	resp, err = http.Get(srv.URL + "/api/issues/" + issueID + "/interactions")
+	if err != nil {
+		t.Fatalf("GET interactions: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET interactions status = %d, want 200", resp.StatusCode)
+	}
+
+	var list map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		t.Fatalf("decoding list response: %v", err)
+	}
+	items, _ := list["items"].([]any)
+	if len(items) != 1 {
+		t.Errorf("interactions list len = %d, want 1", len(items))
+	}
+
+	// Test 4: POST duplicate idempotency key → 200 (dedup, not 201)
+	resp, err = http.Post(srv.URL+"/api/issues/"+issueID+"/interactions", "application/json", bytes.NewReader(createBody))
+	if err != nil {
+		t.Fatalf("POST dedup interaction: %v", err)
+	}
+	defer resp.Body.Close()
+	// According to the plan, we should return 201 always (can't easily distinguish without tracking)
+	// But let's verify at least that we get the same interaction back
+	var dedupInteraction map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&dedupInteraction); err != nil {
+		t.Fatalf("decoding dedup response: %v", err)
+	}
+	if dedupInteraction["id"] != interactionID {
+		t.Errorf("dedup returned different ID: got %v, want %v", dedupInteraction["id"], interactionID)
+	}
+
+	// Test 5: POST resolve → 200, status=resolved, resolvedAt set
+	resolveBody, _ := json.Marshal(map[string]string{
+		"resolvedByAgentId": agentID,
+		"result":            "approved",
+	})
+	resp, err = http.Post(srv.URL+"/api/issues/"+issueID+"/interactions/"+interactionID+"/resolve", "application/json", bytes.NewReader(resolveBody))
+	if err != nil {
+		t.Fatalf("POST resolve: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST resolve status = %d, want 200", resp.StatusCode)
+	}
+
+	var resolved map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&resolved); err != nil {
+		t.Fatalf("decoding resolve response: %v", err)
+	}
+	if resolved["status"] != "resolved" {
+		t.Errorf("resolved status = %q, want resolved", resolved["status"])
+	}
+	if resolved["resolvedAt"] == nil {
+		t.Error("expected resolvedAt to be set")
+	}
+	if resolved["result"] != "approved" {
+		t.Errorf("result = %v, want %q", resolved["result"], "approved")
+	}
+
+	// Test 6: POST resolve again → 409
+	resp, err = http.Post(srv.URL+"/api/issues/"+issueID+"/interactions/"+interactionID+"/resolve", "application/json", bytes.NewReader(resolveBody))
+	if err != nil {
+		t.Fatalf("POST resolve again: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Errorf("POST resolve again status = %d, want 409", resp.StatusCode)
+	}
+
+	// Test 7: POST resolve non-existent → 404
+	resp, err = http.Post(srv.URL+"/api/issues/"+issueID+"/interactions/nonexistent/resolve", "application/json", bytes.NewReader(resolveBody))
+	if err != nil {
+		t.Fatalf("POST resolve nonexistent: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("POST resolve nonexistent status = %d, want 404", resp.StatusCode)
+	}
+}

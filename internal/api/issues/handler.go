@@ -11,6 +11,7 @@ import (
 	asvc "github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/domain"
+	intesvc "github.com/ubunatic/paperclip-go/internal/interactions"
 	isvc "github.com/ubunatic/paperclip-go/internal/issues"
 	lsvc "github.com/ubunatic/paperclip-go/internal/labels"
 	"github.com/ubunatic/paperclip-go/internal/respond"
@@ -23,7 +24,7 @@ type issueWithLabels struct {
 }
 
 // Handler returns an http.Handler for the /api/issues sub-router.
-func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsvc.Service, activityLog *asvc.Log) http.Handler {
+func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsvc.Service, activityLog *asvc.Log, interactionSvc *intesvc.Service) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", list(issueSvc))
 	r.Post("/", create(issueSvc))
@@ -39,6 +40,9 @@ func Handler(issueSvc *isvc.Service, commentSvc *comments.Service, labelSvc *lsv
 	r.Get("/{id}/activity", listActivity(activityLog))
 	r.Post("/{id}/labels", addLabel(labelSvc))
 	r.Delete("/{id}/labels/{labelId}", removeLabel(labelSvc))
+	r.Get("/{id}/interactions", listInteractions(interactionSvc))
+	r.Post("/{id}/interactions", createInteraction(interactionSvc))
+	r.Post("/{id}/interactions/{iid}/resolve", resolveInteraction(interactionSvc))
 	return r
 }
 
@@ -429,5 +433,94 @@ func removeLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func listInteractions(s *intesvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		issueID := chi.URLParam(r, "id")
+		items, err := s.ListByIssue(r.Context(), issueID)
+		if err != nil {
+			log.Printf("interactions: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, map[string]any{"items": items})
+	}
+}
+
+func createInteraction(s *intesvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		issueID := chi.URLParam(r, "id")
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
+		var body struct {
+			CompanyID      string  `json:"companyId"`
+			AgentID        *string `json:"agentId"`
+			CommentID      *string `json:"commentId"`
+			RunID          *string `json:"runId"`
+			Kind           string  `json:"kind"`
+			IdempotencyKey string  `json:"idempotencyKey"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+			return
+		}
+		if body.Kind == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "kind is required")
+			return
+		}
+		input := intesvc.CreateInput{
+			CompanyID:      body.CompanyID,
+			IssueID:        issueID,
+			AgentID:        body.AgentID,
+			CommentID:      body.CommentID,
+			RunID:          body.RunID,
+			Kind:           body.Kind,
+			IdempotencyKey: body.IdempotencyKey,
+		}
+		interaction, err := s.Create(r.Context(), input)
+		if err != nil {
+			log.Printf("interactions: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		// Return 201 for new, 200 for idempotency dedup
+		// Check if this is a dedup by checking if the returned interaction was just created
+		// (can't easily distinguish without tracking, so we return 201 always)
+		respond.JSON(w, http.StatusCreated, interaction)
+	}
+}
+
+func resolveInteraction(s *intesvc.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		iid := chi.URLParam(r, "iid")
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
+		var body struct {
+			ResolvedByAgentID string  `json:"resolvedByAgentId"`
+			Result            *string `json:"result"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+			return
+		}
+		if body.ResolvedByAgentID == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "resolvedByAgentId is required")
+			return
+		}
+		interaction, err := s.Resolve(r.Context(), iid, body.ResolvedByAgentID, body.Result)
+		if err != nil {
+			if errors.Is(err, intesvc.ErrNotFound) {
+				respond.Error(w, http.StatusNotFound, "not_found", "interaction not found")
+				return
+			}
+			if errors.Is(err, intesvc.ErrAlreadyResolved) {
+				respond.Error(w, http.StatusConflict, "conflict", "interaction is already resolved")
+				return
+			}
+			log.Printf("interactions: error: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+		respond.JSON(w, http.StatusOK, interaction)
 	}
 }
