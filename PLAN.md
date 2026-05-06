@@ -19,12 +19,24 @@ This means:
 
 ---
 
-## Status (2026-05-05, I1 complete — agent continuation loop)
+## Status (2026-05-06, H1 complete — execution workspaces)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, I1  
-**Next:** H1 — Execution workspaces (or I2+ if agent loop features needed)  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1, I1  
+**Next:** H2 — WebSocket live events (Tier 4, deferred) or community features  
 **Build:** ✅ green (all 30+ test packages, comprehensive E2E coverage)  
-**Latest migration:** `0014_issue_thread_interactions.sql`
+**Latest migration:** `0015_workspaces.sql`
+
+**H1 Code Review Findings (2026-05-06):**
+- ✅ **Fixed issues:**
+  - Missing `CHECK (status IN (...))` constraint in migration: Added to ensure invalid statuses cannot persist
+  - Service instantiation pattern: Moved `workspaceSvc` and `routineSvc` from route closure to services block for consistency with all other services
+  - Status validation gap: Added `IsValidWorkspaceStatus()` checks in both handler and service (defense-in-depth)
+  - Misleading test name: Renamed `TestFKConstraints` to `TestCreateWithIssueID` to reflect actual test behavior
+  - Variable shadowing: Fixed `ids` variable shadowing package import in `TestListByCompany`
+- 💡 **Minor notes:**
+  - Added explanatory comment to `Run()` method explaining why `workspace_id` is not set at creation time
+  - Implemented `ListByCompany` returning empty slice instead of nil for consistency
+  - All E2E tests cover happy path (create, retrieve, list, delete with proper status assertions)
 
 **G1 & G2 Code Review Findings (2026-05-05):**
 - ✅ **Fixed issues:**
@@ -142,9 +154,9 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/secrets` CRUD | 8+ | ✅ | F1 |
 | `/api/instance-settings` CRUD | 5+ | ✅ | F2 |
 | `/api/approvals` | 10+ | ✅ | G1 |
-| `/api/routines` CRUD + trigger | 15+ | 🔲 | G2 |
+| `/api/routines` CRUD + trigger | 15+ | ✅ | G2 |
 | `/api/issues/{id}/interactions` | 5+ | ✅ | I1 |
-| `/api/execution-workspaces` | 20+ | 🔲 | H1 |
+| `/api/execution-workspaces` | 20+ | ✅ | H1 |
 | `/api/costs` | 20+ | 🟡 | — (deferred) |
 | `/api/goals` | 6 | 🟡 | — (deferred) |
 | `/api/projects` | 25+ | 🟡 | — (deferred) |
@@ -182,10 +194,10 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `secrets` table | ✅ | ✅ | F1 |
 | `instance_settings` table | ✅ | ✅ | F2 |
 | `approvals` table | ✅ | ✅ | G1 |
-| `routines` table | ✅ | 🔲 | G2 |
+| `routines` table | ✅ | ✅ | G2 |
 | `issue_thread_interactions` table | ✅ | ✅ | I1 |
-| `heartbeat_runs.workspace_id` | ✅ | 🔲 | H1 |
-| `execution_workspaces` table | ✅ | 🔲 | H1 |
+| `heartbeat_runs.workspace_id` | ✅ | ✅ | H1 |
+| `execution_workspaces` table | ✅ | ✅ | H1 |
 | WebSocket live events | ✅ | 🔲 | H2 |
 | `goals` / `projects` tables | ✅ | 🟡 | — (deferred) |
 | Authentication (BetterAuth / RBAC) | ✅ | ❌ | — (deferred) |
