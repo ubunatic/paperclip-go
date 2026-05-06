@@ -19,6 +19,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/api/health"
 	apiheartbeat "github.com/ubunatic/paperclip-go/internal/api/heartbeat"
 	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
+	apiws "github.com/ubunatic/paperclip-go/internal/api/ws"
 	apilabels "github.com/ubunatic/paperclip-go/internal/api/labels"
 	apiskills "github.com/ubunatic/paperclip-go/internal/api/skills"
 	apisecrets "github.com/ubunatic/paperclip-go/internal/api/secrets"
@@ -97,6 +98,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string, b
 		r.Mount("/heartbeat", apiheartbeat.Handler(heartbeatRunner))
 		// GET /skills is read-only; use Get, not Mount
 		r.Get("/skills", apiskills.Handler(skillsList))
+		r.Get("/ws", apiws.Handler(bus))
 
 		// Stub endpoints
 		r.Mount("/approvals", apiapprovals.Handler(approvalSvc))
