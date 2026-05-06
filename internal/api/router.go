@@ -27,6 +27,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/approvals"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/events"
 	"github.com/ubunatic/paperclip-go/internal/interactions"
 	"github.com/ubunatic/paperclip-go/internal/routines"
 	"github.com/ubunatic/paperclip-go/internal/workspaces"
@@ -42,7 +43,7 @@ import (
 )
 
 // NewRouter creates and returns a chi router with all API routes and middleware.
-func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *chi.Mux {
+func NewRouter(s *store.Store, skillsDir string, uiDir string, version string, bus events.Bus) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Global middleware
@@ -64,6 +65,11 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
 	routineSvc := routines.New(s)
 	workspaceSvc := workspaces.New(s)
+
+	// Wire bus to services
+	companySvc.WithBus(bus)
+	agentSvc.WithBus(bus)
+	issueSvc.WithBus(bus)
 
 	// Seed instance settings defaults
 	if err := settingSvc.SeedDefaults(context.Background(), map[string]string{
