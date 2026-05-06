@@ -15,6 +15,7 @@ import (
 	apiapprovals "github.com/ubunatic/paperclip-go/internal/api/approvals"
 	apicompanies "github.com/ubunatic/paperclip-go/internal/api/companies"
 	aproutines "github.com/ubunatic/paperclip-go/internal/api/routines"
+	apiworkspaces "github.com/ubunatic/paperclip-go/internal/api/workspaces"
 	"github.com/ubunatic/paperclip-go/internal/api/health"
 	apiheartbeat "github.com/ubunatic/paperclip-go/internal/api/heartbeat"
 	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
@@ -28,6 +29,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/companies"
 	"github.com/ubunatic/paperclip-go/internal/interactions"
 	"github.com/ubunatic/paperclip-go/internal/routines"
+	"github.com/ubunatic/paperclip-go/internal/workspaces"
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
 	"github.com/ubunatic/paperclip-go/internal/issues"
@@ -60,6 +62,8 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 	interactionSvc := interactions.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
 	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
+	routineSvc := routines.New(s)
+	workspaceSvc := workspaces.New(s)
 
 	// Seed instance settings defaults
 	if err := settingSvc.SeedDefaults(context.Background(), map[string]string{
@@ -97,8 +101,8 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string) *
 		r.Get("/dashboard", apistubs.EmptyList())
 		r.Get("/goals", apistubs.EmptyList())
 		r.Get("/projects", apistubs.EmptyList())
-		routineSvc := routines.New(s)
 		r.Mount("/routines", aproutines.Handler(routineSvc))
+		r.Mount("/execution-workspaces", apiworkspaces.Handler(workspaceSvc))
 		r.Get("/plugins", apistubs.EmptyList())
 		r.Get("/sidebar-badges", apistubs.EmptyList())
 		r.Get("/sidebar-preferences", apistubs.EmptyList())
