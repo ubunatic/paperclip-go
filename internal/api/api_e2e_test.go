@@ -3456,3 +3456,135 @@ func TestInteractionsE2E(t *testing.T) {
 		t.Errorf("POST resolve nonexistent status = %d, want 404", resp.StatusCode)
 	}
 }
+
+func TestExecutionWorkspacesE2E(t *testing.T) {
+	srv, _ := testutil.SpawnTestServer(t)
+
+	// Create a company first
+	companyBody, _ := json.Marshal(map[string]string{
+		"name":        "Test Corp",
+		"shortname":   "test",
+		"description": "Test company",
+	})
+	respCompany, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(companyBody))
+	if err != nil {
+		t.Fatalf("POST /api/companies: %v", err)
+	}
+	var company map[string]any
+	if err := json.NewDecoder(respCompany.Body).Decode(&company); err != nil {
+		t.Fatalf("decoding company response: %v", err)
+	}
+	respCompany.Body.Close()
+	companyID, _ := company["id"].(string)
+
+	// Create an agent
+	agentBody, _ := json.Marshal(map[string]any{
+		"companyId":   companyID,
+		"shortname":   "alice",
+		"displayName": "Alice",
+		"role":        "manager",
+		"adapter":     "stub",
+	})
+	respAgent, err := http.Post(srv.URL+"/api/agents", "application/json", bytes.NewReader(agentBody))
+	if err != nil {
+		t.Fatalf("POST /api/agents: %v", err)
+	}
+	var agent map[string]any
+	if err := json.NewDecoder(respAgent.Body).Decode(&agent); err != nil {
+		t.Fatalf("decoding agent response: %v", err)
+	}
+	respAgent.Body.Close()
+	agentID, _ := agent["id"].(string)
+
+	// Create an issue
+	issueBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"title":     "Test Issue",
+		"body":      "This is a test issue",
+	})
+	respIssue, err := http.Post(srv.URL+"/api/issues", "application/json", bytes.NewReader(issueBody))
+	if err != nil {
+		t.Fatalf("POST /api/issues: %v", err)
+	}
+	var issue map[string]any
+	if err := json.NewDecoder(respIssue.Body).Decode(&issue); err != nil {
+		t.Fatalf("decoding issue response: %v", err)
+	}
+	respIssue.Body.Close()
+	issueID, _ := issue["id"].(string)
+
+	// POST /api/execution-workspaces → 201
+	workspaceBody, _ := json.Marshal(map[string]any{
+		"companyId": companyID,
+		"agentId":   agentID,
+		"path":      "/path/to/workspace",
+		"issueId":   issueID,
+		"status":    "active",
+	})
+	resp, err := http.Post(srv.URL+"/api/execution-workspaces", "application/json", bytes.NewReader(workspaceBody))
+	if err != nil {
+		t.Fatalf("POST /api/execution-workspaces: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /api/execution-workspaces status = %d, want 201", resp.StatusCode)
+	}
+
+	var created map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decoding POST response: %v", err)
+	}
+	workspaceID, _ := created["id"].(string)
+	if workspaceID == "" {
+		t.Fatalf("expected id in POST response, got %v", created)
+	}
+
+	// GET /api/execution-workspaces/{id} → 200
+	resp2, err := http.Get(srv.URL + "/api/execution-workspaces/" + workspaceID)
+	if err != nil {
+		t.Fatalf("GET /api/execution-workspaces/%s: %v", workspaceID, err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("GET /api/execution-workspaces/%s status = %d, want 200", workspaceID, resp2.StatusCode)
+	}
+
+	// GET /api/execution-workspaces?companyId=... → list with 1 item
+	resp3, err := http.Get(srv.URL + "/api/execution-workspaces?companyId=" + companyID)
+	if err != nil {
+		t.Fatalf("GET /api/execution-workspaces: %v", err)
+	}
+	defer resp3.Body.Close()
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("GET /api/execution-workspaces status = %d, want 200", resp3.StatusCode)
+	}
+	var workspaces map[string]any
+	if err := json.NewDecoder(resp3.Body).Decode(&workspaces); err != nil {
+		t.Fatalf("decoding workspaces list: %v", err)
+	}
+	items, _ := workspaces["items"].([]any)
+	if len(items) != 1 {
+		t.Errorf("workspaces list len = %d, want 1", len(items))
+	}
+
+	// DELETE /api/execution-workspaces/{id} → 204
+	req, _ := http.NewRequest("DELETE", srv.URL+"/api/execution-workspaces/"+workspaceID, nil)
+	resp4, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE /api/execution-workspaces: %v", err)
+	}
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusNoContent {
+		t.Errorf("DELETE workspace status = %d, want 204", resp4.StatusCode)
+	}
+
+	// Verify it's gone
+	resp5, err := http.Get(srv.URL + "/api/execution-workspaces/" + workspaceID)
+	if err != nil {
+		t.Fatalf("GET after delete: %v", err)
+	}
+	resp5.Body.Close()
+	if resp5.StatusCode != http.StatusNotFound {
+		t.Errorf("GET deleted workspace status = %d, want 404", resp5.StatusCode)
+	}
+}

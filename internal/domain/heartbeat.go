@@ -23,6 +23,8 @@ type HeartbeatRun struct {
 	ScheduledRetryAt       *string `json:"scheduledRetryAt"`
 	ScheduledRetryAttempt  int     `json:"scheduledRetryAttempt"`
 	ScheduledRetryReason   *string `json:"scheduledRetryReason"`
+	// Workspace reference (H1)
+	WorkspaceID            *string `json:"workspaceId"`
 }
 
 // RunContext holds information about the current agent and issue during a heartbeat run.

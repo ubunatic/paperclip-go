@@ -102,6 +102,7 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 		run.IssueID = &selectedIssue.ID
 	}
 
+	// Note: workspace_id is not set at creation time; it is associated after the workspace is created.
 	_, err = r.store.DB.ExecContext(ctx,
 		`INSERT INTO heartbeat_runs(id, agent_id, issue_id, status, started_at)
 		 VALUES (?, ?, ?, ?, ?)`,
@@ -260,7 +261,7 @@ func (r *Runner) GetByID(ctx context.Context, id string) (*domain.HeartbeatRun, 
 	row := r.store.DB.QueryRowContext(ctx,
 		`SELECT id, agent_id, issue_id, status, started_at, finished_at, summary, error,
 		        liveness_state, liveness_reason, continuation_attempt, last_useful_action_at,
-		        next_action, scheduled_retry_at, scheduled_retry_attempt, scheduled_retry_reason
+		        next_action, scheduled_retry_at, scheduled_retry_attempt, scheduled_retry_reason, workspace_id
 		 FROM heartbeat_runs WHERE id = ?`,
 		id,
 	)
@@ -318,7 +319,7 @@ func (r *Runner) ListByAgent(ctx context.Context, agentID string) ([]*domain.Hea
 	rows, err := r.store.DB.QueryContext(ctx,
 		`SELECT id, agent_id, issue_id, status, started_at, finished_at, summary, error,
 		        liveness_state, liveness_reason, continuation_attempt, last_useful_action_at,
-		        next_action, scheduled_retry_at, scheduled_retry_attempt, scheduled_retry_reason
+		        next_action, scheduled_retry_at, scheduled_retry_attempt, scheduled_retry_reason, workspace_id
 		 FROM heartbeat_runs WHERE agent_id = ? ORDER BY started_at DESC`,
 		agentID,
 	)
@@ -358,10 +359,11 @@ func scanHeartbeatRun(s scanner) (*domain.HeartbeatRun, error) {
 	var scheduledRetryAt *string
 	var scheduledRetryAttempt int
 	var scheduledRetryReason *string
+	var workspaceID *string
 
 	if err := s.Scan(&run.ID, &run.AgentID, &issueID, &run.Status, &startedAtStr, &finishedAtStr, &summary, &errMsg,
 		&livenessState, &livenessReason, &continuationAttempt, &lastUsefulActionAt,
-		&nextAction, &scheduledRetryAt, &scheduledRetryAttempt, &scheduledRetryReason); err != nil {
+		&nextAction, &scheduledRetryAt, &scheduledRetryAttempt, &scheduledRetryReason, &workspaceID); err != nil {
 		return nil, err
 	}
 
@@ -376,6 +378,7 @@ func scanHeartbeatRun(s scanner) (*domain.HeartbeatRun, error) {
 	run.ScheduledRetryAt = scheduledRetryAt
 	run.ScheduledRetryAttempt = scheduledRetryAttempt
 	run.ScheduledRetryReason = scheduledRetryReason
+	run.WorkspaceID = workspaceID
 
 	var err error
 	run.StartedAt, err = time.Parse(time.RFC3339, startedAtStr)
