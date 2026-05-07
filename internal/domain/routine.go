@@ -12,7 +12,7 @@ type Routine struct {
 	CronExpr            string     `json:"cronExpr"`
 	Enabled             bool       `json:"enabled"`
 	LastRunAt           *time.Time `json:"lastRunAt"`
-	DispatchFingerprint *string    `json:"dispatchFingerprint,omitempty"`
+	DispatchFingerprint *string    `json:"-"`
 	CreatedAt           time.Time  `json:"createdAt"`
 	UpdatedAt           time.Time  `json:"updatedAt"`
 }
