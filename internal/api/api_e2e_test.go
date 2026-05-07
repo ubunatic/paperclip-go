@@ -1,11 +1,13 @@
 package api_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -3587,4 +3589,126 @@ func TestExecutionWorkspacesE2E(t *testing.T) {
 	if resp5.StatusCode != http.StatusNotFound {
 		t.Errorf("GET deleted workspace status = %d, want 404", resp5.StatusCode)
 	}
+}
+
+func TestWebSocketE2E(t *testing.T) {
+	// Start test server with bus already wired
+	srv, _ := testutil.SpawnTestServer(t)
+	defer srv.Close()
+
+	// Create a company
+	companyResp := struct{ ID string }{}
+	body, _ := json.Marshal(map[string]string{"name": "test-company", "shortname": "test"})
+	resp, err := http.Post(srv.URL+"/api/companies", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("company create failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("company create failed with status %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&companyResp); err != nil {
+		t.Fatalf("decode company response: %v", err)
+	}
+
+	companyID := companyResp.ID
+	if companyID == "" {
+		t.Fatal("expected company ID in response")
+	}
+
+	// Parse server URL to get the host and port
+	wsURL := strings.TrimPrefix(srv.URL, "http://")
+
+	// Connect to WebSocket via raw TCP
+	conn, err := net.Dial("tcp", wsURL)
+	if err != nil {
+		t.Fatalf("net.Dial failed: %v", err)
+	}
+	defer conn.Close()
+
+	// Send HTTP upgrade request
+	req := fmt.Sprintf(
+		"GET /api/ws?companyId=%s HTTP/1.1\r\n"+
+			"Host: %s\r\n"+
+			"Upgrade: websocket\r\n"+
+			"Connection: Upgrade\r\n"+
+			"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"+
+			"Sec-WebSocket-Version: 13\r\n"+
+			"\r\n",
+		companyID,
+		wsURL,
+	)
+	if _, err := conn.Write([]byte(req)); err != nil {
+		t.Fatalf("write upgrade request failed: %v", err)
+	}
+
+	// Read 101 response
+	reader := bufio.NewReader(conn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("read status failed: %v", err)
+	}
+	if !strings.Contains(status, "101") {
+		t.Fatalf("expected 101 response, got: %s", status)
+	}
+
+	// Skip headers until blank line
+	for {
+		line, _ := reader.ReadString('\n')
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+	}
+
+	// Start a goroutine to create an issue (trigger event)
+	done := make(chan bool)
+	go func() {
+		time.Sleep(100 * time.Millisecond) // brief delay
+		issueResp := struct{ ID string }{}
+		issueBody, _ := json.Marshal(map[string]interface{}{
+			"companyId": companyID,
+			"title":     "test issue",
+		})
+		issueReq, _ := http.NewRequest("POST", srv.URL+"/api/issues", bytes.NewReader(issueBody))
+		issueReq.Header.Set("Content-Type", "application/json")
+		issueResp2, err := http.DefaultClient.Do(issueReq)
+		if err != nil {
+			t.Logf("issue create failed: %v", err)
+		} else {
+			defer issueResp2.Body.Close()
+			json.NewDecoder(issueResp2.Body).Decode(&issueResp)
+		}
+		done <- true
+	}()
+
+	// Read WebSocket text frame from server with timeout
+	frameChan := make(chan []byte)
+	errChan := make(chan error)
+	go func() {
+		frame := make([]byte, 4096)
+		n, err := conn.Read(frame)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		frameChan <- frame[:n]
+	}()
+
+	// Wait for either the frame or a timeout
+	select {
+	case frame := <-frameChan:
+		// Parse frame (skip first 2 bytes: FIN+opcode + length, then payload)
+		// For simplicity, just check we got JSON with the event
+		payload := frame[2:]
+		if !strings.Contains(string(payload), "issue.created") {
+			t.Fatalf("expected event with kind 'issue.created', got: %s", string(payload))
+		}
+	case err := <-errChan:
+		t.Fatalf("read frame failed: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for WebSocket frame")
+	}
+
+	// Wait for the goroutine to finish
+	<-done
 }

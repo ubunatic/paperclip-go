@@ -16,6 +16,7 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/api"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/config"
+	"github.com/ubunatic/paperclip-go/internal/events"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
 	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/routines"
@@ -42,7 +43,8 @@ func serveRun() error {
 	}
 	defer s.Close()
 
-	router := api.NewRouter(s, cfg.SkillsDir, cfg.UIDir, getVersion())
+	bus := events.NewMemBus()
+	router := api.NewRouter(s, cfg.SkillsDir, cfg.UIDir, getVersion(), bus)
 	server := &http.Server{
 		Addr:    cfg.ListenAddr,
 		Handler: router,

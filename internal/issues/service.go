@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/domain"
+	"github.com/ubunatic/paperclip-go/internal/events"
 	"github.com/ubunatic/paperclip-go/internal/ids"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
@@ -33,11 +34,25 @@ var ErrInvalidStatus = errors.New("invalid status")
 // Service provides issue CRUD backed by the store.
 type Service struct {
 	store *store.Store
+	bus   events.Bus
 }
 
 // New returns a Service using the given store.
 func New(s *store.Store) *Service {
 	return &Service{store: s}
+}
+
+// WithBus sets the event bus for publishing domain events.
+func (s *Service) WithBus(b events.Bus) {
+	s.bus = b
+}
+
+// publishIfBus publishes an event if a bus is wired.
+func (s *Service) publishIfBus(topic string, e events.Event) {
+	if s.bus == nil {
+		return
+	}
+	s.bus.Publish(topic, e)
 }
 
 // Create inserts a new issue and returns the created entity.
@@ -80,6 +95,12 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, originFing
 	if err != nil {
 		return nil, fmt.Errorf("inserting issue: %w", err)
 	}
+	s.publishIfBus(fmt.Sprintf("company:%s", companyID), events.Event{
+		Kind:      "issue.created",
+		CompanyID: companyID,
+		Payload:   i,
+		OccurredAt: now,
+	})
 	return i, nil
 }
 
@@ -239,7 +260,17 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 	}
 
 	// Fetch and return the updated issue
-	return s.Get(ctx, id)
+	updated, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	s.publishIfBus(fmt.Sprintf("company:%s", updated.CompanyID), events.Event{
+		Kind:      "issue.updated",
+		CompanyID: updated.CompanyID,
+		Payload:   updated,
+		OccurredAt: time.Now().UTC().Truncate(time.Second),
+	})
+	return updated, nil
 }
 
 // Checkout atomically checks out an issue for an agent.

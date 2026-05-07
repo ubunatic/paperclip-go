@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/domain"
+	"github.com/ubunatic/paperclip-go/internal/events"
 	"github.com/ubunatic/paperclip-go/internal/ids"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
@@ -22,11 +23,25 @@ var ErrHasDependents = errors.New("company has dependent agents or issues")
 // Service provides company CRUD backed by the store.
 type Service struct {
 	store *store.Store
+	bus   events.Bus
 }
 
 // New returns a Service using the given store.
 func New(s *store.Store) *Service {
 	return &Service{store: s}
+}
+
+// WithBus sets the event bus for publishing domain events.
+func (s *Service) WithBus(b events.Bus) {
+	s.bus = b
+}
+
+// publishIfBus publishes an event if a bus is wired.
+func (s *Service) publishIfBus(topic string, e events.Event) {
+	if s.bus == nil {
+		return
+	}
+	s.bus.Publish(topic, e)
 }
 
 // Create inserts a new company and returns the created entity.
@@ -49,6 +64,12 @@ func (s *Service) Create(ctx context.Context, name, shortname, description strin
 	if err != nil {
 		return nil, fmt.Errorf("inserting company: %w", err)
 	}
+	s.publishIfBus(fmt.Sprintf("company:%s", c.ID), events.Event{
+		Kind:      "company.created",
+		CompanyID: c.ID,
+		Payload:   c,
+		OccurredAt: now,
+	})
 	return c, nil
 }
 

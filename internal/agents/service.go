@@ -12,6 +12,7 @@ import (
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/domain"
+	"github.com/ubunatic/paperclip-go/internal/events"
 	"github.com/ubunatic/paperclip-go/internal/ids"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
@@ -32,11 +33,25 @@ var ErrInvalidTransition = errors.New("invalid state transition")
 type Service struct {
 	store *store.Store
 	log   *activity.Log
+	bus   events.Bus
 }
 
 // New returns a Service using the given store and activity log.
 func New(s *store.Store, log *activity.Log) *Service {
 	return &Service{store: s, log: log}
+}
+
+// WithBus sets the event bus for publishing domain events.
+func (s *Service) WithBus(b events.Bus) {
+	s.bus = b
+}
+
+// publishIfBus publishes an event if a bus is wired.
+func (s *Service) publishIfBus(topic string, e events.Event) {
+	if s.bus == nil {
+		return
+	}
+	s.bus.Publish(topic, e)
 }
 
 // Create inserts a new agent and returns the created entity.
@@ -68,6 +83,12 @@ func (s *Service) Create(ctx context.Context, companyID, shortname, displayName,
 	if err != nil {
 		return nil, fmt.Errorf("inserting agent: %w", err)
 	}
+	s.publishIfBus(fmt.Sprintf("company:%s", companyID), events.Event{
+		Kind:      "agent.created",
+		CompanyID: companyID,
+		Payload:   a,
+		OccurredAt: now,
+	})
 	return a, nil
 }
 
@@ -288,6 +309,12 @@ func (s *Service) Update(ctx context.Context, id string, displayName, role, runt
 	if err != nil {
 		return nil, err
 	}
+	s.publishIfBus(fmt.Sprintf("company:%s", result.CompanyID), events.Event{
+		Kind:      "agent.updated",
+		CompanyID: result.CompanyID,
+		Payload:   result,
+		OccurredAt: time.Now().UTC().Truncate(time.Second),
+	})
 	return result, nil
 }
 
@@ -338,7 +365,17 @@ func (s *Service) Pause(ctx context.Context, agentID string) (*domain.Agent, err
 	}
 
 	// Fetch and return the updated agent
-	return s.Get(ctx, agentID)
+	updated, err := s.Get(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+	s.publishIfBus(fmt.Sprintf("company:%s", agent.CompanyID), events.Event{
+		Kind:      "agent.updated",
+		CompanyID: agent.CompanyID,
+		Payload:   updated,
+		OccurredAt: now,
+	})
+	return updated, nil
 }
 
 // Resume transitions an agent from paused to running.
@@ -388,7 +425,17 @@ func (s *Service) Resume(ctx context.Context, agentID string) (*domain.Agent, er
 	}
 
 	// Fetch and return the updated agent
-	return s.Get(ctx, agentID)
+	updated, err := s.Get(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+	s.publishIfBus(fmt.Sprintf("company:%s", agent.CompanyID), events.Event{
+		Kind:      "agent.updated",
+		CompanyID: agent.CompanyID,
+		Payload:   updated,
+		OccurredAt: now,
+	})
+	return updated, nil
 }
 
 // Terminate transitions an agent to terminated (from idle, running, or paused states).
@@ -438,7 +485,17 @@ func (s *Service) Terminate(ctx context.Context, agentID string) (*domain.Agent,
 	}
 
 	// Fetch and return the updated agent
-	return s.Get(ctx, agentID)
+	updated, err := s.Get(ctx, agentID)
+	if err != nil {
+		return nil, err
+	}
+	s.publishIfBus(fmt.Sprintf("company:%s", agent.CompanyID), events.Event{
+		Kind:      "agent.updated",
+		CompanyID: agent.CompanyID,
+		Payload:   updated,
+		OccurredAt: now,
+	})
+	return updated, nil
 }
 
 // scanner is satisfied by both *sql.Row and *sql.Rows.

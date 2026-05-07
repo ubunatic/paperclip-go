@@ -8,6 +8,7 @@ import (
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/api"
+	"github.com/ubunatic/paperclip-go/internal/events"
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
 
@@ -30,7 +31,8 @@ func SpawnTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 	t.Helper()
 	s := NewStore(t)
 	skillsDir := filepath.Join(t.TempDir(), "skills")
-	router := api.NewRouter(s, skillsDir, "", "test")
+	bus := events.NewMemBus()
+	router := api.NewRouter(s, skillsDir, "", "test", bus)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 	return srv, s
@@ -40,7 +42,8 @@ func SpawnTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 func SpawnTestServerWithSkillsDir(t *testing.T, skillsDir string) (*httptest.Server, *store.Store) {
 	t.Helper()
 	s := NewStore(t)
-	router := api.NewRouter(s, skillsDir, "", "test")
+	bus := events.NewMemBus()
+	router := api.NewRouter(s, skillsDir, "", "test", bus)
 	srv := httptest.NewServer(router)
 	t.Cleanup(srv.Close)
 	return srv, s
