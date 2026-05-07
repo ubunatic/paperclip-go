@@ -46,6 +46,16 @@ func setupTestCompanyAndAgent(t *testing.T, s *store.Store) (string, string) {
 	return company.ID, agent.ID
 }
 
+func newTestRunner(t *testing.T, s *store.Store) *heartbeat.Runner {
+	t.Helper()
+	actLog := activity.New(s)
+	commentSvc := comments.New(s)
+	agentSvc := agents.New(s, actLog)
+	issueSvc := issues.New(s)
+	registry := heartbeat.NewDefaultRegistry()
+	return heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+}
+
 func extractHeartbeatObject(t *testing.T, body *bytes.Buffer) map[string]any {
 	t.Helper()
 	var resp map[string]any
@@ -72,13 +82,7 @@ func TestHandlerCreate_InvalidJSON(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	handler := apiheartbeat.Handler(runner)
 
@@ -102,13 +106,7 @@ func TestHandlerCreate_MissingAgentID(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	handler := apiheartbeat.Handler(runner)
 
@@ -133,13 +131,7 @@ func TestHandlerCreate_AgentNotFound(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	handler := apiheartbeat.Handler(runner)
 
@@ -168,13 +160,7 @@ func TestHandlerCreate_Success(t *testing.T) {
 
 	_, agentID := setupTestCompanyAndAgent(t, s)
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	handler := apiheartbeat.Handler(runner)
 
@@ -212,13 +198,7 @@ func TestHandlerList_MissingAgentID(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	handler := apiheartbeat.Handler(runner)
 
@@ -242,13 +222,7 @@ func TestHandlerList_Success(t *testing.T) {
 
 	_, agentID := setupTestCompanyAndAgent(t, s)
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	handler := apiheartbeat.Handler(runner)
 
@@ -284,13 +258,7 @@ func TestHandlerGet_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	handler := apiheartbeat.Handler(runner)
 
@@ -314,13 +282,7 @@ func TestHandlerGet_Success(t *testing.T) {
 
 	_, agentID := setupTestCompanyAndAgent(t, s)
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	// Create a run
 	run, err := runner.Create(ctx, agentID, nil, "running")
@@ -353,13 +315,7 @@ func TestHandlerCancel_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	handler := apiheartbeat.Handler(runner)
 
@@ -386,13 +342,7 @@ func TestHandlerCancel_TerminalStatus(t *testing.T) {
 
 	_, agentID := setupTestCompanyAndAgent(t, s)
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	// Create a run and update it to success (terminal status)
 	run, err := runner.Create(ctx, agentID, nil, "running")
@@ -432,13 +382,7 @@ func TestHandlerCancel_Success(t *testing.T) {
 
 	_, agentID := setupTestCompanyAndAgent(t, s)
 
-	// Setup runner
-	actLog := activity.New(s)
-	agentSvc := agents.New(s, actLog)
-	issueSvc := issues.New(s)
-	commentSvc := comments.New(s)
-	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := newTestRunner(t, s)
 
 	// Create a running run
 	run, err := runner.Create(ctx, agentID, nil, "running")

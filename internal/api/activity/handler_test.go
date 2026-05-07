@@ -263,7 +263,7 @@ func TestHandlerList_Success(t *testing.T) {
 	}
 
 	list := extractActivityList(t, w.Body)
-	if len(list) < 2 {
-		t.Errorf("expected at least 2 items, got %d", len(list))
+	if len(list) != 2 {
+		t.Errorf("expected 2 items, got %d", len(list))
 	}
 }

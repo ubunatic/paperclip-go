@@ -138,6 +138,10 @@ func TestHandlerList_Success(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("setup failed: got status %d, want %d", w.Code, http.StatusCreated)
+		}
 	}
 
 	// List workspaces
@@ -154,8 +158,8 @@ func TestHandlerList_Success(t *testing.T) {
 	}
 
 	list := extractWorkspaceList(t, w.Body)
-	if len(list) < 2 {
-		t.Errorf("expected at least 2 items, got %d", len(list))
+	if len(list) != 2 {
+		t.Errorf("expected 2 items, got %d", len(list))
 	}
 }
 

@@ -137,8 +137,8 @@ func TestHandlerList_Success(t *testing.T) {
 	}
 
 	list := extractSecretList(t, w.Body)
-	if len(list) < 2 {
-		t.Errorf("expected at least 2 items, got %d", len(list))
+	if len(list) != 2 {
+		t.Errorf("expected 2 items, got %d", len(list))
 	}
 
 	// Verify items are SecretSummary (no value field)
@@ -284,6 +284,10 @@ func TestHandlerCreate_Duplicate(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup failed: got status %d, want %d", w.Code, http.StatusCreated)
+	}
 
 	// Try to create duplicate
 	body, _ = json.Marshal(map[string]string{
@@ -536,6 +540,10 @@ func TestHandlerUpdate_DuplicateName(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup failed: got status %d, want %d", w.Code, http.StatusCreated)
+	}
+
 	// Create second secret
 	body, _ = json.Marshal(map[string]string{
 		"companyId": companyID,
@@ -548,6 +556,10 @@ func TestHandlerUpdate_DuplicateName(t *testing.T) {
 
 	w = httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup failed: got status %d, want %d", w.Code, http.StatusCreated)
+	}
 
 	created := extractSecretObject(t, w.Body)
 	secretTwoID := created["id"].(string)
