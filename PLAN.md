@@ -19,10 +19,10 @@ This means:
 
 ---
 
-## Status (2026-05-07, J1 complete — Handler Unit Tests + Post-MVP Polish)
+## Status (2026-05-07, K complete — Handler Unit Tests for Core APIs)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1  
-**Next:** Community features or additional quality debt items (auth, embedded Postgres, etc.)  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K  
+**Next:** Community features or additional quality debt items (auth, embedded Postgres, pagination improvements, etc.)  
 **Build:** ✅ green (all 25 test packages, comprehensive E2E + handler unit test coverage)  
 **Latest migration:** `0015_issue_thread_interactions.sql`
 
@@ -488,6 +488,21 @@ Acceptance: agent can post an interaction on an issue and resolve it.
 - **Tests**: 23 new handler unit tests, all passing; 25 test packages total, all green; no race detector warnings.
 
 Acceptance: ✅ `make test` green; handler error branches (validation, conflicts, not found) exercised independently from E2E; `DispatchFingerprint` field no longer exposed in JSON responses.
+
+### Phase K — Handler Unit Tests (Companies, Agents, Issues) ✅
+
+**Files:** `internal/api/companies/handler_test.go`, `internal/api/agents/handler_test.go`, `internal/api/issues/handler_test.go`
+
+**Completed (2026-05-07, post-J1):**
+- **Companies handler tests** (8 tests): create validation (invalid JSON, missing name/shortname), create success (201), update validation (empty name), update success (200), get not found (404), delete conflict (409 if agents exist), list success.
+- **Agents handler tests** (10 tests): create validation (invalid JSON, missing companyId/shortname/displayName), create success (201, adapter defaults to "stub"), get not found/success, update validation (no patch fields), update null configuration, pause not found (404), pause invalid transition (409), delete conflict (409), list success (filters by companyId).
+- **Issues handler tests** (10 tests): list validation (missing companyId → 422, invalid status → 422), create validation (invalid JSON, missing fields, invalid status), create success (201), get not found (404), update validation, checkout validation (missing agentId), checkout conflict (409), list success.
+- **Boilerplate optimization**: Extracted `newTestHandler(t, s)` helper in issues to eliminate repeated 5-line service instantiation across 9 tests.
+- **Test data uniqueness**: Randomized company/agent shortnames using UUID suffixes to avoid UNIQUE constraint violations in cross-test scenarios.
+- **Pattern consistency**: All three files follow the established pattern from J1 (approvals/routines) — `testutil.NewStore(t)` per test, raw SQL data setup, chi router HTTP testing, error body assertions.
+- **Tests**: 28 new handler unit tests (8+10+10), all passing; 25 test packages total remain green; no regressions.
+
+Acceptance: ✅ `make test` green; handler validation branches (missing fields, invalid input, state conflicts) exercised independently from E2E for the three foundational API packages (companies, agents, issues); boilerplate reduced via helper extraction; test data isolation improved.
 
 ---
 
