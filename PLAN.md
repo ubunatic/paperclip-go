@@ -19,12 +19,13 @@ This means:
 
 ---
 
-## Status (2026-05-07, K complete — Handler Unit Tests for Core APIs)
+## Status (2026-05-07, L complete — Handler Unit Tests for Remaining API Packages)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K, L  
 **Next:** Community features or additional quality debt items (auth, embedded Postgres, pagination improvements, etc.)  
-**Build:** ✅ green (all 25 test packages, comprehensive E2E + handler unit test coverage)  
-**Latest migration:** `0015_issue_thread_interactions.sql`
+**Build:** ✅ green (all 25 test packages, 53 additional handler unit tests, comprehensive E2E + full handler coverage)  
+**Latest migration:** `0015_issue_thread_interactions.sql`  
+**API handler test coverage:** 15/15 packages now have handler unit tests (100%)
 
 **H1 Code Review Findings (2026-05-06):**
 - ✅ **Fixed issues:**
@@ -503,6 +504,21 @@ Acceptance: ✅ `make test` green; handler error branches (validation, conflicts
 - **Tests**: 28 new handler unit tests (8+10+10), all passing; 25 test packages total remain green; no regressions.
 
 Acceptance: ✅ `make test` green; handler validation branches (missing fields, invalid input, state conflicts) exercised independently from E2E for the three foundational API packages (companies, agents, issues); boilerplate reduced via helper extraction; test data isolation improved.
+
+### Phase L — Handler Unit Tests (Remaining API Packages) ✅
+
+**Files:** `internal/api/activity/handler_test.go`, `internal/api/secrets/handler_test.go`, `internal/api/heartbeat/handler_test.go`, `internal/api/workspaces/handler_test.go`, `internal/api/health/handler_test.go`
+
+**Completed (2026-05-07, post-K):**
+- **Activity handler tests** (7 tests): create validation (invalid JSON, missing fields), create success (201), list validation (missing companyId → 400), list success (scoped to company).
+- **Secrets handler tests** (17 tests): CRUD endpoints with validation (missing name, whitespace value), duplicates (409 on create/update), not-found (404), list without values, update/delete success.
+- **Heartbeat handler tests** (11 tests): create (missing agentId → 422, agent not found → 404, success → 201), list (missing agentId → 400, success), get (not found/success), cancel (not found/terminal status conflict → 409, success).
+- **Workspaces handler tests** (14 tests): CRUD with validation (missing path, blank agentId, invalid status), default status (active), duplicate agent+path (409), not-found, delete success.
+- **Health handler tests** (4 tests): status code 200, correct status field, all required fields present, version passthrough, features structure validation.
+- **Code review refinements**: Extracted `newTestRunner()` helper in heartbeat to eliminate 55 lines of boilerplate; precise list assertions (exact count, not ≥); setup response guards to prevent panics on failure; consistent with K test patterns.
+- **Test coverage**: 53 new handler unit tests across 5 packages, all passing; 15/15 API packages now have unit test coverage (100%).
+
+Acceptance: ✅ `make test` green (all 25 packages + 53 handler tests); all API handler packages have comprehensive unit test coverage including validation, success paths, conflicts, and not-found scenarios; boilerplate extracted and optimized per code review feedback.
 
 ---
 
