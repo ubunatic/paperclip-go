@@ -67,7 +67,7 @@ func extractRoutineList(t *testing.T, body *bytes.Buffer) []any {
 	return list
 }
 
-func TestHandlerListMissingCompanyID(t *testing.T) {
+func TestHandlerList_MissingCompanyID(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -94,7 +94,7 @@ func TestHandlerListMissingCompanyID(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateInvalidJSON(t *testing.T) {
+func TestHandlerCreate_InvalidJSON(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -114,7 +114,7 @@ func TestHandlerCreateInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateMissingFields(t *testing.T) {
+func TestHandlerCreate_MissingFields(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -140,16 +140,14 @@ func TestHandlerCreateMissingFields(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateInvalidCron(t *testing.T) {
+func TestHandlerCreate_InvalidCron(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
 
-	companyID, agentID := setupRoutineTestData(t, s)
-
 	body, _ := json.Marshal(map[string]string{
-		"companyId": companyID,
-		"agentId":   agentID,
+		"companyId": "c1",
+		"agentId":   "a1",
 		"name":      "test-routine",
 		"cronExpr":  "invalid cron",
 	})
@@ -177,7 +175,7 @@ func TestHandlerCreateInvalidCron(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateNameConflict(t *testing.T) {
+func TestHandlerCreate_NameConflict(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -221,7 +219,7 @@ func TestHandlerCreateNameConflict(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateSuccess(t *testing.T) {
+func TestHandlerCreate_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -264,7 +262,7 @@ func TestHandlerCreateSuccess(t *testing.T) {
 	}
 }
 
-func TestHandlerGetNotFound(t *testing.T) {
+func TestHandlerGet_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -282,7 +280,7 @@ func TestHandlerGetNotFound(t *testing.T) {
 	}
 }
 
-func TestHandlerGetSuccess(t *testing.T) {
+func TestHandlerGet_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -319,7 +317,7 @@ func TestHandlerGetSuccess(t *testing.T) {
 	}
 }
 
-func TestHandlerUpdateInvalidCron(t *testing.T) {
+func TestHandlerUpdate_InvalidCron(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -358,7 +356,7 @@ func TestHandlerUpdateInvalidCron(t *testing.T) {
 	}
 }
 
-func TestHandlerDeleteNotFound(t *testing.T) {
+func TestHandlerDelete_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -376,7 +374,7 @@ func TestHandlerDeleteNotFound(t *testing.T) {
 	}
 }
 
-func TestHandlerTriggerNotFound(t *testing.T) {
+func TestHandlerTrigger_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)
@@ -394,7 +392,7 @@ func TestHandlerTriggerNotFound(t *testing.T) {
 	}
 }
 
-func TestHandlerListSuccess(t *testing.T) {
+func TestHandlerList_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
 	handler := apiroutines.Handler(svc)

@@ -77,7 +77,7 @@ func extractApprovalList(t *testing.T, body *bytes.Buffer) []any {
 	return list
 }
 
-func TestHandlerListMissingCompanyID(t *testing.T) {
+func TestHandlerList_MissingCompanyID(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -104,7 +104,7 @@ func TestHandlerListMissingCompanyID(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateInvalidJSON(t *testing.T) {
+func TestHandlerCreate_InvalidJSON(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -124,7 +124,7 @@ func TestHandlerCreateInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateMissingFields(t *testing.T) {
+func TestHandlerCreate_MissingFields(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -150,7 +150,7 @@ func TestHandlerCreateMissingFields(t *testing.T) {
 	}
 }
 
-func TestHandlerCreateSuccess(t *testing.T) {
+func TestHandlerCreate_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -189,7 +189,7 @@ func TestHandlerCreateSuccess(t *testing.T) {
 	}
 }
 
-func TestHandlerGetNotFound(t *testing.T) {
+func TestHandlerGet_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -207,7 +207,7 @@ func TestHandlerGetNotFound(t *testing.T) {
 	}
 }
 
-func TestHandlerGetSuccess(t *testing.T) {
+func TestHandlerGet_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -237,7 +237,7 @@ func TestHandlerGetSuccess(t *testing.T) {
 	}
 }
 
-func TestHandlerApproveSuccess(t *testing.T) {
+func TestHandlerApprove_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -267,7 +267,7 @@ func TestHandlerApproveSuccess(t *testing.T) {
 	}
 }
 
-func TestHandlerApproveAlreadyResolved(t *testing.T) {
+func TestHandlerApprove_AlreadyResolved(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -308,7 +308,7 @@ func TestHandlerApproveAlreadyResolved(t *testing.T) {
 	}
 }
 
-func TestHandlerRejectSuccess(t *testing.T) {
+func TestHandlerReject_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -338,7 +338,7 @@ func TestHandlerRejectSuccess(t *testing.T) {
 	}
 }
 
-func TestHandlerRejectAlreadyResolved(t *testing.T) {
+func TestHandlerReject_AlreadyResolved(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
@@ -368,9 +368,18 @@ func TestHandlerRejectAlreadyResolved(t *testing.T) {
 	if w.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409", w.Code)
 	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	errObj, ok := resp["error"].(map[string]any)
+	if !ok || errObj["code"] != "conflict" {
+		t.Errorf("error code not conflict: %v", resp)
+	}
 }
 
-func TestHandlerListSuccess(t *testing.T) {
+func TestHandlerList_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := approvals.New(s)
 	handler := apiapprovals.Handler(svc)
