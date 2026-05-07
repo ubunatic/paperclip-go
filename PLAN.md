@@ -19,12 +19,12 @@ This means:
 
 ---
 
-## Status (2026-05-06, H2 complete — WebSocket live events)
+## Status (2026-05-07, J1 complete — Handler Unit Tests + Post-MVP Polish)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1  
-**Next:** Community features or post-MVP polish (auth, embedded Postgres, etc.)  
-**Build:** ✅ green (all 24 test packages, comprehensive E2E coverage)  
-**Latest migration:** `0015_workspaces.sql`
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1  
+**Next:** Community features or additional quality debt items (auth, embedded Postgres, etc.)  
+**Build:** ✅ green (all 25 test packages, comprehensive E2E + handler unit test coverage)  
+**Latest migration:** `0015_issue_thread_interactions.sql`
 
 **H1 Code Review Findings (2026-05-06):**
 - ✅ **Fixed issues:**
@@ -473,6 +473,24 @@ Acceptance: agent can post an interaction on an issue and resolve it.
 
 ---
 
+### Phase J — Post-MVP Polish & Quality Debt
+
+#### J1 — Handler Unit Tests (Approvals & Routines) ✅
+
+**Files:** `internal/api/approvals/handler_test.go`, `internal/api/routines/handler_test.go`, `internal/domain/routine.go`
+
+**Completed (2026-05-07):**
+- **Approvals handler tests** (11 tests): list validation (missing companyId → 422), create validation (invalid JSON, missing fields), create success (201), get not found (404)/success (200), approve/reject success and already-resolved conflicts (409).
+- **Routines handler tests** (12 tests): list validation, create validation (invalid JSON, missing fields, invalid cron, name conflict), create success (201, no `dispatchFingerprint` in response), get not found/success, update invalid cron (422), delete/trigger not found.
+- **DispatchFingerprint fix**: Changed `json:"dispatchFingerprint,omitempty"` to `json:"-"` on `Routine.DispatchFingerprint` to hide the internal dedup sentinel from API responses.
+- **Test pattern**: Follows `internal/api/labels/handler_test.go` — uses `testutil.NewStore(t)` for hermetic SQLite, direct DB inserts for test data, chi router ServeHTTP calls for HTTP testing.
+- **Code review**: Two defects identified and fixed: (1) missing error body assertion in reject test, (2) unnecessary DB setup in invalid-cron test. Test naming aligned with codebase convention (`TestHandlerVerb_Condition`).
+- **Tests**: 23 new handler unit tests, all passing; 25 test packages total, all green; no race detector warnings.
+
+Acceptance: ✅ `make test` green; handler error branches (validation, conflicts, not found) exercised independently from E2E; `DispatchFingerprint` field no longer exposed in JSON responses.
+
+---
+
 ## LLM Mocking Convention
 
 All adapters that call external LLMs **must** accept an interface for the HTTP transport:
@@ -526,8 +544,8 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 | ✅ Context cancellation in env CLI | MEDIUM | `internal/cli/env.go:65-233` | FIXED | — |
 | ✅ RowsAffected() error handling in routines | MEDIUM | `internal/routines/service.go:231,310` | FIXED (2026-05-05) | — |
 | ✅ HTTP status code consistency (G1/G2) | LOW | `internal/api/routines,approvals/handler.go` | FIXED (2026-05-05) | — |
-| DispatchFingerprint exposure in API | LOW | `internal/domain/routine.go:15` | Review needed | <5 min |
-| Handler unit tests missing (G1/G2) | MEDIUM | `internal/api/approvals,routines/` | Deferred | 1–2 h |
+| ✅ DispatchFingerprint exposure in API | LOW | `internal/domain/routine.go:15` | FIXED (2026-05-07, J1) | — |
+| ✅ Handler unit tests missing (G1/G2) | MEDIUM | `internal/api/approvals,routines/` | FIXED (2026-05-07, J1) — 23 tests | — |
 | Redundant validation in secrets handler | LOW | `internal/api/secrets/handler.go:31` | Acceptable | <1 min |
 | Inconsistent error handling in env CLI | LOW | `internal/cli/env.go:200+` | Minor | 2 min |
 | HTTP client lifecycle inefficiency | LOW | `internal/cli/env.go` | Minor | 5 min |
