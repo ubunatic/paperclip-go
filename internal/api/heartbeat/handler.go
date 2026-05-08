@@ -2,7 +2,6 @@
 package heartbeat
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -25,12 +24,10 @@ func Handler(r *svc.Runner) http.Handler {
 
 func create(r *svc.Runner) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		req.Body = http.MaxBytesReader(w, req.Body, 1<<20) // 1 MiB
 		var body struct {
 			AgentID string `json:"agentId"`
 		}
-		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, req, &body) {
 			return
 		}
 		if body.AgentID == "" {

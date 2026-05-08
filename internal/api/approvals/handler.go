@@ -2,7 +2,6 @@
 package approvals
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -50,7 +49,6 @@ func list(svc *approvals.Service) http.HandlerFunc {
 
 func create(svc *approvals.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			CompanyID   string  `json:"companyId"`
 			AgentID     string  `json:"agentId"`
@@ -58,8 +56,7 @@ func create(svc *approvals.Service) http.HandlerFunc {
 			Kind        string  `json:"kind"`
 			RequestBody *string `json:"requestBody"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 

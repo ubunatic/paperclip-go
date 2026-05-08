@@ -2,7 +2,6 @@
 package settings
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 
@@ -39,12 +38,8 @@ func getAll(svc *settingssvc.Service) http.HandlerFunc {
 
 func patch(svc *settingssvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
-
 		var body map[string]string
-		decoder := json.NewDecoder(r.Body)
-		if err := decoder.Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body or not an object")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 

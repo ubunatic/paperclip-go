@@ -2,7 +2,6 @@
 package companies
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -37,14 +36,12 @@ func list(s *svc.Service) http.HandlerFunc {
 
 func create(s *svc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			Name        string `json:"name"`
 			Shortname   string `json:"shortname"`
 			Description string `json:"description"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.Name == "" || body.Shortname == "" {
@@ -81,13 +78,11 @@ func get(s *svc.Service) http.HandlerFunc {
 func update(s *svc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			Name        *string `json:"name"`
 			Description *string `json:"description"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		// At least one field must be provided

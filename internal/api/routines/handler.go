@@ -2,7 +2,6 @@
 package routines
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -51,15 +50,13 @@ func list(svc *routines.Service) http.HandlerFunc {
 
 func create(svc *routines.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			CompanyID string `json:"companyId"`
 			AgentID   string `json:"agentId"`
 			Name      string `json:"name"`
 			CronExpr  string `json:"cronExpr"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 
@@ -120,14 +117,12 @@ func update(svc *routines.Service) http.HandlerFunc {
 			return
 		}
 
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			Name     *string `json:"name"`
 			CronExpr *string `json:"cronExpr"`
 			Enabled  *bool   `json:"enabled"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 

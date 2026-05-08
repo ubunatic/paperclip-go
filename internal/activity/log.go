@@ -12,6 +12,8 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
 
+const MaxEntityLimit = 500
+
 // Log provides activity logging backed by the store.
 type Log struct {
 	store *store.Store
@@ -86,14 +88,19 @@ func (l *Log) List(ctx context.Context, companyID string, limit int) ([]*domain.
 	return out, nil
 }
 
-// ListByEntity queries all activities for a given entity (no pagination yet).
-// Safe for issues with typical activity volume; consider adding LIMIT for high-volume entities.
+// ListByEntity queries activities for a given entity with a limit.
 // Returns activity log entries for a specific entity, ordered chronologically (ascending by created_at).
-func (l *Log) ListByEntity(ctx context.Context, entityType, entityID string) ([]*domain.Activity, error) {
+// The limit is clamped to MaxEntityLimit (500) to prevent unbounded queries.
+func (l *Log) ListByEntity(ctx context.Context, entityType, entityID string, limit int) ([]*domain.Activity, error) {
+	// Clamp limit: if limit <= 0 or limit > MaxEntityLimit then limit = MaxEntityLimit
+	if limit <= 0 || limit > MaxEntityLimit {
+		limit = MaxEntityLimit
+	}
+
 	rows, err := l.store.DB.QueryContext(ctx,
 		`SELECT id, company_id, actor_type, actor_id, action, entity_type, entity_id, meta_json, created_at
-		 FROM activity_log WHERE entity_type = ? AND entity_id = ? ORDER BY created_at ASC, id ASC`,
-		entityType, entityID,
+		 FROM activity_log WHERE entity_type = ? AND entity_id = ? ORDER BY created_at ASC, id ASC LIMIT ?`,
+		entityType, entityID, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("querying activity log by entity: %w", err)
