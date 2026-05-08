@@ -19,13 +19,13 @@ This means:
 
 ---
 
-## Status (2026-05-07, L complete — Handler Unit Tests for Remaining API Packages)
+## Status (2026-05-08, M0 complete — Decode Boilerplate Consolidation + Activity Pagination)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K, L  
-**Next:** Community features or additional quality debt items (auth, embedded Postgres, pagination improvements, etc.)  
-**Build:** ✅ green (all 25 test packages, 53 additional handler unit tests, comprehensive E2E + full handler coverage)  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K, L, M0  
+**Next:** Community features or additional quality debt items (structured logging, response wrapping, cross-tenant isolation, etc.)  
+**Build:** ✅ green (all 25 test packages + 4 new respond tests, 346 total tests passing)  
 **Latest migration:** `0015_issue_thread_interactions.sql`  
-**API handler test coverage:** 15/15 packages now have handler unit tests (100%)
+**Code quality:** ✅ Boilerplate removed (66 lines eliminated from 11 handler files); pagination limits enforced
 
 **H1 Code Review Findings (2026-05-06):**
 - ✅ **Fixed issues:**
@@ -519,6 +519,19 @@ Acceptance: ✅ `make test` green; handler validation branches (missing fields, 
 - **Test coverage**: 53 new handler unit tests across 5 packages, all passing; 15/15 API packages now have unit test coverage (100%).
 
 Acceptance: ✅ `make test` green (all 25 packages + 53 handler tests); all API handler packages have comprehensive unit test coverage including validation, success paths, conflicts, and not-found scenarios; boilerplate extracted and optimized per code review feedback.
+
+### Phase M0 — Decode Boilerplate Consolidation + Activity Pagination ✅
+
+**Files:** `internal/respond/respond.go`, `internal/respond/respond_test.go`, `internal/api/{issues,agents,companies,secrets,routines,approvals,activity,workspaces,heartbeat,settings,labels}/handler.go`, `internal/activity/log.go`, `internal/activity/log_test.go`, `internal/api/secrets/handler.go`
+
+**Completed (2026-05-08):**
+- **Decode helper**: Added `respond.DecodeJSON(w, r, dst)` in respond package to centralize JSON body decoding (1 MiB limit, proper error responses for 400 bad JSON vs. 413 oversized bodies). Created `respond_test.go` with 4 comprehensive tests (valid, invalid JSON, oversized, empty body).
+- **Boilerplate elimination**: Replaced 24 identical `http.MaxBytesReader` + `json.NewDecoder` blocks across 11 handler files with single `respond.DecodeJSON` call. Removed now-unused `encoding/json` imports from 9 files. Net result: 66 lines of boilerplate eliminated.
+- **Activity pagination**: Added `LIMIT` clause to `ListByEntity()` with `const MaxEntityLimit = 500` and clamping logic. Updated single call site in issues handler to use exported constant. Added `TestListByEntity_LimitClamped` test covering limit enforcement and clamping edge cases.
+- **Secrets handler cleanup**: Consolidated redundant `strings.TrimSpace()` validation checks in create/update handlers and `list` handler for clearer, single-check logic per field.
+- **Code review fixes**: Fixed test logic error in `TestDecodeJSON_Valid` (guard condition). Exported `MaxEntityLimit` constant for cross-package reuse in activity handler. All 346 tests passing; no regressions.
+
+Acceptance: ✅ `make test` green; zero `MaxBytesReader`/`json.NewDecoder` boilerplate remaining in handlers; `ListByEntity` has `LIMIT` with clamping; constant properly exported and reused; test coverage comprehensive.
 
 ---
 

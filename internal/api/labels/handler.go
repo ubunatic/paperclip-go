@@ -2,7 +2,6 @@
 package labels
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -43,14 +42,12 @@ func list(svc *labelssvc.Service) http.HandlerFunc {
 
 func create(svc *labelssvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			CompanyID string `json:"companyId"`
 			Name      string `json:"name"`
 			Color     string `json:"color"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 
