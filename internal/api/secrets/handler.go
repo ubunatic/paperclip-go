@@ -27,7 +27,7 @@ func Handler(svc *secretssvc.Service) http.Handler {
 func list(svc *secretssvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		companyID := r.URL.Query().Get("companyId")
-		if companyID == "" || len(strings.TrimSpace(companyID)) == 0 {
+		if strings.TrimSpace(companyID) == "" {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId query parameter is required and must not be blank")
 			return
 		}
@@ -57,23 +57,8 @@ func create(svc *secretssvc.Service) http.HandlerFunc {
 		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
-		if body.CompanyID == "" || body.Name == "" || body.Value == "" {
+		if strings.TrimSpace(body.CompanyID) == "" || strings.TrimSpace(body.Name) == "" || strings.TrimSpace(body.Value) == "" {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId, name, and value are required and must be non-empty")
-			return
-		}
-		// Validate companyId is not just whitespace
-		if len(strings.TrimSpace(body.CompanyID)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId cannot be only whitespace")
-			return
-		}
-		// Validate name is not just whitespace
-		if len(strings.TrimSpace(body.Name)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be only whitespace")
-			return
-		}
-		// Validate value is not just whitespace
-		if len(strings.TrimSpace(body.Value)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "value cannot be only whitespace")
 			return
 		}
 
@@ -123,24 +108,14 @@ func update(svc *secretssvc.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of name or value is required")
 			return
 		}
-		// Reject empty name
-		if body.Name != nil && *body.Name == "" {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be empty")
+		// Validate name if provided
+		if body.Name != nil && strings.TrimSpace(*body.Name) == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be empty or only whitespace")
 			return
 		}
-		// Reject whitespace-only name
-		if body.Name != nil && len(strings.TrimSpace(*body.Name)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "name cannot be only whitespace")
-			return
-		}
-		// Reject empty value
-		if body.Value != nil && *body.Value == "" {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "value cannot be empty")
-			return
-		}
-		// Reject whitespace-only value
-		if body.Value != nil && len(strings.TrimSpace(*body.Value)) == 0 {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "value cannot be only whitespace")
+		// Validate value if provided
+		if body.Value != nil && strings.TrimSpace(*body.Value) == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "value cannot be empty or only whitespace")
 			return
 		}
 
