@@ -25,7 +25,7 @@ func TestDecodeJSON_Valid(t *testing.T) {
 		t.Errorf("Name = %q, want %q", body.Name, "test")
 	}
 	// When successful, no response is written
-	if w.Code != http.StatusOK && w.Body.Len() > 0 {
+	if w.Body.Len() > 0 {
 		t.Errorf("Response body written on success: %s", w.Body.String())
 	}
 }

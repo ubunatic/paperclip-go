@@ -20,7 +20,7 @@ func Handler(s *svc.Log) http.Handler {
 	return r
 }
 
-const maxLimit = 500
+const maxLimit = svc.MaxEntityLimit
 
 func create(s *svc.Log) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
