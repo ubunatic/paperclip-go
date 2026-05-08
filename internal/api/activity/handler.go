@@ -24,7 +24,6 @@ const maxLimit = 500
 
 func create(s *svc.Log) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			CompanyID  string          `json:"companyId"`
 			ActorType  string          `json:"actorType"`
@@ -34,8 +33,7 @@ func create(s *svc.Log) http.HandlerFunc {
 			EntityID   string          `json:"entityId"`
 			MetaJSON   json.RawMessage `json:"metaJson"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 

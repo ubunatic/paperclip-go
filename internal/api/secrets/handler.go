@@ -2,7 +2,6 @@
 package secrets
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -50,14 +49,12 @@ func list(svc *secretssvc.Service) http.HandlerFunc {
 
 func create(svc *secretssvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			CompanyID string `json:"companyId"`
 			Name      string `json:"name"`
 			Value     string `json:"value"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.CompanyID == "" || body.Name == "" || body.Value == "" {
@@ -114,13 +111,11 @@ func get(svc *secretssvc.Service) http.HandlerFunc {
 func update(svc *secretssvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			Name  *string `json:"name"`
 			Value *string `json:"value"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		// At least one field must be provided

@@ -2,7 +2,6 @@
 package issues
 
 import (
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -90,7 +89,6 @@ func list(s *isvc.Service) http.HandlerFunc {
 
 func create(s *isvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			CompanyID         string  `json:"companyId"`
 			Title             string  `json:"title"`
@@ -99,8 +97,7 @@ func create(s *isvc.Service) http.HandlerFunc {
 			OriginFingerprint string  `json:"originFingerprint"`
 			AssigneeID        *string `json:"assigneeId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.CompanyID == "" || body.Title == "" {
@@ -153,15 +150,13 @@ func get(s *isvc.Service, labelSvc *lsvc.Service) http.HandlerFunc {
 func update(s *isvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			Status       string  `json:"status"`
 			AssigneeID   *string `json:"assigneeId"`
 			Documents    *[]any  `json:"documents"`
 			WorkProducts *[]any  `json:"workProducts"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		// At least one field must be provided
@@ -190,12 +185,10 @@ func update(s *isvc.Service) http.HandlerFunc {
 func checkout(s *isvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			AgentID string `json:"agentId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.AgentID == "" {
@@ -223,12 +216,10 @@ func checkout(s *isvc.Service) http.HandlerFunc {
 func release(s *isvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			AgentID string `json:"agentId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.AgentID == "" {
@@ -337,14 +328,12 @@ func listActivity(a *asvc.Log) http.HandlerFunc {
 func createComment(s *comments.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			Body          string  `json:"body"`
 			AuthorAgentID *string `json:"authorAgentId"`
 			AuthorKind    string  `json:"authorKind"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.Body == "" {
@@ -379,12 +368,10 @@ func createComment(s *comments.Service) http.HandlerFunc {
 func addLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			LabelID string `json:"labelId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.LabelID == "" {
@@ -452,7 +439,6 @@ func listInteractions(s *intesvc.Service) http.HandlerFunc {
 func createInteraction(s *intesvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			CompanyID      string  `json:"companyId"`
 			AgentID        *string `json:"agentId"`
@@ -461,8 +447,7 @@ func createInteraction(s *intesvc.Service) http.HandlerFunc {
 			Kind           string  `json:"kind"`
 			IdempotencyKey string  `json:"idempotencyKey"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.Kind == "" {
@@ -494,13 +479,11 @@ func createInteraction(s *intesvc.Service) http.HandlerFunc {
 func resolveInteraction(s *intesvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		iid := chi.URLParam(r, "iid")
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MiB
 		var body struct {
 			ResolvedByAgentID string  `json:"resolvedByAgentId"`
 			Result            *string `json:"result"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			respond.Error(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		if body.ResolvedByAgentID == "" {
