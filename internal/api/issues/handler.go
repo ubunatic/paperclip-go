@@ -315,7 +315,7 @@ func listComments(s *comments.Service) http.HandlerFunc {
 func listActivity(a *asvc.Log) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
-		items, err := a.ListByEntity(r.Context(), "issue", issueID)
+		items, err := a.ListByEntity(r.Context(), "issue", issueID, 500)
 		if err != nil {
 			log.Printf("activity: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")

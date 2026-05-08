@@ -124,7 +124,7 @@ func TestListByEntity(t *testing.T) {
 	}
 
 	// List activities for entity1 (should be in chronological order, ascending)
-	items1, err := log.ListByEntity(ctx, entity1Kind, entity1ID)
+	items1, err := log.ListByEntity(ctx, entity1Kind, entity1ID, 500)
 	if err != nil {
 		t.Fatalf("ListByEntity for entity1: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestListByEntity(t *testing.T) {
 	}
 
 	// List activities for entity2
-	items2, err := log.ListByEntity(ctx, entity2Kind, entity2ID)
+	items2, err := log.ListByEntity(ctx, entity2Kind, entity2ID, 500)
 	if err != nil {
 		t.Fatalf("ListByEntity for entity2: %v", err)
 	}
@@ -150,11 +150,62 @@ func TestListByEntity(t *testing.T) {
 	}
 
 	// List activities for nonexistent entity
-	items3, err := log.ListByEntity(ctx, "nonexistent", "nonexistent-id")
+	items3, err := log.ListByEntity(ctx, "nonexistent", "nonexistent-id", 500)
 	if err != nil {
 		t.Fatalf("ListByEntity for nonexistent: %v", err)
 	}
 	if len(items3) != 0 {
 		t.Errorf("ListByEntity nonexistent len = %d, want 0", len(items3))
+	}
+}
+
+func TestListByEntity_LimitClamped(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create a company
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	// Insert 6 activities for the same entity
+	log := activity.New(s)
+	const entityKind = "issue"
+	const entityID = "issue-123"
+
+	for i := 0; i < 6; i++ {
+		_, err := log.Record(ctx, company.ID, "agent", "agent-123", "action", entityKind, entityID, "{}")
+		if err != nil {
+			t.Fatalf("Record activity %d: %v", i, err)
+		}
+	}
+
+	// Call with limit=4, should return exactly 4 items
+	items, err := log.ListByEntity(ctx, entityKind, entityID, 4)
+	if err != nil {
+		t.Fatalf("ListByEntity with limit 4: %v", err)
+	}
+	if len(items) != 4 {
+		t.Errorf("ListByEntity len = %d, want 4", len(items))
+	}
+
+	// Call with limit=0, should clamp to maxEntityLimit and return all 6
+	items, err = log.ListByEntity(ctx, entityKind, entityID, 0)
+	if err != nil {
+		t.Fatalf("ListByEntity with limit 0: %v", err)
+	}
+	if len(items) != 6 {
+		t.Errorf("ListByEntity with limit 0 len = %d, want 6", len(items))
+	}
+
+	// Call with limit > maxEntityLimit, should clamp to maxEntityLimit and return all 6
+	items, err = log.ListByEntity(ctx, entityKind, entityID, 1000)
+	if err != nil {
+		t.Fatalf("ListByEntity with limit 1000: %v", err)
+	}
+	if len(items) != 6 {
+		t.Errorf("ListByEntity with limit 1000 len = %d, want 6", len(items))
 	}
 }
