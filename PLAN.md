@@ -19,13 +19,13 @@ This means:
 
 ---
 
-## Status (2026-05-08, M0 complete — Decode Boilerplate Consolidation + Activity Pagination)
+## Status (2026-05-09, M0 complete — Decode Boilerplate Consolidation + Activity Pagination)
 
 **Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K, L, M0  
-**Next:** Community features or additional quality debt items (structured logging, response wrapping, cross-tenant isolation, etc.)  
+**Next:** Code quality cleanup (consistency fixes + minor design debt) or additional features  
 **Build:** ✅ green (all 25 test packages + 4 new respond tests, 346 total tests passing)  
-**Latest migration:** `0015_issue_thread_interactions.sql`  
-**Code quality:** ✅ Boilerplate removed (66 lines eliminated from 11 handler files); pagination limits enforced
+**Latest migration:** `0015_issue_thread_interactions.sql` (workspace_id link to heartbeat_runs)  
+**Code quality:** ✅ Boilerplate removed (66 lines); pagination limits enforced; review identified minor consistency gaps
 
 **H1 Code Review Findings (2026-05-06):**
 - ✅ **Fixed issues:**
@@ -46,6 +46,18 @@ This means:
   - Event.Topic field never populated by publish calls (redundant, but not a bug since routing uses topic parameter)
   - No read-side disconnect detection; relies on write deadline (acceptable for server-push-only design)
   - Scheduler in serve.go uses separate service instances without bus (maintenance hazard only, not a correctness bug)
+
+**M0+ Code Review Findings (2026-05-09):**
+- ✅ **All tests passing** — 346 tests, no regressions, no critical bugs found
+- 🐛 **Small fixes identified (apply next):**
+  - WebSocket error handling: Replace 5 `http.Error()` calls with `respond.Error()` for consistency (`internal/api/ws/upgrade.go:28-46`)
+  - Respond.go logging: Add documentation comment explaining silent encode-error logging policy (`internal/respond/respond.go:26`)
+  - Slice initialization: Standardize `approvals`/`routines` services to use `make([]*Type, 0)` pattern like secrets/workspaces (consistency, not a bug since handlers have nil guards)
+- 🏗️ **Design debt items:**
+  - ListByEntity limit clamping: `limit=0` clamps to 500 instead of using sensible default; add separate defaultLimit constant
+  - Interactions ListByIssue: Missing pagination limit (unbounded on high-activity issues); add optional limit parameter like ListByEntity
+  - WebSocket SetWriteDeadline: Set on every loop iteration (inefficiency); move outside select loop
+  - Secrets validation: Multiple `strings.TrimSpace()` checks could be consolidated (acceptable per existing notes, skip for now)
 
 **G1 & G2 Code Review Findings (2026-05-05):**
 - ✅ **Fixed issues:**
@@ -590,16 +602,19 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 | ✅ HTTP status code consistency (G1/G2) | LOW | `internal/api/routines,approvals/handler.go` | FIXED (2026-05-05) | — |
 | ✅ DispatchFingerprint exposure in API | LOW | `internal/domain/routine.go:15` | FIXED (2026-05-07, J1) | — |
 | ✅ Handler unit tests missing (G1/G2) | MEDIUM | `internal/api/approvals,routines/` | FIXED (2026-05-07, J1) — 23 tests | — |
-| Redundant validation in secrets handler | LOW | `internal/api/secrets/handler.go:31` | Acceptable | <1 min |
-| Inconsistent error handling in env CLI | LOW | `internal/cli/env.go:200+` | Minor | 2 min |
-| HTTP client lifecycle inefficiency | LOW | `internal/cli/env.go` | Minor | 5 min |
-| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | Deferred | 20 min |
-| Unbounded `ListByEntity()` pagination | MEDIUM | `internal/activity/log.go` | Deferred | 15 min |
-| `MaxBytesReader` boilerplate (8 sites) | LOW | `internal/api/*/handler.go` | Deferred | 20 min |
-| Response wrapping inconsistency | LOW | GET returns `{items}`, POST returns raw object | Deferred | 30 min |
-| Handler unit tests missing | MEDIUM | agents, issues, companies packages | Deferred | 1–2 h |
+| ✅ `MaxBytesReader` boilerplate (24 sites) | LOW | `internal/api/*/handler.go` | FIXED (2026-05-08, M0) — DecodeJSON | — |
+| ✅ Unbounded `ListByEntity()` pagination | MEDIUM | `internal/activity/log.go` | FIXED (2026-05-08, M0) — added LIMIT + clamping | — |
+| 🐛 WebSocket error handling inconsistency | LOW | `internal/api/ws/upgrade.go:28-46` | Pending | <5 min |
+| 🐛 Slice init consistency (approvals/routines) | MEDIUM | `internal/{approvals,routines}/service.go` | Pending | 10 min |
+| 🐛 ListByEntity limit clamping logic | LOW | `internal/activity/log.go:95-98` | Pending | 5 min |
+| 🐛 Respond.go logging documentation | LOW | `internal/respond/respond.go:26` | Pending | <3 min |
+| 🏗️ Interactions ListByIssue pagination | MEDIUM | `internal/interactions/service.go:99` | Deferred | 10 min |
+| 🏗️ WebSocket SetWriteDeadline inefficiency | LOW | `internal/api/ws/handler.go:51` | Deferred | <5 min |
+| 🏗️ Secrets TrimSpace validation consolidation | LOW | `internal/api/secrets/handler.go:60` | Acceptable | 5 min |
 | Cross-tenant isolation at route level | MEDIUM | DELETE/PATCH/state endpoints | Phase F+ | — |
 | State machine RBAC | MEDIUM | pause/resume/terminate handlers | Phase F+ | — |
+| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | Deferred | 20 min |
+| Response wrapping inconsistency | LOW | GET returns `{items}`, POST returns raw object | Deferred | 30 min |
 
 ---
 

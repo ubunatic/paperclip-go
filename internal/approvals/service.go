@@ -89,7 +89,7 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domai
 	}
 	defer rows.Close()
 
-	var approvals []*domain.Approval
+	approvals := make([]*domain.Approval, 0)
 	for rows.Next() {
 		a, err := scanApproval(rows)
 		if err != nil {

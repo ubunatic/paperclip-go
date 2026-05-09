@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/ubunatic/paperclip-go/internal/respond"
 )
 
 // hasToken checks if a comma-separated header contains a specific token (case-insensitive).
@@ -25,25 +27,25 @@ func hasToken(header, token string) bool {
 func Upgrade(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
 	// Check required headers (RFC 6455)
 	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-		http.Error(w, "Upgrade header missing or not 'websocket'", http.StatusBadRequest)
+		respond.Error(w, http.StatusBadRequest, "upgrade_header_missing", "Upgrade header missing or not 'websocket'")
 		return nil, fmt.Errorf("upgrade header not websocket")
 	}
 	if !hasToken(r.Header.Get("Connection"), "Upgrade") {
-		http.Error(w, "Connection header must contain 'Upgrade'", http.StatusBadRequest)
+		respond.Error(w, http.StatusBadRequest, "connection_header_invalid", "Connection header must contain 'Upgrade'")
 		return nil, fmt.Errorf("connection header missing upgrade token")
 	}
 
 	// Check WebSocket version (RFC 6455 requires version 13)
 	if r.Header.Get("Sec-WebSocket-Version") != "13" {
 		w.Header().Set("Sec-WebSocket-Version", "13")
-		http.Error(w, "WebSocket version 13 required", http.StatusBadRequest)
+		respond.Error(w, http.StatusBadRequest, "websocket_version_invalid", "WebSocket version 13 required")
 		return nil, fmt.Errorf("websocket version not 13")
 	}
 
 	// Get Sec-WebSocket-Key
 	key := r.Header.Get("Sec-WebSocket-Key")
 	if key == "" {
-		http.Error(w, "Sec-WebSocket-Key header missing", http.StatusBadRequest)
+		respond.Error(w, http.StatusBadRequest, "sec_websocket_key_missing", "Sec-WebSocket-Key header missing")
 		return nil, fmt.Errorf("sec-websocket-key missing")
 	}
 
@@ -56,7 +58,7 @@ func Upgrade(w http.ResponseWriter, r *http.Request) (net.Conn, error) {
 	// Hijack the connection
 	hj, ok := w.(http.Hijacker)
 	if !ok {
-		http.Error(w, "hijack not supported", http.StatusInternalServerError)
+		respond.Error(w, http.StatusInternalServerError, "hijack_not_supported", "hijack not supported")
 		return nil, fmt.Errorf("hijacker not available")
 	}
 	conn, rw, err := hj.Hijack()
