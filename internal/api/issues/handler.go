@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	asvc "github.com/ubunatic/paperclip-go/internal/activity"
@@ -426,7 +427,14 @@ func removeLabel(labelSvc *lsvc.Service) http.HandlerFunc {
 func listInteractions(s *intesvc.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		issueID := chi.URLParam(r, "id")
-		items, err := s.ListByIssue(r.Context(), issueID)
+		limitParam := r.URL.Query().Get("limit")
+		limit := 0
+		if limitParam != "" {
+			if v, err := strconv.Atoi(limitParam); err == nil {
+				limit = v
+			}
+		}
+		items, err := s.ListByIssue(r.Context(), issueID, limit)
 		if err != nil {
 			log.Printf("interactions: error: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")

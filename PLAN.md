@@ -19,13 +19,25 @@ This means:
 
 ---
 
-## Status (2026-05-09, M0 complete — Decode Boilerplate Consolidation + Activity Pagination)
+## Status (2026-05-09, M1 in progress — WebSocket + Interactions quality debt)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K, L, M0  
-**Next:** Code quality cleanup (consistency fixes + minor design debt) or additional features  
-**Build:** ✅ green (all 25 test packages + 4 new respond tests, 346 total tests passing)  
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K, L, M0, M1  
+**Next:** Additional features (see Phase N proposals below) or further quality debt  
+**Build:** ✅ green (all 25 test packages, 346+ total tests passing)  
 **Latest migration:** `0015_issue_thread_interactions.sql` (workspace_id link to heartbeat_runs)  
-**Code quality:** ✅ Boilerplate removed (66 lines); pagination limits enforced; review identified minor consistency gaps
+**Code quality:** ✅ Boilerplate removed; pagination enforced; WS consistency fixed; scanner interfaces modernized
+
+**M1 Code Review Findings (2026-05-09):**
+- ✅ **Fixed issues:**
+  - WebSocket handler: Replaced lone `http.Error()` with `respond.Error()` for consistency (`internal/api/ws/handler.go:17`)
+  - Scanner interface: Modernized `...interface{}` → `...any` in approvals and routines service (`internal/{approvals,routines}/service.go`)
+  - WebSocket SetWriteDeadline: Moved outside select loop to eliminate per-event syscall overhead (`internal/api/ws/handler.go`)
+  - Interactions pagination: Added `limit` query parameter to `ListByIssue` with default 100 / max 500 clamping (`internal/interactions/service.go`)
+- 💡 **Status corrections from post-M0 review:**
+  - Slice init consistency (approvals/routines) — already fixed in commit 024047b; was incorrectly listed as pending
+  - ListByEntity limit clamping — already fixed in M0 (uses `DefaultEntityLimit=50`); was incorrectly listed as pending
+  - Respond.go logging documentation — already present in respond.go:22-24; was incorrectly listed as pending
+  - WS upgrade.go error handling — already used `respond.Error()` throughout; single remaining `http.Error()` was in handler.go (now fixed)
 
 **H1 Code Review Findings (2026-05-06):**
 - ✅ **Fixed issues:**
@@ -197,7 +209,7 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `env list/set/get` | ✅ | ✅ | F3 |
 | `db:backup` | ✅ | ✅ | F4 |
 | `approval list/get` | ✅ | ✅ | G1 |
-| `routine create/list` | ✅ | 🔲 | G2 |
+| `routine create/list` | ✅ | ✅ | G2 |
 | `plugin install/list/remove` | ✅ | 🟡 | — (deferred) |
 
 ### Schema / Data Model
@@ -545,6 +557,48 @@ Acceptance: ✅ `make test` green (all 25 packages + 53 handler tests); all API 
 
 Acceptance: ✅ `make test` green; zero `MaxBytesReader`/`json.NewDecoder` boilerplate remaining in handlers; `ListByEntity` has `LIMIT` with clamping; constant properly exported and reused; test coverage comprehensive.
 
+### Phase M1 — WebSocket + Interactions Quality Debt ✅
+
+**Files:** `internal/api/ws/handler.go`, `internal/approvals/service.go`, `internal/routines/service.go`, `internal/interactions/service.go`
+
+**Completed (2026-05-09):**
+- **WS handler consistency**: Replaced `http.Error()` with `respond.Error()` in `ws/handler.go:17` — the one remaining inconsistency after M0 was applied to upgrade.go.
+- **Scanner interface modernization**: Changed `Scan(dest ...interface{})` → `Scan(dest ...any)` in approvals and routines scanner interfaces (Go 1.18+ convention).
+- **WS SetWriteDeadline optimization**: Moved `conn.SetWriteDeadline()` call outside the select loop to eliminate per-event syscall overhead.
+- **Interactions pagination**: Added optional `limit` query parameter to `GET /api/issues/{id}/interactions` (default 100, max 500) matching the activity log pattern.
+
+Acceptance: ✅ `make test` green; all WS error paths use `respond.Error()`; interactions listing is bounded; scanner interfaces use modern `any` alias.
+
+---
+
+### Phase N — Proposed Next Steps 🔲
+
+These are the most valuable remaining improvements, sized for single agent sessions.
+
+#### N1 — Handler tests for interactions routes
+
+The three interaction routes (`POST/GET /api/issues/{id}/interactions`, `POST .../resolve`) are tested only via E2E. Add unit handler tests following the J1/K/L pattern using `testutil.NewStore(t)`.
+
+**Files:** `internal/api/issues/handler_test.go` (extend) or new `internal/api/interactions/handler_test.go`
+
+#### N2 — `routine create/list` CLI integration tests
+
+The CLI commands exist but have no unit tests. Add tests following the `env_test.go` pattern with a mock HTTP server.
+
+**Files:** `internal/cli/routine_test.go`
+
+#### N3 — Structured logging
+
+Replace scattered `log.Printf` calls with a minimal structured logger (stdlib `slog`, Go 1.21+) across handlers. Adds request-scoped context (method, path, duration) without external deps.
+
+**Files:** `internal/api/router.go`, handler files
+
+#### N4 — `approval create/get` CLI integration tests
+
+Mirrors N2 for the approvals CLI commands.
+
+**Files:** `internal/cli/approval_test.go`
+
 ---
 
 ## LLM Mocking Convention
@@ -604,12 +658,13 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 | ✅ Handler unit tests missing (G1/G2) | MEDIUM | `internal/api/approvals,routines/` | FIXED (2026-05-07, J1) — 23 tests | — |
 | ✅ `MaxBytesReader` boilerplate (24 sites) | LOW | `internal/api/*/handler.go` | FIXED (2026-05-08, M0) — DecodeJSON | — |
 | ✅ Unbounded `ListByEntity()` pagination | MEDIUM | `internal/activity/log.go` | FIXED (2026-05-08, M0) — added LIMIT + clamping | — |
-| 🐛 WebSocket error handling inconsistency | LOW | `internal/api/ws/upgrade.go:28-46` | Pending | <5 min |
-| 🐛 Slice init consistency (approvals/routines) | MEDIUM | `internal/{approvals,routines}/service.go` | Pending | 10 min |
-| 🐛 ListByEntity limit clamping logic | LOW | `internal/activity/log.go:95-98` | Pending | 5 min |
-| 🐛 Respond.go logging documentation | LOW | `internal/respond/respond.go:26` | Pending | <3 min |
-| 🏗️ Interactions ListByIssue pagination | MEDIUM | `internal/interactions/service.go:99` | Deferred | 10 min |
-| 🏗️ WebSocket SetWriteDeadline inefficiency | LOW | `internal/api/ws/handler.go:51` | Deferred | <5 min |
+| ✅ Slice init consistency (approvals/routines) | MEDIUM | `internal/{approvals,routines}/service.go` | FIXED (2026-05-09, 024047b) | — |
+| ✅ ListByEntity limit clamping logic | LOW | `internal/activity/log.go:95-98` | FIXED (2026-05-08, M0) — DefaultEntityLimit=50 | — |
+| ✅ Respond.go logging documentation | LOW | `internal/respond/respond.go:22-24` | FIXED (2026-05-08, M0) — doc comment present | — |
+| ✅ WebSocket error handling inconsistency | LOW | `internal/api/ws/handler.go:17` | FIXED (2026-05-09, M1) — respond.Error() | — |
+| ✅ Scanner interface `...interface{}` → `...any` | LOW | `internal/{approvals,routines}/service.go` | FIXED (2026-05-09, M1) — modernized | — |
+| ✅ Interactions ListByIssue pagination | MEDIUM | `internal/interactions/service.go:99` | FIXED (2026-05-09, M1) — limit param, default 100/max 500 | — |
+| ✅ WebSocket SetWriteDeadline inefficiency | LOW | `internal/api/ws/handler.go:51` | FIXED (2026-05-09, M1) — moved outside select | — |
 | 🏗️ Secrets TrimSpace validation consolidation | LOW | `internal/api/secrets/handler.go:60` | Acceptable | 5 min |
 | Cross-tenant isolation at route level | MEDIUM | DELETE/PATCH/state endpoints | Phase F+ | — |
 | State machine RBAC | MEDIUM | pause/resume/terminate handlers | Phase F+ | — |
