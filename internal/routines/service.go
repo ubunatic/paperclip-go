@@ -102,7 +102,7 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domai
 	}
 	defer rows.Close()
 
-	var routines []*domain.Routine
+	routines := make([]*domain.Routine, 0)
 	for rows.Next() {
 		r, err := scanRoutine(rows)
 		if err != nil {
@@ -252,7 +252,7 @@ func (s *Service) DueRoutines(ctx context.Context, now time.Time) ([]*domain.Rou
 	}
 	defer rows.Close()
 
-	var routines []*domain.Routine
+	routines := make([]*domain.Routine, 0)
 	truncatedNow := now.Truncate(time.Minute)
 
 	for rows.Next() {

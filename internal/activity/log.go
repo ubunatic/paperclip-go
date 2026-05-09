@@ -12,7 +12,10 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
 
-const MaxEntityLimit = 500
+const (
+	DefaultEntityLimit = 50
+	MaxEntityLimit     = 500
+)
 
 // Log provides activity logging backed by the store.
 type Log struct {
@@ -90,10 +93,11 @@ func (l *Log) List(ctx context.Context, companyID string, limit int) ([]*domain.
 
 // ListByEntity queries activities for a given entity with a limit.
 // Returns activity log entries for a specific entity, ordered chronologically (ascending by created_at).
-// The limit is clamped to MaxEntityLimit (500) to prevent unbounded queries.
+// A limit of 0 uses DefaultEntityLimit (50); values > MaxEntityLimit are clamped to 500.
 func (l *Log) ListByEntity(ctx context.Context, entityType, entityID string, limit int) ([]*domain.Activity, error) {
-	// Clamp limit: if limit <= 0 or limit > MaxEntityLimit then limit = MaxEntityLimit
-	if limit <= 0 || limit > MaxEntityLimit {
+	if limit <= 0 {
+		limit = DefaultEntityLimit
+	} else if limit > MaxEntityLimit {
 		limit = MaxEntityLimit
 	}
 
