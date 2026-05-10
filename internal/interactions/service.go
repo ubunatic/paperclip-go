@@ -20,6 +20,11 @@ var ErrNotFound = errors.New("interaction not found")
 // ErrAlreadyResolved is returned when attempting to resolve an already resolved interaction.
 var ErrAlreadyResolved = errors.New("interaction already resolved")
 
+const (
+	DefaultInteractionLimit = 100
+	MaxInteractionLimit     = 500
+)
+
 // CreateInput holds the input for creating an interaction.
 type CreateInput struct {
 	CompanyID      string
@@ -94,13 +99,21 @@ func (s *Service) GetByIdempotencyKey(ctx context.Context, issueID, idempotencyK
 	return i, err
 }
 
-// ListByIssue returns all interactions for a given issue, ordered by creation time descending.
+// ListByIssue returns interactions for a given issue, ordered by creation time descending.
 // Returns an empty slice (not nil) if no interactions exist.
-func (s *Service) ListByIssue(ctx context.Context, issueID string) ([]*domain.Interaction, error) {
+// limit: max number of interactions to return; 0 uses DefaultInteractionLimit, values > MaxInteractionLimit are clamped.
+func (s *Service) ListByIssue(ctx context.Context, issueID string, limit int) ([]*domain.Interaction, error) {
+	// Clamp limit to valid range
+	if limit <= 0 {
+		limit = DefaultInteractionLimit
+	} else if limit > MaxInteractionLimit {
+		limit = MaxInteractionLimit
+	}
+
 	rows, err := s.store.DB.QueryContext(ctx,
 		`SELECT id, company_id, issue_id, agent_id, comment_id, run_id, kind, status, idempotency_key, result, resolved_at, resolved_by_agent_id, created_at, updated_at
-		 FROM issue_thread_interactions WHERE issue_id = ? ORDER BY created_at DESC`,
-		issueID,
+		 FROM issue_thread_interactions WHERE issue_id = ? ORDER BY created_at DESC LIMIT ?`,
+		issueID, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("listing interactions by issue: %w", err)

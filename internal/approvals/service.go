@@ -172,7 +172,7 @@ func (s *Service) setState(ctx context.Context, id string, newStatus domain.Appr
 
 // scanner is an interface for *sql.Row or *sql.Rows.
 type scanner interface {
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 }
 
 // scanApproval scans an approval from a row or rows.

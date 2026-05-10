@@ -328,7 +328,7 @@ func (s *Service) validateCronExpr(expr string) error {
 
 // scanner is an interface for *sql.Row or *sql.Rows.
 type scanner interface {
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 }
 
 // scanRoutine scans a routine from a row or rows.

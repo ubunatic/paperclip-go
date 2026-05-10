@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/events"
+	"github.com/ubunatic/paperclip-go/internal/respond"
 )
 
 // Handler returns an HTTP handler that upgrades to WebSocket and fans out events.
@@ -14,7 +15,7 @@ func Handler(bus events.Bus) http.HandlerFunc {
 		// Extract companyId from query string
 		companyID := r.URL.Query().Get("companyId")
 		if companyID == "" {
-			http.Error(w, "companyId query parameter required", http.StatusBadRequest)
+			respond.Error(w, http.StatusBadRequest, "validation_error", "companyId query parameter required")
 			return
 		}
 

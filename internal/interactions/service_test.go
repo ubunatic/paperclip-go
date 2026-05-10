@@ -208,7 +208,7 @@ func TestInteractionCRUD(t *testing.T) {
 			}
 		}
 
-		items, err := svc.ListByIssue(ctx, issueID)
+		items, err := svc.ListByIssue(ctx, issueID, 0)
 		if err != nil {
 			t.Fatalf("ListByIssue: %v", err)
 		}
@@ -224,7 +224,7 @@ func TestInteractionCRUD(t *testing.T) {
 
 		svc := interactions.New(s)
 
-		items, err := svc.ListByIssue(ctx, issueID)
+		items, err := svc.ListByIssue(ctx, issueID, 0)
 		if err != nil {
 			t.Fatalf("ListByIssue: %v", err)
 		}
