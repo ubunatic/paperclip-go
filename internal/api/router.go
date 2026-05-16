@@ -63,8 +63,9 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string, b
 	approvalSvc := approvals.New(s)
 	interactionSvc := interactions.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
-	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
+	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry, approvalSvc)
 	routineSvc := routines.New(s)
+	routineRunSvc := routines.NewRunService(s)
 	workspaceSvc := workspaces.New(s)
 
 	// Wire bus to services
@@ -109,7 +110,7 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string, b
 		r.Get("/dashboard", apistubs.EmptyList())
 		r.Get("/goals", apistubs.EmptyList())
 		r.Get("/projects", apistubs.EmptyList())
-		r.Mount("/routines", aproutines.Handler(routineSvc))
+		r.Mount("/routines", aproutines.Handler(routineSvc, routineRunSvc))
 		r.Mount("/execution-workspaces", apiworkspaces.Handler(workspaceSvc))
 		r.Get("/plugins", apistubs.EmptyList())
 		r.Get("/sidebar-badges", apistubs.EmptyList())

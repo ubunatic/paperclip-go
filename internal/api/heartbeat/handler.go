@@ -42,6 +42,10 @@ func create(r *svc.Runner) http.HandlerFunc {
 				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
 				return
 			}
+			if errors.Is(err, svc.ErrAlreadyRunning) {
+				respond.Error(w, http.StatusConflict, "already_running", "agent already has a running heartbeat")
+				return
+			}
 			log.Printf("heartbeat: error running: %v", err)
 			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
 			return

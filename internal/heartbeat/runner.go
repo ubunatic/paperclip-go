@@ -11,6 +11,7 @@ import (
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
+	"github.com/ubunatic/paperclip-go/internal/approvals"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/ids"
@@ -27,15 +28,22 @@ var ErrTerminalStatus = errors.New("heartbeat run is not running")
 // ErrBudgetExceeded is returned when an agent has reached its budget limit.
 var ErrBudgetExceeded = errors.New("agent budget exceeded")
 
+// ErrApprovalPending is returned when all available issues have pending approvals and no idle run is possible.
+var ErrApprovalPending = errors.New("issue has pending approvals")
+
+// ErrAlreadyRunning is returned when an agent already has a heartbeat run in "running" state.
+var ErrAlreadyRunning = errors.New("agent already has a running heartbeat")
+
 // Runner provides heartbeat run operations backed by the store.
 type Runner struct {
-	store    *store.Store
-	agents   *agents.Service
-	issues   *issues.Service
-	comments *comments.Service
-	actLog   *activity.Log
-	registry *Registry
-	Timeout  time.Duration
+	store     *store.Store
+	agents    *agents.Service
+	issues    *issues.Service
+	comments  *comments.Service
+	actLog    *activity.Log
+	registry  *Registry
+	approvals *approvals.Service
+	Timeout   time.Duration
 }
 
 // New returns a Runner using the given dependencies.
@@ -46,15 +54,17 @@ func New(
 	commentSvc *comments.Service,
 	actLog *activity.Log,
 	registry *Registry,
+	approvalSvc *approvals.Service,
 ) *Runner {
 	return &Runner{
-		store:    s,
-		agents:   agentSvc,
-		issues:   issueSvc,
-		comments: commentSvc,
-		actLog:   actLog,
-		registry: registry,
-		Timeout:  5 * time.Minute,
+		store:     s,
+		agents:    agentSvc,
+		issues:    issueSvc,
+		comments:  commentSvc,
+		actLog:    actLog,
+		registry:  registry,
+		approvals: approvalSvc,
+		Timeout:   5 * time.Minute,
 	}
 }
 
@@ -84,6 +94,17 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 		return nil, ErrBudgetExceeded
 	}
 
+	var inFlightCount int
+	if err := r.store.DB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM heartbeat_runs WHERE agent_id = ? AND status = 'running'`,
+		agentID,
+	).Scan(&inFlightCount); err != nil {
+		return nil, fmt.Errorf("checking in-flight runs: %w", err)
+	}
+	if inFlightCount > 0 {
+		return nil, ErrAlreadyRunning
+	}
+
 	// Select an issue to work on (first open issue)
 	// This is a simple heuristic; heartbeat may pass nil issue
 	var selectedIssue *domain.Issue
@@ -93,6 +114,16 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 	}
 	if len(issues) > 0 {
 		selectedIssue = issues[0]
+	}
+
+	if selectedIssue != nil && r.approvals != nil {
+		pending, err := r.approvals.ListPendingByIssue(ctx, selectedIssue.ID)
+		if err != nil {
+			return nil, fmt.Errorf("checking pending approvals: %w", err)
+		}
+		if len(pending) > 0 {
+			selectedIssue = nil
+		}
 	}
 
 	// Create the HeartbeatRun record with status "running"
