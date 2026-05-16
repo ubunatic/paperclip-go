@@ -17,6 +17,8 @@ type Agent struct {
 	Configuration map[string]any `json:"configuration"`
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`
+	BudgetLimit   *int           `json:"budgetLimit"`
+	BudgetUsed    int            `json:"budgetUsed"`
 }
 
 // validRuntimeStates contains the allowed runtime state values for agents.

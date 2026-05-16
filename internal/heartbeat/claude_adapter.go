@@ -41,10 +41,17 @@ type anthropicMessage struct {
 	Content string `json:"content"`
 }
 
+// anthropicUsage holds token counts from the Anthropic API response.
+type anthropicUsage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+}
+
 // anthropicResponse represents the response from the Anthropic Messages API.
 type anthropicResponse struct {
 	Content    []anthropicContent `json:"content"`
 	StopReason string             `json:"stop_reason"`
+	Usage      anthropicUsage     `json:"usage"`
 }
 
 // anthropicContent represents a content block in the Anthropic response.
@@ -177,7 +184,9 @@ func (a *ClaudeAdapter) Run(ctx context.Context, agent *domain.Agent, issue *dom
 	summary = strings.TrimSpace(summary)
 
 	return &domain.RunResult{
-		Status:  "success",
-		Summary: summary,
+		Status:           "success",
+		Summary:          summary,
+		PromptTokens:     apiResp.Usage.InputTokens,
+		CompletionTokens: apiResp.Usage.OutputTokens,
 	}, nil
 }

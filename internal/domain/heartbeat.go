@@ -25,6 +25,9 @@ type HeartbeatRun struct {
 	ScheduledRetryReason   *string `json:"scheduledRetryReason"`
 	// Workspace reference (H1)
 	WorkspaceID            *string `json:"workspaceId"`
+	PromptTokens           int     `json:"promptTokens"`
+	CompletionTokens       int     `json:"completionTokens"`
+	Cost                   int     `json:"cost"`
 }
 
 // RunContext holds information about the current agent and issue during a heartbeat run.
@@ -35,7 +38,10 @@ type RunContext struct {
 
 // RunResult holds the output from a successful heartbeat run.
 type RunResult struct {
-	Status  string
-	Summary string
-	IssueID *string
+	Status          string
+	Summary         string
+	IssueID         *string
+	PromptTokens    int
+	CompletionTokens int
+	Cost            int
 }

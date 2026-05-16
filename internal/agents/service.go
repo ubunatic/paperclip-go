@@ -70,14 +70,16 @@ func (s *Service) Create(ctx context.Context, companyID, shortname, displayName,
 		Configuration: make(map[string]any),
 		CreatedAt:     now,
 		UpdatedAt:     now,
+		BudgetLimit:   nil,
+		BudgetUsed:    0,
 	}
 	configJSON, err := json.Marshal(a.Configuration)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling configuration: %w", err)
 	}
 	_, err = s.store.DB.ExecContext(ctx,
-		`INSERT INTO agents(id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO agents(id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at, budget_limit, budget_used)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0)`,
 		a.ID, a.CompanyID, a.Shortname, a.DisplayName, a.Role, a.ReportsTo, a.Adapter, a.RuntimeState, string(configJSON), ts, ts,
 	)
 	if err != nil {
@@ -95,7 +97,7 @@ func (s *Service) Create(ctx context.Context, companyID, shortname, displayName,
 // Get returns the agent with the given ID, or ErrNotFound if it doesn't exist.
 func (s *Service) Get(ctx context.Context, id string) (*domain.Agent, error) {
 	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
+		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at, budget_limit, budget_used
 		 FROM agents WHERE id = ?`, id,
 	)
 	a, err := scanAgent(row)
@@ -108,7 +110,7 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Agent, error) {
 // List returns all agents ordered by creation time.
 func (s *Service) List(ctx context.Context) ([]*domain.Agent, error) {
 	rows, err := s.store.DB.QueryContext(ctx,
-		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
+		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at, budget_limit, budget_used
 		 FROM agents ORDER BY created_at`,
 	)
 	if err != nil {
@@ -133,7 +135,7 @@ func (s *Service) List(ctx context.Context) ([]*domain.Agent, error) {
 // ListByCompany returns all agents for a given company, ordered by creation time.
 func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domain.Agent, error) {
 	rows, err := s.store.DB.QueryContext(ctx,
-		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
+		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at, budget_limit, budget_used
 		 FROM agents WHERE company_id = ? ORDER BY created_at`,
 		companyID,
 	)
@@ -159,7 +161,7 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domai
 // GetByShortname returns the agent with the given company ID and shortname, or ErrNotFound if it doesn't exist.
 func (s *Service) GetByShortname(ctx context.Context, companyID, shortname string) (*domain.Agent, error) {
 	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
+		`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at, budget_limit, budget_used
 		 FROM agents WHERE company_id = ? AND shortname = ?`, companyID, shortname,
 	)
 	a, err := scanAgent(row)
@@ -214,10 +216,10 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	})
 }
 
-// Update updates the displayName, role, runtimeState, and/or configuration of an agent.
+// Update updates the displayName, role, runtimeState, budgetLimit, and/or configuration of an agent.
 // Configuration is merge-patched: new keys are added, existing keys are updated.
 // NOTE: This is an admin override that bypasses the state machine validation.
-func (s *Service) Update(ctx context.Context, id string, displayName, role, runtimeState *string, configuration map[string]any) (*domain.Agent, error) {
+func (s *Service) Update(ctx context.Context, id string, displayName, role, runtimeState *string, budgetLimit *int, configuration map[string]any) (*domain.Agent, error) {
 	var result *domain.Agent
 	err := s.store.WithTx(ctx, func(tx *sql.Tx) error {
 		now := time.Now().UTC().Truncate(time.Second)
@@ -228,10 +230,10 @@ func (s *Service) Update(ctx context.Context, id string, displayName, role, runt
 		var createdAt, updatedAt string
 		var configJSON sql.NullString
 		row := tx.QueryRowContext(ctx,
-			`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at
+			`SELECT id, company_id, shortname, display_name, role, reports_to, adapter, runtime_state, configuration, created_at, updated_at, budget_limit, budget_used
 			 FROM agents WHERE id = ?`, id,
 		)
-		if err := row.Scan(&a.ID, &a.CompanyID, &a.Shortname, &a.DisplayName, &a.Role, &a.ReportsTo, &a.Adapter, &a.RuntimeState, &configJSON, &createdAt, &updatedAt); err != nil {
+		if err := row.Scan(&a.ID, &a.CompanyID, &a.Shortname, &a.DisplayName, &a.Role, &a.ReportsTo, &a.Adapter, &a.RuntimeState, &configJSON, &createdAt, &updatedAt, &a.BudgetLimit, &a.BudgetUsed); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ErrNotFound
 			}
@@ -507,9 +509,13 @@ func scanAgent(s scanner) (*domain.Agent, error) {
 	var a domain.Agent
 	var createdAt, updatedAt string
 	var configJSON sql.NullString
-	if err := s.Scan(&a.ID, &a.CompanyID, &a.Shortname, &a.DisplayName, &a.Role, &a.ReportsTo, &a.Adapter, &a.RuntimeState, &configJSON, &createdAt, &updatedAt); err != nil {
+	var budgetLimit *int
+	var budgetUsed int
+	if err := s.Scan(&a.ID, &a.CompanyID, &a.Shortname, &a.DisplayName, &a.Role, &a.ReportsTo, &a.Adapter, &a.RuntimeState, &configJSON, &createdAt, &updatedAt, &budgetLimit, &budgetUsed); err != nil {
 		return nil, err
 	}
+	a.BudgetLimit = budgetLimit
+	a.BudgetUsed = budgetUsed
 
 	// Parse configuration JSON; treat NULL as empty config
 	a.Configuration = make(map[string]any)
