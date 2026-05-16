@@ -43,7 +43,7 @@ func TestRunnerCreate(t *testing.T) {
 	actLog := activity.New(s)
 	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry, nil)
 
 	// Create a heartbeat run
 	run, err := runner.Create(ctx, agent.ID, nil, "running")
@@ -85,7 +85,7 @@ func TestRunnerGetByID(t *testing.T) {
 	actLog := activity.New(s)
 	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry, nil)
 
 	// Create and fetch a heartbeat run
 	run, err := runner.Create(ctx, agent.ID, nil, "running")
@@ -113,7 +113,7 @@ func TestRunnerGetByIDNotFound(t *testing.T) {
 	commentSvc := comments.New(s)
 	agentSvc := agents.New(s, activity.New(s))
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry, nil)
 
 	_, err := runner.GetByID(ctx, "nonexistent-id")
 	if !errors.Is(err, heartbeat.ErrNotFound) {
@@ -142,7 +142,7 @@ func TestRunnerUpdate(t *testing.T) {
 	actLog := activity.New(s)
 	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry, nil)
 
 	// Create and update a heartbeat run
 	run, err := runner.Create(ctx, agent.ID, nil, "running")
@@ -187,7 +187,7 @@ func TestRunnerListByAgent(t *testing.T) {
 	actLog := activity.New(s)
 	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry, nil)
 
 	// Create multiple heartbeat runs
 	run1, err := runner.Create(ctx, agent.ID, nil, "running")
@@ -240,7 +240,7 @@ func TestRunnerRunSuccess(t *testing.T) {
 	commentSvc := comments.New(s)
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	// Run a heartbeat
 	run, err := runner.Run(ctx, agent.ID)
@@ -268,7 +268,7 @@ func TestRunnerRunNotFound(t *testing.T) {
 	agentSvc := agents.New(s, activity.New(s))
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	// Run with non-existent agent
 	_, err := runner.Run(ctx, "nonexistent-agent-id")
@@ -307,7 +307,7 @@ func TestRunnerRunWithIssue(t *testing.T) {
 	actLog := activity.New(s)
 	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	// Run a heartbeat
 	run, err := runner.Run(ctx, agent.ID)
@@ -390,7 +390,7 @@ func TestRunnerRunAdapterError(t *testing.T) {
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewRegistry()
 	registry.Register("error-adapter", errorAdapter)
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	// Run a heartbeat, expecting an error
 	run, err := runner.Run(ctx, agent.ID)
@@ -440,7 +440,7 @@ func TestRunnerCancel(t *testing.T) {
 	actLog := activity.New(s)
 	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry, nil)
 
 	// Create a heartbeat run with "running" status
 	run, err := runner.Create(ctx, agent.ID, nil, "running")

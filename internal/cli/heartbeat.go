@@ -51,7 +51,7 @@ func runHeartbeatRun(cmd *cobra.Command, args []string) error {
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	// Run the heartbeat
 	run, err := runner.Run(ctx, flagHeartbeatAgent)

@@ -47,7 +47,7 @@ func newRunnerWithBlockingAdapter(t *testing.T, adapterName string) (*heartbeat.
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
 	actLog := activity.New(s)
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	return runner, agent.ID
 }

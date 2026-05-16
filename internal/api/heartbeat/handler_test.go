@@ -53,7 +53,7 @@ func newTestRunner(t *testing.T, s *store.Store) *heartbeat.Runner {
 	agentSvc := agents.New(s, actLog)
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	return heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	return heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 }
 
 func extractHeartbeatObject(t *testing.T, body *bytes.Buffer) map[string]any {

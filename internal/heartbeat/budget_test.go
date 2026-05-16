@@ -48,7 +48,7 @@ func TestBudgetEnforcementBlocked(t *testing.T) {
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
 	actLog := activity.New(s)
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	_, err = runner.Run(ctx, agent.ID)
 	if !errors.Is(err, heartbeat.ErrBudgetExceeded) {
@@ -89,7 +89,7 @@ func TestBudgetEnforcementAllowed(t *testing.T) {
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
 	actLog := activity.New(s)
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	run, err := runner.Run(ctx, agent.ID)
 	if err != nil {
@@ -128,7 +128,7 @@ func TestBudgetUsedIncrementedAfterRun(t *testing.T) {
 	issueSvc := issues.New(s)
 	commentSvc := comments.New(s)
 	actLog := activity.New(s)
-	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 
 	_, err = runner.Run(ctx, agent.ID)
 	if err != nil {
