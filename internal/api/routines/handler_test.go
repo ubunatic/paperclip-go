@@ -70,7 +70,7 @@ func extractRoutineList(t *testing.T, body *bytes.Buffer) []any {
 func TestHandlerList_MissingCompanyID(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	req, err := http.NewRequest("GET", "/", nil)
 	if err != nil {
@@ -97,7 +97,7 @@ func TestHandlerList_MissingCompanyID(t *testing.T) {
 func TestHandlerCreate_InvalidJSON(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	body := bytes.NewReader([]byte("invalid json"))
 	req, err := http.NewRequest("POST", "/", body)
@@ -117,7 +117,7 @@ func TestHandlerCreate_InvalidJSON(t *testing.T) {
 func TestHandlerCreate_MissingFields(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	// Missing cronExpr
 	body, _ := json.Marshal(map[string]string{
@@ -143,7 +143,7 @@ func TestHandlerCreate_MissingFields(t *testing.T) {
 func TestHandlerCreate_InvalidCron(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	body, _ := json.Marshal(map[string]string{
 		"companyId": "c1",
@@ -178,7 +178,7 @@ func TestHandlerCreate_InvalidCron(t *testing.T) {
 func TestHandlerCreate_NameConflict(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	companyID, agentID := setupRoutineTestData(t, s)
 
@@ -222,7 +222,7 @@ func TestHandlerCreate_NameConflict(t *testing.T) {
 func TestHandlerCreate_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	companyID, agentID := setupRoutineTestData(t, s)
 
@@ -265,7 +265,7 @@ func TestHandlerCreate_Success(t *testing.T) {
 func TestHandlerGet_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	req, err := http.NewRequest("GET", "/nonexistent-id", nil)
 	if err != nil {
@@ -283,7 +283,7 @@ func TestHandlerGet_NotFound(t *testing.T) {
 func TestHandlerGet_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	companyID, agentID := setupRoutineTestData(t, s)
 
@@ -320,7 +320,7 @@ func TestHandlerGet_Success(t *testing.T) {
 func TestHandlerUpdate_InvalidCron(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	companyID, agentID := setupRoutineTestData(t, s)
 
@@ -359,7 +359,7 @@ func TestHandlerUpdate_InvalidCron(t *testing.T) {
 func TestHandlerDelete_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	req, err := http.NewRequest("DELETE", "/nonexistent-id", nil)
 	if err != nil {
@@ -377,7 +377,7 @@ func TestHandlerDelete_NotFound(t *testing.T) {
 func TestHandlerTrigger_NotFound(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	req, err := http.NewRequest("POST", "/nonexistent-id/trigger", nil)
 	if err != nil {
@@ -395,7 +395,7 @@ func TestHandlerTrigger_NotFound(t *testing.T) {
 func TestHandlerList_Success(t *testing.T) {
 	s := newTestStore(t)
 	svc := routines.New(s)
-	handler := apiroutines.Handler(svc)
+	handler := apiroutines.Handler(svc, routines.NewRunService(s))
 
 	companyID, agentID := setupRoutineTestData(t, s)
 

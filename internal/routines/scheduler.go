@@ -13,11 +13,12 @@ import (
 
 // Scheduler implements a background scheduler for running routines on a cron schedule.
 type Scheduler struct {
-	svc     *Service
-	runner  *heartbeat.Runner
+	svc      *Service
+	runner   *heartbeat.Runner
 	issueSvc *issues.Service
-	tick    time.Duration
-	now     func() time.Time
+	runSvc   *RunService
+	tick     time.Duration
+	now      func() time.Time
 }
 
 // NewScheduler creates a scheduler with default tick interval (60s) and system clock.
@@ -28,6 +29,12 @@ func NewScheduler(svc *Service, runner *heartbeat.Runner, issueSvc *issues.Servi
 // NewSchedulerWithClock creates a scheduler with custom tick interval and clock function (for testing).
 func NewSchedulerWithClock(svc *Service, runner *heartbeat.Runner, issueSvc *issues.Service, tick time.Duration, now func() time.Time) *Scheduler {
 	return &Scheduler{svc: svc, runner: runner, issueSvc: issueSvc, tick: tick, now: now}
+}
+
+// WithRunService attaches a RunService so dispatches are recorded in routine_runs.
+func (sch *Scheduler) WithRunService(rs *RunService) *Scheduler {
+	sch.runSvc = rs
+	return sch
 }
 
 // Start launches the background scheduler loop. Blocks until ctx is cancelled.
@@ -70,6 +77,13 @@ func (sch *Scheduler) tick_() {
 		if !dispatched {
 			// Another process already claimed this slot; skip
 			continue
+		}
+
+		// Record the dispatch before firing so the run row exists even if heartbeat fails.
+		if sch.runSvc != nil {
+			if _, err := sch.runSvc.Record(ctx, routine.ID, routine.AgentID); err != nil {
+				log.Printf("scheduler: Record run(%s) error: %v", routine.ID, err)
+			}
 		}
 
 		// Fire the heartbeat run asynchronously
