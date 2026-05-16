@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
@@ -44,6 +45,9 @@ type Runner struct {
 	registry  *Registry
 	approvals *approvals.Service
 	Timeout   time.Duration
+	// inFlight serializes concurrent Run() calls for the same agent within this
+	// process. The DB-level count check handles cross-process/restart cases.
+	inFlight sync.Map
 }
 
 // New returns a Runner using the given dependencies.
@@ -93,6 +97,15 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 	if agent.BudgetLimit != nil && agent.BudgetUsed >= *agent.BudgetLimit {
 		return nil, ErrBudgetExceeded
 	}
+
+	// Atomically claim the in-flight slot for this agent within this process.
+	// This prevents two goroutines from both reading 0 in-flight DB rows and
+	// both proceeding. The DB count check below additionally catches stale
+	// "running" rows left by other processes or unclean restarts.
+	if _, loaded := r.inFlight.LoadOrStore(agentID, struct{}{}); loaded {
+		return nil, ErrAlreadyRunning
+	}
+	defer r.inFlight.Delete(agentID)
 
 	var inFlightCount int
 	if err := r.store.DB.QueryRowContext(ctx,

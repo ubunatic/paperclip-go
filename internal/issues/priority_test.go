@@ -2,6 +2,7 @@ package issues_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/ubunatic/paperclip-go/internal/companies"
@@ -99,6 +100,46 @@ func TestIssueEstimateSet(t *testing.T) {
 	}
 	if fetched.Estimate == nil || *fetched.Estimate != 5 {
 		t.Errorf("Fetched Estimate = %v, want 5", fetched.Estimate)
+	}
+}
+
+func TestIssuePriorityInvalid(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "prio-invalid", "Invalid priority company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := issues.New(s)
+	_, err = svc.Create(ctx, company.ID, "Bad Priority", "Body", "", "open", "nonsense", nil)
+	if !errors.Is(err, issues.ErrInvalidPriority) {
+		t.Errorf("expected ErrInvalidPriority for invalid priority, got %v", err)
+	}
+}
+
+func TestIssuePriorityInvalidUpdate(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "prio-inv-upd", "Invalid priority update company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	svc := issues.New(s)
+	issue, err := svc.Create(ctx, company.ID, "Issue", "Body", "", "open", "", nil)
+	if err != nil {
+		t.Fatalf("Create issue: %v", err)
+	}
+
+	badPrio := "nonsense"
+	_, err = svc.Update(ctx, issue.ID, "", nil, &badPrio, nil, nil, nil)
+	if !errors.Is(err, issues.ErrInvalidPriority) {
+		t.Errorf("expected ErrInvalidPriority on update, got %v", err)
 	}
 }
 

@@ -3,6 +3,8 @@ package heartbeat_test
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -10,11 +12,75 @@ import (
 	"github.com/ubunatic/paperclip-go/internal/agents"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
+	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/heartbeat"
 	"github.com/ubunatic/paperclip-go/internal/ids"
 	"github.com/ubunatic/paperclip-go/internal/issues"
 	"github.com/ubunatic/paperclip-go/internal/testutil"
 )
+
+// TestConcurrencyLimitRaceCondition fires two Run() calls simultaneously for the
+// same agent and verifies that exactly one succeeds and one returns ErrAlreadyRunning.
+// The race detector will catch any data race in the in-flight check.
+func TestConcurrencyLimitRaceCondition(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Race Corp", "race-corp", "Race test")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	agentSvc := agents.New(s, activity.New(s))
+	agent, err := agentSvc.Create(ctx, company.ID, "racer", "Racer", "agent", nil, "slow-stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+
+	// A slow adapter that holds the run in "running" state briefly so the second
+	// goroutine can see it in the DB.
+	slowAdapter := heartbeat.NewMockAdapter(func(a *domain.Agent, i *domain.Issue) (*domain.RunResult, error) {
+		time.Sleep(50 * time.Millisecond)
+		return &domain.RunResult{Status: "success", Summary: "done"}, nil
+	})
+	registry := heartbeat.NewRegistry()
+	registry.Register("slow-stub", slowAdapter)
+
+	issueSvc := issues.New(s)
+	commentSvc := comments.New(s)
+	actLog := activity.New(s)
+	runner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
+
+	var (
+		wg       sync.WaitGroup
+		successes atomic.Int32
+		conflicts atomic.Int32
+	)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := runner.Run(ctx, agent.ID)
+			if err == nil {
+				successes.Add(1)
+			} else if errors.Is(err, heartbeat.ErrAlreadyRunning) {
+				conflicts.Add(1)
+			} else {
+				t.Errorf("unexpected error: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if successes.Load() != 1 {
+		t.Errorf("successes = %d, want 1", successes.Load())
+	}
+	if conflicts.Load() != 1 {
+		t.Errorf("conflicts = %d, want 1", conflicts.Load())
+	}
+}
 
 func TestConcurrencyLimitBlocksSecondRun(t *testing.T) {
 	s := testutil.NewStore(t)

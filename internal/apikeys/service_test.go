@@ -81,6 +81,67 @@ func TestAPIKeyRevoke(t *testing.T) {
 	}
 }
 
+func TestAPIKeyRevokedKeyExcludedFromList(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companySvc := companies.New(s)
+	c, err := companySvc.Create(ctx, "Acme Corp", "acme-rev", "")
+	if err != nil {
+		t.Fatalf("create company: %v", err)
+	}
+
+	svc := apikeys.New(s)
+	// Create two keys, revoke one
+	key1, _, err := svc.Create(ctx, c.ID, "keep")
+	if err != nil {
+		t.Fatalf("Create key1: %v", err)
+	}
+	key2, _, err := svc.Create(ctx, c.ID, "revoke-me")
+	if err != nil {
+		t.Fatalf("Create key2: %v", err)
+	}
+	if err := svc.Revoke(ctx, key2.ID); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+
+	list, err := svc.ListByCompany(ctx, c.ID)
+	if err != nil {
+		t.Fatalf("ListByCompany: %v", err)
+	}
+	if len(list) != 1 {
+		t.Errorf("len = %d, want 1 (revoked key should be excluded)", len(list))
+	}
+	if list[0].ID != key1.ID {
+		t.Errorf("list[0].ID = %q, want %q", list[0].ID, key1.ID)
+	}
+}
+
+func TestAPIKeyDoubleRevoke(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companySvc := companies.New(s)
+	c, err := companySvc.Create(ctx, "Acme Corp", "acme-dbl", "")
+	if err != nil {
+		t.Fatalf("create company: %v", err)
+	}
+
+	svc := apikeys.New(s)
+	key, _, err := svc.Create(ctx, c.ID, "my-key")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if err := svc.Revoke(ctx, key.ID); err != nil {
+		t.Fatalf("first Revoke: %v", err)
+	}
+	// Second revoke should return ErrNotFound (already revoked)
+	if err := svc.Revoke(ctx, key.ID); !errors.Is(err, apikeys.ErrNotFound) {
+		t.Errorf("second Revoke: expected ErrNotFound, got %v", err)
+	}
+}
+
 func TestAPIKeyListByCompany(t *testing.T) {
 	s := testutil.NewStore(t)
 	ctx := context.Background()

@@ -31,6 +31,9 @@ var ErrCheckoutConflictDelete = errors.New("cannot delete checked-out issue")
 // ErrInvalidStatus is returned when attempting to set an invalid status.
 var ErrInvalidStatus = errors.New("invalid status")
 
+// ErrInvalidPriority is returned when attempting to set an invalid priority.
+var ErrInvalidPriority = errors.New("invalid priority")
+
 // Service provides issue CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -72,9 +75,12 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, originFing
 		originFingerprint = "default"
 	}
 
-	// Default priority to "medium" if empty
+	// Default priority to "medium" if empty, then validate
 	if priority == "" {
 		priority = "medium"
+	}
+	if !domain.IsValidIssuePriority(priority) {
+		return nil, ErrInvalidPriority
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -213,6 +219,11 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 	// Validate status if provided
 	if status != "" && !domain.IsValidIssueStatus(status) {
 		return nil, ErrInvalidStatus
+	}
+
+	// Validate priority if provided
+	if priority != nil && !domain.IsValidIssuePriority(*priority) {
+		return nil, ErrInvalidPriority
 	}
 
 	// Build the UPDATE query dynamically

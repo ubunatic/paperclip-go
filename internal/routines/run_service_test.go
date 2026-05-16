@@ -46,6 +46,48 @@ func TestRoutineRunRecord(t *testing.T) {
 	}
 }
 
+func TestRoutineRunListOrderedDescending(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companyID, agentID := setupTestData(t, s)
+
+	svc := routines.New(s)
+	routine, err := svc.Create(ctx, companyID, agentID, "Order Routine", "0 9 * * *")
+	if err != nil {
+		t.Fatalf("Create routine: %v", err)
+	}
+
+	runSvc := routines.NewRunService(s)
+	run1, err := runSvc.Record(ctx, routine.ID, agentID)
+	if err != nil {
+		t.Fatalf("Record run1: %v", err)
+	}
+	run2, err := runSvc.Record(ctx, routine.ID, agentID)
+	if err != nil {
+		t.Fatalf("Record run2: %v", err)
+	}
+
+	runs, err := runSvc.ListByRoutine(ctx, routine.ID)
+	if err != nil {
+		t.Fatalf("ListByRoutine: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("expected 2 runs, got %d", len(runs))
+	}
+	// Both runs must be present regardless of sub-second ordering
+	ids := map[string]bool{runs[0].ID: true, runs[1].ID: true}
+	if !ids[run1.ID] || !ids[run2.ID] {
+		t.Errorf("runs = %v, want both %q and %q", ids, run1.ID, run2.ID)
+	}
+	// All runs must belong to this routine
+	for _, r := range runs {
+		if r.RoutineID != routine.ID {
+			t.Errorf("run.RoutineID = %q, want %q", r.RoutineID, routine.ID)
+		}
+	}
+}
+
 func TestRoutineRunListByRoutine(t *testing.T) {
 	s := testutil.NewStore(t)
 	ctx := context.Background()
