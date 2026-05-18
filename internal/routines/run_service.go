@@ -71,6 +71,37 @@ func (rs *RunService) ListByRoutine(ctx context.Context, routineID string) ([]*d
 	return runs, nil
 }
 
+// MarkSucceeded updates a routine run to status="succeeded" with finished_at=now.
+func (rs *RunService) MarkSucceeded(ctx context.Context, id string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := rs.store.DB.ExecContext(ctx,
+		`UPDATE routine_runs SET status = 'succeeded', finished_at = ? WHERE id = ?`,
+		now, id,
+	)
+	return err
+}
+
+// MarkFailed updates a routine run to status="failed" with finished_at=now and an error message.
+func (rs *RunService) MarkFailed(ctx context.Context, id, errMsg string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := rs.store.DB.ExecContext(ctx,
+		`UPDATE routine_runs SET status = 'failed', finished_at = ?, error = ? WHERE id = ?`,
+		now, errMsg, id,
+	)
+	return err
+}
+
+// MarkSkipped updates a routine run to status="skipped" with finished_at=now.
+// Used when a heartbeat is not dispatched (e.g. agent busy, approval pending).
+func (rs *RunService) MarkSkipped(ctx context.Context, id string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := rs.store.DB.ExecContext(ctx,
+		`UPDATE routine_runs SET status = 'skipped', finished_at = ? WHERE id = ?`,
+		now, id,
+	)
+	return err
+}
+
 // scanRoutineRun reads a RoutineRun from a sql.Row or sql.Rows.
 func scanRoutineRun(s scanner) (*domain.RoutineRun, error) {
 	var run domain.RoutineRun

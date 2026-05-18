@@ -2,6 +2,7 @@ package routines
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -80,21 +81,44 @@ func (sch *Scheduler) tick_() {
 		}
 
 		// Record the dispatch before firing so the run row exists even if heartbeat fails.
+		var routineRunID string
 		if sch.runSvc != nil {
-			if _, err := sch.runSvc.Record(ctx, routine.ID, routine.AgentID); err != nil {
+			rr, err := sch.runSvc.Record(ctx, routine.ID, routine.AgentID)
+			if err != nil {
 				log.Printf("scheduler: Record run(%s) error: %v", routine.ID, err)
+			} else {
+				routineRunID = rr.ID
 			}
 		}
 
-		// Fire the heartbeat run asynchronously
-		go func(r *domain.Routine) {
+		// Fire the heartbeat run asynchronously and update the run status when done.
+		go func(r *domain.Routine, runID string) {
 			runCtx := context.Background()
 			_, err := sch.runner.Run(runCtx, r.AgentID)
-			if err != nil {
-				log.Printf("scheduler: Run(%s) error: %v", r.ID, err)
-				// Leave dispatch fingerprint set to avoid duplicate runs
-				// Manual retry via POST /trigger if needed
+			if sch.runSvc == nil || runID == "" {
+				if err != nil {
+					log.Printf("scheduler: Run(%s) error: %v", r.ID, err)
+				}
+				return
 			}
-		}(routine)
+			finCtx := context.Background()
+			switch {
+			case err == nil:
+				if merr := sch.runSvc.MarkSucceeded(finCtx, runID); merr != nil {
+					log.Printf("scheduler: MarkSucceeded(%s) error: %v", runID, merr)
+				}
+			case errors.Is(err, heartbeat.ErrAlreadyRunning),
+				errors.Is(err, heartbeat.ErrApprovalPending),
+				errors.Is(err, heartbeat.ErrBudgetExceeded):
+				if merr := sch.runSvc.MarkSkipped(finCtx, runID); merr != nil {
+					log.Printf("scheduler: MarkSkipped(%s) error: %v", runID, merr)
+				}
+			default:
+				if merr := sch.runSvc.MarkFailed(finCtx, runID, err.Error()); merr != nil {
+					log.Printf("scheduler: MarkFailed(%s) error: %v", runID, merr)
+				}
+				log.Printf("scheduler: Run(%s) error: %v", r.ID, err)
+			}
+		}(routine, routineRunID)
 	}
 }

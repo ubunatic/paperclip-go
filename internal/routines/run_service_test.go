@@ -133,3 +133,125 @@ func TestRoutineRunListByRoutine(t *testing.T) {
 		}
 	}
 }
+
+func TestRoutineRunMarkSucceeded(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companyID, agentID := setupTestData(t, s)
+	svc := routines.New(s)
+	routine, err := svc.Create(ctx, companyID, agentID, "Mark Succeeded Routine", "0 9 * * *")
+	if err != nil {
+		t.Fatalf("Create routine: %v", err)
+	}
+
+	runSvc := routines.NewRunService(s)
+	run, err := runSvc.Record(ctx, routine.ID, agentID)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	if err := runSvc.MarkSucceeded(ctx, run.ID); err != nil {
+		t.Fatalf("MarkSucceeded: %v", err)
+	}
+
+	runs, err := runSvc.ListByRoutine(ctx, routine.ID)
+	if err != nil {
+		t.Fatalf("ListByRoutine: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(runs))
+	}
+	got := runs[0]
+	if got.Status != "succeeded" {
+		t.Errorf("status = %q, want %q", got.Status, "succeeded")
+	}
+	if got.FinishedAt == nil {
+		t.Error("FinishedAt is nil, want non-nil")
+	}
+	if got.Error != nil {
+		t.Errorf("Error = %v, want nil", got.Error)
+	}
+}
+
+func TestRoutineRunMarkFailed(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companyID, agentID := setupTestData(t, s)
+	svc := routines.New(s)
+	routine, err := svc.Create(ctx, companyID, agentID, "Mark Failed Routine", "0 9 * * *")
+	if err != nil {
+		t.Fatalf("Create routine: %v", err)
+	}
+
+	runSvc := routines.NewRunService(s)
+	run, err := runSvc.Record(ctx, routine.ID, agentID)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	if err := runSvc.MarkFailed(ctx, run.ID, "something went wrong"); err != nil {
+		t.Fatalf("MarkFailed: %v", err)
+	}
+
+	runs, err := runSvc.ListByRoutine(ctx, routine.ID)
+	if err != nil {
+		t.Fatalf("ListByRoutine: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(runs))
+	}
+	got := runs[0]
+	if got.Status != "failed" {
+		t.Errorf("status = %q, want %q", got.Status, "failed")
+	}
+	if got.FinishedAt == nil {
+		t.Error("FinishedAt is nil, want non-nil")
+	}
+	if got.Error == nil {
+		t.Error("Error is nil, want non-nil")
+	} else if *got.Error != "something went wrong" {
+		t.Errorf("Error = %q, want %q", *got.Error, "something went wrong")
+	}
+}
+
+func TestRoutineRunMarkSkipped(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companyID, agentID := setupTestData(t, s)
+	svc := routines.New(s)
+	routine, err := svc.Create(ctx, companyID, agentID, "Mark Skipped Routine", "0 9 * * *")
+	if err != nil {
+		t.Fatalf("Create routine: %v", err)
+	}
+
+	runSvc := routines.NewRunService(s)
+	run, err := runSvc.Record(ctx, routine.ID, agentID)
+	if err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	if err := runSvc.MarkSkipped(ctx, run.ID); err != nil {
+		t.Fatalf("MarkSkipped: %v", err)
+	}
+
+	runs, err := runSvc.ListByRoutine(ctx, routine.ID)
+	if err != nil {
+		t.Fatalf("ListByRoutine: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 run, got %d", len(runs))
+	}
+	got := runs[0]
+	if got.Status != "skipped" {
+		t.Errorf("status = %q, want %q", got.Status, "skipped")
+	}
+	if got.FinishedAt == nil {
+		t.Error("FinishedAt is nil, want non-nil")
+	}
+	if got.Error != nil {
+		t.Errorf("Error = %v, want nil", got.Error)
+	}
+}
