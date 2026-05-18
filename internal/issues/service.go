@@ -205,6 +205,39 @@ func (s *Service) ListWithFilters(ctx context.Context, companyID, status string,
 	return out, nil
 }
 
+// ListOpenByPriority returns all open, non-archived issues for a company ordered by
+// priority (urgent > high > medium > low) then by creation time ascending.
+func (s *Service) ListOpenByPriority(ctx context.Context, companyID string) ([]*domain.Issue, error) {
+	rows, err := s.store.DB.QueryContext(ctx, `
+		SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products, priority, estimate
+		FROM issues
+		WHERE company_id = ? AND status = 'open' AND archived_at IS NULL
+		ORDER BY CASE priority
+			WHEN 'urgent' THEN 0
+			WHEN 'high'   THEN 1
+			WHEN 'medium' THEN 2
+			ELSE               3
+		END, created_at
+	`, companyID)
+	if err != nil {
+		return nil, fmt.Errorf("listing open issues by priority: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]*domain.Issue, 0)
+	for rows.Next() {
+		i, err := scanIssue(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating issues: %w", err)
+	}
+	return out, nil
+}
+
 // Update updates the status and/or assignee of an issue.
 // Returns ErrInvalidStatus if the status is not valid.
 func (s *Service) Update(ctx context.Context, id, status string, assigneeID *string, priority *string, estimate *int, documents, workProducts *[]any) (*domain.Issue, error) {

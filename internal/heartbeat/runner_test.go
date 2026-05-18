@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
@@ -470,5 +471,147 @@ func TestRunnerCancel(t *testing.T) {
 	_, err = runner.Cancel(ctx, "nonexistent")
 	if !errors.Is(err, heartbeat.ErrNotFound) {
 		t.Errorf("Cancel non-existent run: expected ErrNotFound, got %v", err)
+	}
+}
+
+// TestRecoverStaleRuns verifies that RecoverStaleRuns resets runs older than Timeout
+// to "error" status, and leaves younger runs untouched.
+func TestRecoverStaleRuns(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	// Create company and agents
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	agentSvc := agents.New(s, activity.New(s))
+	agent, err := agentSvc.Create(ctx, company.ID, "alice", "Alice", "agent", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent: %v", err)
+	}
+	agent2, err := agentSvc.Create(ctx, company.ID, "bob", "Bob", "agent", nil, "stub")
+	if err != nil {
+		t.Fatalf("Create agent2: %v", err)
+	}
+
+	actLog := activity.New(s)
+	commentSvc := comments.New(s)
+	registry := heartbeat.NewDefaultRegistry()
+	runner := heartbeat.New(s, agentSvc, nil, commentSvc, actLog, registry, nil)
+	// Use a short timeout so we can manufacture stale runs easily.
+	runner.Timeout = 10 * time.Minute
+
+	// Create a stale run: insert with started_at far in the past.
+	staleStartedAt := time.Now().UTC().Add(-30 * time.Minute).Format(time.RFC3339)
+	_, err = s.DB.ExecContext(ctx,
+		`INSERT INTO heartbeat_runs(id, agent_id, status, started_at) VALUES (?, ?, 'running', ?)`,
+		"stale-run-id", agent.ID, staleStartedAt,
+	)
+	if err != nil {
+		t.Fatalf("insert stale run: %v", err)
+	}
+
+	// Create a fresh run: started_at just now (younger than Timeout).
+	freshStartedAt := time.Now().UTC().Format(time.RFC3339)
+	_, err = s.DB.ExecContext(ctx,
+		`INSERT INTO heartbeat_runs(id, agent_id, status, started_at) VALUES (?, ?, 'running', ?)`,
+		"fresh-run-id", agent2.ID, freshStartedAt,
+	)
+	if err != nil {
+		t.Fatalf("insert fresh run: %v", err)
+	}
+
+	// Run the watchdog.
+	runner.RecoverStaleRuns(ctx)
+
+	// The stale run should be in "error" status.
+	staleRun, err := runner.GetByID(ctx, "stale-run-id")
+	if err != nil {
+		t.Fatalf("GetByID stale: %v", err)
+	}
+	if staleRun.Status != "error" {
+		t.Errorf("stale run status = %q, want %q", staleRun.Status, "error")
+	}
+	if staleRun.Error == nil || *staleRun.Error != "recovered: stale run on startup" {
+		t.Errorf("stale run error = %v, want 'recovered: stale run on startup'", staleRun.Error)
+	}
+
+	// The fresh run should still be "running".
+	freshRun, err := runner.GetByID(ctx, "fresh-run-id")
+	if err != nil {
+		t.Fatalf("GetByID fresh: %v", err)
+	}
+	if freshRun.Status != "running" {
+		t.Errorf("fresh run status = %q, want %q", freshRun.Status, "running")
+	}
+}
+
+// TestListOpenByPriority verifies that issues are returned in priority order
+// (urgent > high > medium > low) and that archived issues are excluded.
+func TestListOpenByPriority(t *testing.T) {
+	s := testutil.NewStore(t)
+	ctx := context.Background()
+
+	companySvc := companies.New(s)
+	company, err := companySvc.Create(ctx, "Test Corp", "test", "Test company")
+	if err != nil {
+		t.Fatalf("Create company: %v", err)
+	}
+
+	issueSvc := issues.New(s)
+
+	// Create issues with explicit priorities.
+	low, err := issueSvc.Create(ctx, company.ID, "Low issue", "", "default", "open", "low", nil)
+	if err != nil {
+		t.Fatalf("Create low issue: %v", err)
+	}
+	medium, err := issueSvc.Create(ctx, company.ID, "Medium issue", "", "default", "open", "medium", nil)
+	if err != nil {
+		t.Fatalf("Create medium issue: %v", err)
+	}
+	high, err := issueSvc.Create(ctx, company.ID, "High issue", "", "default", "open", "high", nil)
+	if err != nil {
+		t.Fatalf("Create high issue: %v", err)
+	}
+	urgent, err := issueSvc.Create(ctx, company.ID, "Urgent issue", "", "default", "open", "urgent", nil)
+	if err != nil {
+		t.Fatalf("Create urgent issue: %v", err)
+	}
+	// Archived issue with high priority — should not appear in results.
+	archived, err := issueSvc.Create(ctx, company.ID, "Archived issue", "", "default", "open", "high", nil)
+	if err != nil {
+		t.Fatalf("Create archived issue: %v", err)
+	}
+	if err := issueSvc.Archive(ctx, archived.ID); err != nil {
+		t.Fatalf("Archive issue: %v", err)
+	}
+
+	// List by priority.
+	result, err := issueSvc.ListOpenByPriority(ctx, company.ID)
+	if err != nil {
+		t.Fatalf("ListOpenByPriority: %v", err)
+	}
+
+	// Should have 4 issues (not the archived one).
+	if len(result) != 4 {
+		t.Fatalf("expected 4 issues, got %d", len(result))
+	}
+
+	// Verify order: urgent, high, medium, low.
+	wantOrder := []string{urgent.ID, high.ID, medium.ID, low.ID}
+	for i, want := range wantOrder {
+		if result[i].ID != want {
+			t.Errorf("result[%d].ID = %q, want %q", i, result[i].ID, want)
+		}
+	}
+
+	// Verify the archived issue is not present.
+	for _, issue := range result {
+		if issue.ID == archived.ID {
+			t.Error("archived issue should not appear in ListOpenByPriority results")
+		}
 	}
 }

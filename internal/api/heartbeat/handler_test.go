@@ -226,9 +226,10 @@ func TestHandlerList_Success(t *testing.T) {
 
 	handler := apiheartbeat.Handler(runner)
 
-	// Create 2 runs via runner.Create()
-	for i := 0; i < 2; i++ {
-		_, err := runner.Create(ctx, agentID, nil, "running")
+	// Create 2 runs via runner.Create() with different statuses to avoid the
+	// unique index on (agent_id) WHERE status='running'.
+	for _, status := range []string{"success", "running"} {
+		_, err := runner.Create(ctx, agentID, nil, status)
 		if err != nil {
 			t.Fatalf("Create run: %v", err)
 		}

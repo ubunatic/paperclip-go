@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -118,24 +119,25 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 		return nil, ErrAlreadyRunning
 	}
 
-	// Select an issue to work on (first open issue)
-	// This is a simple heuristic; heartbeat may pass nil issue
+	// Select the highest-priority open issue without pending approvals.
 	var selectedIssue *domain.Issue
-	issues, err := r.issues.ListWithFilters(ctx, agent.CompanyID, "open", nil, false)
-	if err != nil {
-		return nil, fmt.Errorf("listing issues: %w", err)
-	}
-	if len(issues) > 0 {
-		selectedIssue = issues[0]
-	}
-
-	if selectedIssue != nil && r.approvals != nil {
-		pending, err := r.approvals.ListPendingByIssue(ctx, selectedIssue.ID)
+	if r.issues != nil {
+		openIssues, err := r.issues.ListOpenByPriority(ctx, agent.CompanyID)
 		if err != nil {
-			return nil, fmt.Errorf("checking pending approvals: %w", err)
+			return nil, fmt.Errorf("listing issues: %w", err)
 		}
-		if len(pending) > 0 {
-			selectedIssue = nil
+		for _, candidate := range openIssues {
+			if r.approvals != nil {
+				pending, err := r.approvals.ListPendingByIssue(ctx, candidate.ID)
+				if err != nil {
+					return nil, fmt.Errorf("checking pending approvals: %w", err)
+				}
+				if len(pending) > 0 {
+					continue // skip this issue, try the next
+				}
+			}
+			selectedIssue = candidate
+			break
 		}
 	}
 
@@ -156,12 +158,17 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 	}
 
 	// Note: workspace_id is not set at creation time; it is associated after the workspace is created.
+	// The UNIQUE index heartbeat_runs_agent_inflight additionally enforces at most one
+	// running row per agent at the DB level (cross-process safety).
 	_, err = r.store.DB.ExecContext(ctx,
 		`INSERT INTO heartbeat_runs(id, agent_id, issue_id, status, started_at)
 		 VALUES (?, ?, ?, ?, ?)`,
 		run.ID, run.AgentID, run.IssueID, run.Status, startedAtStr,
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return nil, ErrAlreadyRunning
+		}
 		return nil, fmt.Errorf("creating heartbeat run: %w", err)
 	}
 
@@ -177,18 +184,20 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 
 	// Check if adapter was found
 	if adapter == nil {
-		// Create run record with status="error"
+		// Mark run as errored using background context so a cancelled ctx doesn't
+		// prevent the write from landing.
 		finishedAt := time.Now().UTC().Truncate(time.Second)
 		finishedAtStr := finishedAt.Format(time.RFC3339)
 		errMsg := fmt.Sprintf("heartbeat adapter %q not found", adapterName)
 
-		_, err := r.store.DB.ExecContext(ctx,
+		bgCtx := context.Background()
+		_, dbErr := r.store.DB.ExecContext(bgCtx,
 			`UPDATE heartbeat_runs SET status = 'error', finished_at = ?, error = ?
 			 WHERE id = ?`,
 			finishedAtStr, errMsg, run.ID,
 		)
-		if err != nil {
-			return nil, fmt.Errorf("updating heartbeat run with error: %w", err)
+		if dbErr != nil {
+			return nil, fmt.Errorf("updating heartbeat run with error: %w", dbErr)
 		}
 
 		return nil, fmt.Errorf("heartbeat adapter %q not found", adapterName)
@@ -203,18 +212,20 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 	defer cancel()
 	result, err := adapter.Run(runCtx, agent, selectedIssue)
 	if err != nil {
-		// Adapter returned an error; mark the run as failed
+		// Adapter returned an error; mark the run as failed.
+		// Use background context so a cancelled adapter context doesn't prevent finalization.
+		bgCtx := context.Background()
 		finishedAt := time.Now().UTC().Truncate(time.Second)
 		finishedAtStr := finishedAt.Format(time.RFC3339)
 		errMsg := err.Error()
 
-		_, err2 := r.store.DB.ExecContext(ctx,
+		_, dbErr := r.store.DB.ExecContext(bgCtx,
 			`UPDATE heartbeat_runs SET status = 'error', finished_at = ?, error = ?
 			 WHERE id = ?`,
 			finishedAtStr, errMsg, run.ID,
 		)
-		if err2 != nil {
-			return nil, fmt.Errorf("updating heartbeat run with error: %w", err2)
+		if dbErr != nil {
+			return nil, fmt.Errorf("updating heartbeat run with error: %w", dbErr)
 		}
 
 		return nil, err
@@ -242,16 +253,31 @@ func (r *Runner) Run(ctx context.Context, agentID string) (*domain.HeartbeatRun,
 		return run, nil
 	}
 
-	// Update token/cost fields on the run
+	// Finalize token/cost data in a background-context transaction so a cancelled
+	// adapter context doesn't prevent the writes from landing.
 	if result.PromptTokens > 0 || result.CompletionTokens > 0 || result.Cost > 0 {
-		_, _ = r.store.DB.ExecContext(ctx,
-			`UPDATE heartbeat_runs SET prompt_tokens = ?, completion_tokens = ?, cost = ? WHERE id = ?`,
-			result.PromptTokens, result.CompletionTokens, result.Cost, run.ID,
-		)
-		_, _ = r.store.DB.ExecContext(ctx,
-			`UPDATE agents SET budget_used = budget_used + ? WHERE id = ?`,
-			result.Cost, agentID,
-		)
+		bgCtx := context.Background()
+		tx, txErr := r.store.DB.BeginTx(bgCtx, nil)
+		if txErr != nil {
+			log.Printf("heartbeat: begin finalization tx: %v", txErr)
+		} else {
+			_, txErr = tx.ExecContext(bgCtx,
+				`UPDATE heartbeat_runs SET prompt_tokens = ?, completion_tokens = ?, cost = ? WHERE id = ?`,
+				result.PromptTokens, result.CompletionTokens, result.Cost, run.ID,
+			)
+			if txErr == nil {
+				_, txErr = tx.ExecContext(bgCtx,
+					`UPDATE agents SET budget_used = budget_used + ? WHERE id = ?`,
+					result.Cost, agentID,
+				)
+			}
+			if txErr != nil {
+				_ = tx.Rollback()
+				log.Printf("heartbeat: finalization tx: %v", txErr)
+			} else if commitErr := tx.Commit(); commitErr != nil {
+				log.Printf("heartbeat: finalization commit: %v", commitErr)
+			}
+		}
 	}
 
 	// Record activity: heartbeat_run
@@ -289,6 +315,24 @@ func (r *Runner) postHeartbeatComment(ctx context.Context, issueID, agentID, sum
 		return fmt.Errorf("posting heartbeat comment: %w", err)
 	}
 	return nil
+}
+
+// RecoverStaleRuns resets any heartbeat_runs stuck in "running" status for longer
+// than the runner's Timeout. Called once at server startup to recover from crashes.
+func (r *Runner) RecoverStaleRuns(ctx context.Context) {
+	cutoff := time.Now().UTC().Add(-r.Timeout).Format(time.RFC3339)
+	res, err := r.store.DB.ExecContext(ctx,
+		`UPDATE heartbeat_runs SET status = 'error', error = 'recovered: stale run on startup'
+		 WHERE status = 'running' AND started_at < ?`,
+		cutoff,
+	)
+	if err != nil {
+		log.Printf("heartbeat: RecoverStaleRuns: %v", err)
+		return
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		log.Printf("heartbeat: recovered %d stale run(s)", n)
+	}
 }
 
 // Create inserts a new heartbeat run and returns it.
