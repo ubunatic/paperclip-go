@@ -1,5 +1,9 @@
 # Paperclip-Go MVP v1 — Implementation Plan
 
+> **Archived.** All 9 MVP phases (1–9) and post-MVP phases A–M1 are complete.  
+> Current work (N5–N11, Phase P proposals, Opus review findings) is tracked in `PLAN.md`.  
+> Last updated: 2026-05-16. Active branch: `claude/review-go-port-tests-TjhEm` (PR #79).
+
 ## Context
 
 `paperclip-go` is a fork of [paperclipai/paperclip](https://github.com/paperclipai/paperclip), a TypeScript/Node.js control plane for autonomous AI agent companies. This plan adds a **Go reimplementation alongside the existing TS code** so the user can:

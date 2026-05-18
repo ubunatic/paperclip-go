@@ -21,6 +21,8 @@ type Issue struct {
 	ArchivedAt         *time.Time `json:"archivedAt"`
 	Documents          []any      `json:"documents"`
 	WorkProducts       []any      `json:"workProducts"`
+	Priority           string     `json:"priority"`
+	Estimate           *int       `json:"estimate"`
 }
 
 // validStatuses contains the allowed status values for issues.
@@ -35,4 +37,16 @@ var validStatuses = map[string]bool{
 // IsValidIssueStatus reports whether status is an allowed issue status.
 func IsValidIssueStatus(status string) bool {
 	return validStatuses[status]
+}
+
+var validPriorities = map[string]bool{
+	"urgent": true,
+	"high":   true,
+	"medium": true,
+	"low":    true,
+}
+
+// IsValidIssuePriority reports whether p is an allowed issue priority.
+func IsValidIssuePriority(p string) bool {
+	return validPriorities[p]
 }

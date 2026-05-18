@@ -254,7 +254,7 @@ func TestDeleteAgentWithHeartbeatRuns(t *testing.T) {
 
 	// Create an issue
 	issueSvc := issues.New(s)
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "default", "open", nil)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "default", "open", "", nil)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestDeleteAgentHasActiveCheckout(t *testing.T) {
 	// Create an issue assigned to the agent
 	issueSvc := issues.New(s)
 	agentIDPtr := &agent.ID
-	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "default", "open", agentIDPtr)
+	issue, err := issueSvc.Create(ctx, company.ID, "Test Issue", "Body", "default", "open", "", agentIDPtr)
 	if err != nil {
 		t.Fatalf("Create issue: %v", err)
 	}
@@ -648,7 +648,7 @@ func TestAgentConfigurationNotAltered(t *testing.T) {
 
 	// Update with initial configuration
 	config := map[string]any{"key1": "value1"}
-	updated, err := svc.Update(ctx, agent.ID, nil, nil, nil, config)
+	updated, err := svc.Update(ctx, agent.ID, nil, nil, nil, nil, config)
 	if err != nil {
 		t.Fatalf("Update with config: %v", err)
 	}
@@ -658,7 +658,7 @@ func TestAgentConfigurationNotAltered(t *testing.T) {
 
 	// Update only displayName, verify configuration unchanged
 	newDisplay := "Alice Updated"
-	updated2, err := svc.Update(ctx, agent.ID, &newDisplay, nil, nil, nil)
+	updated2, err := svc.Update(ctx, agent.ID, &newDisplay, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Update displayName: %v", err)
 	}
@@ -677,7 +677,7 @@ func TestAgentConfigurationUpdateNotFound(t *testing.T) {
 
 	// Try to update configuration for non-existent agent
 	config := map[string]any{"key1": "value1"}
-	_, err := svc.Update(ctx, "nonexistent-id", nil, nil, nil, config)
+	_, err := svc.Update(ctx, "nonexistent-id", nil, nil, nil, nil, config)
 	if !errors.Is(err, agents.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}

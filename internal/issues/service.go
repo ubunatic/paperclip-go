@@ -31,6 +31,9 @@ var ErrCheckoutConflictDelete = errors.New("cannot delete checked-out issue")
 // ErrInvalidStatus is returned when attempting to set an invalid status.
 var ErrInvalidStatus = errors.New("invalid status")
 
+// ErrInvalidPriority is returned when attempting to set an invalid priority.
+var ErrInvalidPriority = errors.New("invalid priority")
+
 // Service provides issue CRUD backed by the store.
 type Service struct {
 	store *store.Store
@@ -56,7 +59,7 @@ func (s *Service) publishIfBus(topic string, e events.Event) {
 }
 
 // Create inserts a new issue and returns the created entity.
-func (s *Service) Create(ctx context.Context, companyID, title, body, originFingerprint, status string, assigneeID *string) (*domain.Issue, error) {
+func (s *Service) Create(ctx context.Context, companyID, title, body, originFingerprint, status, priority string, assigneeID *string) (*domain.Issue, error) {
 	// Default to "open" if status is empty
 	if status == "" {
 		status = "open"
@@ -72,6 +75,14 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, originFing
 		originFingerprint = "default"
 	}
 
+	// Default priority to "medium" if empty, then validate
+	if priority == "" {
+		priority = "medium"
+	}
+	if !domain.IsValidIssuePriority(priority) {
+		return nil, ErrInvalidPriority
+	}
+
 	now := time.Now().UTC().Truncate(time.Second)
 	ts := now.Format(time.RFC3339)
 	i := &domain.Issue{
@@ -82,15 +93,16 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, originFing
 		Status:            status,
 		AssigneeID:        assigneeID,
 		OriginFingerprint: originFingerprint,
+		Priority:          priority,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 		Documents:         []any{},
 		WorkProducts:      []any{},
 	}
 	_, err := s.store.DB.ExecContext(ctx,
-		`INSERT INTO issues(id, company_id, title, body, status, assignee_id, origin_fingerprint, created_at, updated_at, documents, work_products)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		i.ID, i.CompanyID, i.Title, i.Body, i.Status, i.AssigneeID, i.OriginFingerprint, ts, ts, "[]", "[]",
+		`INSERT INTO issues(id, company_id, title, body, status, assignee_id, origin_fingerprint, created_at, updated_at, documents, work_products, priority)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		i.ID, i.CompanyID, i.Title, i.Body, i.Status, i.AssigneeID, i.OriginFingerprint, ts, ts, "[]", "[]", priority,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("inserting issue: %w", err)
@@ -107,7 +119,7 @@ func (s *Service) Create(ctx context.Context, companyID, title, body, originFing
 // Get returns the issue with the given ID, or ErrNotFound if it doesn't exist.
 func (s *Service) Get(ctx context.Context, id string) (*domain.Issue, error) {
 	row := s.store.DB.QueryRowContext(ctx,
-		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products
+		`SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products, priority, estimate
 		 FROM issues WHERE id = ?`, id,
 	)
 	i, err := scanIssue(row)
@@ -120,7 +132,7 @@ func (s *Service) Get(ctx context.Context, id string) (*domain.Issue, error) {
 // ListByCompany returns all issues for a given company, ordered by creation time descending.
 // If includeArchived is false, archived issues (archived_at IS NOT NULL) are excluded.
 func (s *Service) ListByCompany(ctx context.Context, companyID string, includeArchived bool) ([]*domain.Issue, error) {
-	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products
+	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products, priority, estimate
 	          FROM issues WHERE company_id = ?`
 	args := []interface{}{companyID}
 
@@ -153,7 +165,7 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string, includeAr
 // ListWithFilters returns issues for a company with optional status and assignee filters, ordered by creation time descending.
 // If includeArchived is false, archived issues (archived_at IS NOT NULL) are excluded.
 func (s *Service) ListWithFilters(ctx context.Context, companyID, status string, assigneeID *string, includeArchived bool) ([]*domain.Issue, error) {
-	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products
+	query := `SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products, priority, estimate
 	          FROM issues WHERE company_id = ?`
 	args := []interface{}{companyID}
 
@@ -193,11 +205,44 @@ func (s *Service) ListWithFilters(ctx context.Context, companyID, status string,
 	return out, nil
 }
 
+// ListOpenByPriority returns all open, non-archived issues for a company ordered by
+// priority (urgent > high > medium > low) then by creation time ascending.
+func (s *Service) ListOpenByPriority(ctx context.Context, companyID string) ([]*domain.Issue, error) {
+	rows, err := s.store.DB.QueryContext(ctx, `
+		SELECT id, company_id, title, body, status, assignee_id, checked_out_by, checked_out_at, parent_issue_id, origin_fingerprint, created_at, updated_at, archived_at, documents, work_products, priority, estimate
+		FROM issues
+		WHERE company_id = ? AND status = 'open' AND archived_at IS NULL
+		ORDER BY CASE priority
+			WHEN 'urgent' THEN 0
+			WHEN 'high'   THEN 1
+			WHEN 'medium' THEN 2
+			ELSE               3
+		END, created_at
+	`, companyID)
+	if err != nil {
+		return nil, fmt.Errorf("listing open issues by priority: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]*domain.Issue, 0)
+	for rows.Next() {
+		i, err := scanIssue(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating issues: %w", err)
+	}
+	return out, nil
+}
+
 // Update updates the status and/or assignee of an issue.
 // Returns ErrInvalidStatus if the status is not valid.
-func (s *Service) Update(ctx context.Context, id, status string, assigneeID *string, documents, workProducts *[]any) (*domain.Issue, error) {
+func (s *Service) Update(ctx context.Context, id, status string, assigneeID *string, priority *string, estimate *int, documents, workProducts *[]any) (*domain.Issue, error) {
 	// Validate that at least one field is being updated
-	if status == "" && assigneeID == nil && documents == nil && workProducts == nil {
+	if status == "" && assigneeID == nil && priority == nil && estimate == nil && documents == nil && workProducts == nil {
 		return nil, fmt.Errorf("at least one field must be provided for update")
 	}
 
@@ -207,6 +252,11 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 	// Validate status if provided
 	if status != "" && !domain.IsValidIssueStatus(status) {
 		return nil, ErrInvalidStatus
+	}
+
+	// Validate priority if provided
+	if priority != nil && !domain.IsValidIssuePriority(*priority) {
+		return nil, ErrInvalidPriority
 	}
 
 	// Build the UPDATE query dynamically
@@ -249,6 +299,16 @@ func (s *Service) Update(ctx context.Context, id, status string, assigneeID *str
 			return nil, fmt.Errorf("marshaling work_products: %w", err)
 		}
 		args = append(args, string(wpJSON))
+	}
+
+	if priority != nil {
+		query += `, priority = ?`
+		args = append(args, *priority)
+	}
+
+	if estimate != nil {
+		query += `, estimate = ?`
+		args = append(args, *estimate)
 	}
 
 	query += ` WHERE id = ?`
@@ -535,14 +595,18 @@ func scanIssue(s scanner) (*domain.Issue, error) {
 	var checkedOutAt, archivedAt *string
 	var checkedOutBy, assigneeID, parentIssueID *string
 	var documentsStr, workProductsStr string
+	var priority string
+	var estimate *int
 
-	if err := s.Scan(&i.ID, &i.CompanyID, &i.Title, &i.Body, &i.Status, &assigneeID, &checkedOutBy, &checkedOutAt, &parentIssueID, &i.OriginFingerprint, &createdAt, &updatedAt, &archivedAt, &documentsStr, &workProductsStr); err != nil {
+	if err := s.Scan(&i.ID, &i.CompanyID, &i.Title, &i.Body, &i.Status, &assigneeID, &checkedOutBy, &checkedOutAt, &parentIssueID, &i.OriginFingerprint, &createdAt, &updatedAt, &archivedAt, &documentsStr, &workProductsStr, &priority, &estimate); err != nil {
 		return nil, err
 	}
 
 	i.AssigneeID = assigneeID
 	i.CheckedOutBy = checkedOutBy
 	i.ParentIssueID = parentIssueID
+	i.Priority = priority
+	i.Estimate = estimate
 
 	var err error
 	i.CreatedAt, err = time.Parse(time.RFC3339, createdAt)

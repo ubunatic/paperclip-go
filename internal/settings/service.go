@@ -3,11 +3,16 @@ package settings
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/ubunatic/paperclip-go/internal/store"
 )
+
+// ErrNotFound is returned when the requested setting key does not exist.
+var ErrNotFound = errors.New("setting not found")
 
 // Service provides setting CRUD backed by the store.
 type Service struct {
@@ -17,6 +22,18 @@ type Service struct {
 // New returns a Service using the given store.
 func New(s *store.Store) *Service {
 	return &Service{store: s}
+}
+
+// Get returns the value of a single setting by key, or ErrNotFound if it doesn't exist.
+func (s *Service) Get(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.store.DB.QueryRowContext(ctx,
+		`SELECT value FROM instance_settings WHERE key = ?`, key,
+	).Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return value, err
 }
 
 // GetAll returns all instance settings as a map of key-value pairs.

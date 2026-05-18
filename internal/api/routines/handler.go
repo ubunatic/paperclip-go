@@ -8,16 +8,17 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/ubunatic/paperclip-go/internal/domain"
 	"github.com/ubunatic/paperclip-go/internal/respond"
 	"github.com/ubunatic/paperclip-go/internal/routines"
-	"github.com/ubunatic/paperclip-go/internal/domain"
 )
 
 // Handler returns an http.Handler for the /api/routines sub-router.
-func Handler(svc *routines.Service) http.Handler {
+func Handler(svc *routines.Service, runSvc *routines.RunService) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", list(svc))
 	r.Post("/", create(svc))
+	r.Get("/runs", listRuns(runSvc))
 	r.Get("/{id}", get(svc))
 	r.Patch("/{id}", update(svc))
 	r.Delete("/{id}", del(svc))
@@ -198,5 +199,27 @@ func trigger(svc *routines.Service) http.HandlerFunc {
 		}
 
 		respond.JSON(w, http.StatusOK, routine)
+	}
+}
+
+func listRuns(runSvc *routines.RunService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		routineID := r.URL.Query().Get("routineId")
+		if strings.TrimSpace(routineID) == "" {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "routineId query parameter is required")
+			return
+		}
+
+		items, err := runSvc.ListByRoutine(r.Context(), routineID)
+		if err != nil {
+			log.Printf("routines: error listing runs: %v", err)
+			respond.Error(w, http.StatusInternalServerError, "internal_error", "an internal error occurred")
+			return
+		}
+
+		if items == nil {
+			items = make([]*domain.RoutineRun, 0)
+		}
+		respond.JSON(w, http.StatusOK, map[string]any{"items": items})
 	}
 }

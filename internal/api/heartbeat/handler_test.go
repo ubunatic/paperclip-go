@@ -53,7 +53,7 @@ func newTestRunner(t *testing.T, s *store.Store) *heartbeat.Runner {
 	agentSvc := agents.New(s, actLog)
 	issueSvc := issues.New(s)
 	registry := heartbeat.NewDefaultRegistry()
-	return heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry)
+	return heartbeat.New(s, agentSvc, issueSvc, commentSvc, actLog, registry, nil)
 }
 
 func extractHeartbeatObject(t *testing.T, body *bytes.Buffer) map[string]any {
@@ -226,9 +226,10 @@ func TestHandlerList_Success(t *testing.T) {
 
 	handler := apiheartbeat.Handler(runner)
 
-	// Create 2 runs via runner.Create()
-	for i := 0; i < 2; i++ {
-		_, err := runner.Create(ctx, agentID, nil, "running")
+	// Create 2 runs via runner.Create() with different statuses to avoid the
+	// unique index on (agent_id) WHERE status='running'.
+	for _, status := range []string{"success", "running"} {
+		_, err := runner.Create(ctx, agentID, nil, status)
 		if err != nil {
 			t.Fatalf("Create run: %v", err)
 		}

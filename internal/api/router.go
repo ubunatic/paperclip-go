@@ -7,13 +7,14 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/ubunatic/paperclip-go/internal/activity"
 	"github.com/ubunatic/paperclip-go/internal/agents"
 	apiactivity "github.com/ubunatic/paperclip-go/internal/api/activity"
 	apiagents "github.com/ubunatic/paperclip-go/internal/api/agents"
 	apiapprovals "github.com/ubunatic/paperclip-go/internal/api/approvals"
 	apicompanies "github.com/ubunatic/paperclip-go/internal/api/companies"
+	apiapikeys "github.com/ubunatic/paperclip-go/internal/api/apikeys"
 	aproutines "github.com/ubunatic/paperclip-go/internal/api/routines"
 	apiworkspaces "github.com/ubunatic/paperclip-go/internal/api/workspaces"
 	"github.com/ubunatic/paperclip-go/internal/api/health"
@@ -21,10 +22,12 @@ import (
 	apiissues "github.com/ubunatic/paperclip-go/internal/api/issues"
 	apiws "github.com/ubunatic/paperclip-go/internal/api/ws"
 	apilabels "github.com/ubunatic/paperclip-go/internal/api/labels"
+	apimiddleware "github.com/ubunatic/paperclip-go/internal/api/middleware"
 	apiskills "github.com/ubunatic/paperclip-go/internal/api/skills"
 	apisecrets "github.com/ubunatic/paperclip-go/internal/api/secrets"
 	apisettings "github.com/ubunatic/paperclip-go/internal/api/settings"
 	apistubs "github.com/ubunatic/paperclip-go/internal/api/stubs"
+	"github.com/ubunatic/paperclip-go/internal/apikeys"
 	"github.com/ubunatic/paperclip-go/internal/approvals"
 	"github.com/ubunatic/paperclip-go/internal/comments"
 	"github.com/ubunatic/paperclip-go/internal/companies"
@@ -48,10 +51,11 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string, b
 	r := chi.NewRouter()
 
 	// Global middleware
-	r.Use(middleware.RequestID)
-	r.Use(middleware.Recoverer)
+	r.Use(chimiddleware.RequestID)
+	r.Use(chimiddleware.Recoverer)
 
 	// Services
+	apikeySvc := apikeys.New(s)
 	companySvc := companies.New(s)
 	activityLog := activity.New(s)
 	agentSvc := agents.New(s, activityLog)
@@ -63,8 +67,9 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string, b
 	approvalSvc := approvals.New(s)
 	interactionSvc := interactions.New(s)
 	heartbeatRegistry := heartbeat.NewDefaultRegistry()
-	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry)
+	heartbeatRunner := heartbeat.New(s, agentSvc, issueSvc, commentSvc, activityLog, heartbeatRegistry, approvalSvc)
 	routineSvc := routines.New(s)
+	routineRunSvc := routines.NewRunService(s)
 	workspaceSvc := workspaces.New(s)
 
 	// Wire bus to services
@@ -78,6 +83,14 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string, b
 		"allowed_origins": "localhost",
 	}); err != nil {
 		log.Printf("api: error seeding instance settings defaults: %v", err)
+	}
+
+	deploymentMode := "local_trusted"
+	if dm, err := settingSvc.Get(context.Background(), "deployment_mode"); err == nil {
+		deploymentMode = dm
+	}
+	if deploymentMode != "local_trusted" {
+		r.Use(apimiddleware.APIKeyAuth(apikeySvc, "/api/health", "/api/apikeys"))
 	}
 
 	// Load skills
@@ -109,13 +122,14 @@ func NewRouter(s *store.Store, skillsDir string, uiDir string, version string, b
 		r.Get("/dashboard", apistubs.EmptyList())
 		r.Get("/goals", apistubs.EmptyList())
 		r.Get("/projects", apistubs.EmptyList())
-		r.Mount("/routines", aproutines.Handler(routineSvc))
+		r.Mount("/routines", aproutines.Handler(routineSvc, routineRunSvc))
 		r.Mount("/execution-workspaces", apiworkspaces.Handler(workspaceSvc))
 		r.Get("/plugins", apistubs.EmptyList())
 		r.Get("/sidebar-badges", apistubs.EmptyList())
 		r.Get("/sidebar-preferences", apistubs.EmptyList())
 		r.Get("/inbox-dismissals", apistubs.EmptyList())
 		r.Mount("/instance-settings", apisettings.Handler(settingSvc))
+		r.Mount("/apikeys", apiapikeys.Handler(apikeySvc))
 		r.Get("/llms", apistubs.EmptyList())
 		r.Get("/access", apistubs.EmptyList())
 

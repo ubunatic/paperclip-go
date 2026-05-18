@@ -105,6 +105,34 @@ func (s *Service) ListByCompany(ctx context.Context, companyID string) ([]*domai
 	return approvals, nil
 }
 
+// ListPendingByIssue returns all pending approvals for a given issue.
+func (s *Service) ListPendingByIssue(ctx context.Context, issueID string) ([]*domain.Approval, error) {
+	rows, err := s.store.DB.QueryContext(ctx,
+		`SELECT id, company_id, agent_id, issue_id, kind, status, request_body, response_body, created_at, resolved_at
+		 FROM approvals WHERE issue_id = ? AND status = 'pending' ORDER BY created_at`,
+		issueID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list pending approvals by issue: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]*domain.Approval, 0)
+	for rows.Next() {
+		a, err := scanApproval(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan approval: %w", err)
+		}
+		result = append(result, a)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return result, nil
+}
+
 // Approve transitions an approval to "approved" status.
 // Returns ErrNotFound if the approval doesn't exist.
 // Returns ErrAlreadyResolved if the approval is already resolved.

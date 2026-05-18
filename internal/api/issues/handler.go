@@ -95,6 +95,7 @@ func create(s *isvc.Service) http.HandlerFunc {
 			Title             string  `json:"title"`
 			Body              string  `json:"body"`
 			Status            string  `json:"status"`
+			Priority          string  `json:"priority"`
 			OriginFingerprint string  `json:"originFingerprint"`
 			AssigneeID        *string `json:"assigneeId"`
 		}
@@ -105,7 +106,7 @@ func create(s *isvc.Service) http.HandlerFunc {
 			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "companyId and title are required")
 			return
 		}
-		issue, err := s.Create(r.Context(), body.CompanyID, body.Title, body.Body, body.OriginFingerprint, body.Status, body.AssigneeID)
+		issue, err := s.Create(r.Context(), body.CompanyID, body.Title, body.Body, body.OriginFingerprint, body.Status, body.Priority, body.AssigneeID)
 		if err != nil {
 			if errors.Is(err, isvc.ErrInvalidStatus) {
 				respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "invalid status value")
@@ -153,6 +154,8 @@ func update(s *isvc.Service) http.HandlerFunc {
 		id := chi.URLParam(r, "id")
 		var body struct {
 			Status       string  `json:"status"`
+			Priority     *string `json:"priority"`
+			Estimate     *int    `json:"estimate"`
 			AssigneeID   *string `json:"assigneeId"`
 			Documents    *[]any  `json:"documents"`
 			WorkProducts *[]any  `json:"workProducts"`
@@ -161,11 +164,11 @@ func update(s *isvc.Service) http.HandlerFunc {
 			return
 		}
 		// At least one field must be provided
-		if body.Status == "" && body.AssigneeID == nil && body.Documents == nil && body.WorkProducts == nil {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of status, assigneeId, documents, or workProducts is required")
+		if body.Status == "" && body.Priority == nil && body.Estimate == nil && body.AssigneeID == nil && body.Documents == nil && body.WorkProducts == nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of status, priority, estimate, assigneeId, documents, or workProducts is required")
 			return
 		}
-		issue, err := s.Update(r.Context(), id, body.Status, body.AssigneeID, body.Documents, body.WorkProducts)
+		issue, err := s.Update(r.Context(), id, body.Status, body.AssigneeID, body.Priority, body.Estimate, body.Documents, body.WorkProducts)
 		if err != nil {
 			if errors.Is(err, isvc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "issue not found")

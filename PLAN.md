@@ -19,13 +19,29 @@ This means:
 
 ---
 
-## Status (2026-05-09, M1 in progress — WebSocket + Interactions quality debt)
+## Status (2026-05-16, PR #79 open — agentic invariants + security layer + test hardening)
 
-**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K, L, M0, M1  
-**Next:** Additional features (see Phase N proposals below) or further quality debt  
-**Build:** ✅ green (all 25 test packages, 346+ total tests passing)  
-**Latest migration:** `0015_issue_thread_interactions.sql` (workspace_id link to heartbeat_runs)  
-**Code quality:** ✅ Boilerplate removed; pagination enforced; WS consistency fixed; scanner interfaces modernized
+**Completed:** A1–A4, B1–B2, C1–C3, D1, E1–E5, F1–F4, G1–G2, H1–H2, I1, J1, K, L, M0, M1, N5–N11  
+**PR:** [#79 — Review Go port tests](https://github.com/ubunatic/paperclip-go/pull/79) (branch `claude/review-go-port-tests-TjhEm`)  
+**Next:** Phase P proposals (Opus review findings, see below) or further hardening  
+**Build:** ✅ green (all test packages, 400+ total tests passing, race detector enabled)  
+**Latest migration:** `0018_api_keys.sql`  
+**Code quality:** ✅ Approval gate; budget hard-stop; concurrency guard; API key auth; routine run history; race detector in CI
+
+**N5–N11 Session Findings (2026-05-16, Opus deep review):**
+- ✅ **Implemented in this session:**
+  - Schema fields: `issues.priority` + `issues.estimate`, `agents.budget_limit/budget_used`, `heartbeat_runs.prompt_tokens/completion_tokens/cost` (migration 0016)
+  - Routine run history: `routine_runs` table + `RunService` (Record, ListByRoutine) (migration 0017)
+  - API key auth: `api_keys` table, SHA-256 hashing service, `APIKeyAuth` middleware, `/api/apikeys` handler (migration 0018)
+  - Approval gate in heartbeat runner: skips issues with pending approvals, returns `ErrApprovalPending`
+  - Budget hard-stop: checks `budget_limit`/`budget_used` before run, returns `ErrBudgetExceeded`
+  - Concurrency guard: `sync.Map` in-process guard + DB COUNT cross-process check, `ErrAlreadyRunning`
+  - Context timeout: `context.WithTimeout` wrapping adapter calls (default 5 min)
+  - Token/cost recording: extracts from Anthropic API response, stored after run, increments `budget_used`
+  - Race detector: `go test -race ./...` in Makefile
+  - `ListPendingByIssue` method on approvals service
+  - Comprehensive tests for all new features (budget, context, concurrency, approval gate, API keys, routine runs, priority/estimate, auth middleware)
+- ⚠️ **Open critical items from Opus review** (see Phase P proposals below)
 
 **M1 Code Review Findings (2026-05-09):**
 - ✅ **Fixed issues:**
@@ -190,6 +206,8 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `/api/routines` CRUD + trigger | 15+ | ✅ | G2 |
 | `/api/issues/{id}/interactions` | 5+ | ✅ | I1 |
 | `/api/execution-workspaces` | 20+ | ✅ | H1 |
+| `/api/apikeys` CRUD | 3 | ✅ | N9 |
+| `APIKeyAuth` middleware | — | ✅ | N9 |
 | `/api/costs` | 20+ | 🟡 | — (deferred) |
 | `/api/goals` | 6 | 🟡 | — (deferred) |
 | `/api/projects` | 25+ | 🟡 | — (deferred) |
@@ -232,6 +250,11 @@ Legend: ✅ Done | ⚠️ Partial | 🟡 Stub | 🔲 Planned | ❌ Not started
 | `heartbeat_runs.workspace_id` | ✅ | ✅ | H1 |
 | `execution_workspaces` table | ✅ | ✅ | H1 |
 | WebSocket live events | ✅ | ✅ | H2 |
+| `issues.priority` + `issues.estimate` | ✅ | ✅ | N5 |
+| `agents.budget_limit/budget_used` | ✅ | ✅ | N6 |
+| `heartbeat_runs.prompt_tokens/completion_tokens/cost` | ✅ | ✅ | N7 |
+| `routine_runs` table | ✅ | ✅ | N8 |
+| `api_keys` table (SHA-256 hash) | — | ✅ | N9 |
 | `goals` / `projects` tables | ✅ | 🟡 | — (deferred) |
 | Authentication (BetterAuth / RBAC) | ✅ | ❌ | — (deferred) |
 
@@ -571,33 +594,178 @@ Acceptance: ✅ `make test` green; all WS error paths use `respond.Error()`; int
 
 ---
 
-### Phase N — Proposed Next Steps 🔲
+### Phase N — Completed in Session (2026-05-16) ✅
 
-These are the most valuable remaining improvements, sized for single agent sessions.
+#### N1–N4 — Proposed (remain open, see below)
 
-#### N1 — Handler tests for interactions routes
+#### N5 — Issue priority + estimate fields ✅
+
+**Migration:** `0016_fields.sql` — `issues.priority TEXT NOT NULL DEFAULT 'medium'`, `issues.estimate INTEGER`  
+**Domain:** `Issue.Priority`, `Issue.Estimate *int`, `IsValidIssuePriority()`, `validPriorities` map, `ErrInvalidPriority` sentinel  
+**Service:** Priority validated in Create and Update; defaults to "medium" on empty; `ErrInvalidPriority` on invalid values  
+**Tests:** `internal/issues/priority_test.go` — 6 tests (default, explicit, estimate set/update, invalid create/update)
+
+#### N6 — Agent budget fields ✅
+
+**Migration:** `0016_fields.sql` — `agents.budget_limit INTEGER`, `agents.budget_used INTEGER NOT NULL DEFAULT 0`  
+**Domain:** `Agent.BudgetLimit *int`, `Agent.BudgetUsed int`  
+**Heartbeat:** Budget hard-stop in `runner.Run()` — checks `budget_used >= budget_limit` before proceeding, returns `ErrBudgetExceeded`  
+**Tests:** `internal/heartbeat/budget_test.go` — 3 tests (blocked, allowed, increment after run)
+
+#### N7 — Heartbeat token/cost tracking ✅
+
+**Migration:** `0016_fields.sql` — `heartbeat_runs.prompt_tokens/completion_tokens/cost INTEGER NOT NULL DEFAULT 0`  
+**Domain:** `HeartbeatRun.PromptTokens/CompletionTokens/Cost int`, `RunResult.PromptTokens/CompletionTokens/Cost int`  
+**Adapter:** Claude adapter extracts `usage.input_tokens` / `usage.output_tokens` from Anthropic API response  
+**Runner:** Stores tokens + cost after run; increments `agents.budget_used` by run cost
+
+#### N8 — Routine run history ✅
+
+**Migration:** `0017_routine_runs.sql` — `routine_runs(id, routine_id, agent_id, status, started_at, finished_at, error)`  
+**Domain:** `RoutineRun` struct in `domain/routine.go`  
+**Service:** `routines.NewRunService(s)` with `Record(ctx, routineID, agentID)` (status="dispatched") and `ListByRoutine(ctx, routineID)`  
+**Tests:** `internal/routines/run_service_test.go` — 3 tests (record, list by routine, ordering)
+
+#### N9 — API key auth layer ✅
+
+**Migration:** `0018_api_keys.sql` — `api_keys(id, company_id, name, key_hash TEXT UNIQUE, created_at, revoked_at)`  
+**Domain:** `domain.APIKey` (no key_hash exposed)  
+**Service:** `apikeys.New(s)` — SHA-256 hashing, raw key returned once at creation; `ErrNotFound`, `ErrRevoked` sentinels  
+**Middleware:** `api/middleware.APIKeyAuth(svc, skipPaths...)` — checks `X-Api-Key` header; 401 on missing/invalid/revoked  
+**Router:** Conditionally applied when `deployment_mode != "local_trusted"`; skip paths: `/api/health`, `/api/apikeys`  
+**Tests:** `internal/apikeys/service_test.go` (6 tests) + `internal/api/middleware/apikey_test.go` (6 tests)
+
+#### N10 — Approval gate in heartbeat ✅
+
+**Runner:** Before dispatching an issue, checks `approvalSvc.ListPendingByIssue(ctx, issue.ID)`; skips issues with pending approvals  
+**Approvals service:** Added `ListPendingByIssue(ctx, issueID string) ([]*domain.Approval, error)`  
+**Tests:** `internal/heartbeat/approval_test.go` — 2 tests (gate skips issue, gate allows issue without pending approvals)
+
+#### N11 — Context timeout + concurrency guard ✅
+
+**Context timeout:** `context.WithTimeout` wrapping adapter calls in runner (default 5 min via `runner.Timeout`)  
+**Concurrency guard:** `sync.Map` in-process `LoadOrStore` guard (deterministic for goroutines) + DB COUNT check (cross-process stale rows)  
+**Errors:** `ErrAlreadyRunning` when another run is in-flight for the same agent  
+**Race detector:** `go test -race ./...` in Makefile  
+**Tests:** `internal/heartbeat/concurrency_test.go` (3 tests) + `internal/heartbeat/context_test.go` (2 tests)
+
+---
+
+### Phase O — Proposed Next Steps (from N1–N4) 🔲
+
+#### O1 — Handler tests for interactions routes
 
 The three interaction routes (`POST/GET /api/issues/{id}/interactions`, `POST .../resolve`) are tested only via E2E. Add unit handler tests following the J1/K/L pattern using `testutil.NewStore(t)`.
 
 **Files:** `internal/api/issues/handler_test.go` (extend) or new `internal/api/interactions/handler_test.go`
 
-#### N2 — `routine create/list` CLI integration tests
+#### O2 — `routine create/list` CLI integration tests
 
 The CLI commands exist but have no unit tests. Add tests following the `env_test.go` pattern with a mock HTTP server.
 
 **Files:** `internal/cli/routine_test.go`
 
-#### N3 — Structured logging
+#### O3 — Structured logging
 
 Replace scattered `log.Printf` calls with a minimal structured logger (stdlib `slog`, Go 1.21+) across handlers. Adds request-scoped context (method, path, duration) without external deps.
 
 **Files:** `internal/api/router.go`, handler files
 
-#### N4 — `approval create/get` CLI integration tests
+#### O4 — `approval create/get` CLI integration tests
 
-Mirrors N2 for the approvals CLI commands.
+Mirrors O2 for the approvals CLI commands.
 
 **Files:** `internal/cli/approval_test.go`
+
+---
+
+### Phase P — Opus Review Proposals 🔲
+
+Deep review by Opus on 2026-05-16 identified the following improvements. Critical security items (P3, P4) should be addressed before exposing the server to non-local traffic.
+
+#### P1 — Atomic heartbeat claim via partial unique index (S)
+
+**Problem:** `sync.Map` guard is in-process only; DB COUNT check + INSERT are not atomic. Two processes can both see 0 in-flight and both insert.  
+**Fix:** Add a partial unique index: `CREATE UNIQUE INDEX IF NOT EXISTS heartbeat_runs_agent_inflight ON heartbeat_runs(agent_id) WHERE status = 'running'`. The INSERT then fails with a UNIQUE constraint error if another process already holds the lock; map the error to `ErrAlreadyRunning`.  
+**Files:** new migration, `internal/heartbeat/runner.go`
+
+#### P2 — Transactional cost + budget finalization (S)
+
+**Problem:** Token/cost update and `budget_used` increment are two separate `ExecContext` calls; an error on the second is silently swallowed (`_, _ =`). A crash between the two leaves cost recorded but budget not incremented.  
+**Fix:** Wrap both writes in a single DB transaction; surface errors instead of swallowing them.  
+**Files:** `internal/heartbeat/runner.go`
+
+#### P3 — Inject principal into request context — closes multi-tenant hole (M) ⚠️ CRITICAL
+
+**Problem:** `APIKeyAuth` middleware validates the key but discards `APIKey.CompanyID`. Downstream handlers trust `?companyId=` query params from the caller. Any valid key for Company A can query Company B's data.  
+**Fix:** Store the validated `*domain.APIKey` in request context (`context.WithValue`); handlers read company ID from context instead of from query param.  
+**Files:** `internal/api/middleware/apikey.go`, all handlers that accept `?companyId=`
+
+#### P4 — Protect `/api/apikeys` — separate bootstrap auth (M) ⚠️ CRITICAL
+
+**Problem:** `/api/apikeys` is on the skip list so API key creation is unauthenticated in non-local_trusted mode. Anyone who can reach the server can create keys.  
+**Fix:** Require a separate bootstrap secret (env var `PAPERCLIP_ADMIN_SECRET`) or restrict key creation to `local_trusted` mode only. Remove `/api/apikeys` from the skip list.  
+**Files:** `internal/api/middleware/apikey.go`, `internal/api/router.go`
+
+#### P5 — Routine run lifecycle: MarkSucceeded/Failed/Skipped (S)
+
+**Problem:** Routine runs are created with `status="dispatched"` and never updated. There is no way to know if a scheduled run succeeded, failed, or was skipped (approval gate).  
+**Fix:** Add `MarkSucceeded(ctx, id string)`, `MarkFailed(ctx, id, errMsg string)`, `MarkSkipped(ctx, id string)` to `RunService`; call from the scheduler after heartbeat.Run() returns.  
+**Files:** `internal/routines/run_service.go`, `internal/api/serve.go` (scheduler)
+
+#### P6 — Priority-aware issue selection (S)
+
+**Problem:** Heartbeat runner selects an issue with no ordering — priority field exists but is ignored.  
+**Fix:** Add `ORDER BY CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at` to the issue selection query.  
+**Files:** `internal/heartbeat/runner.go`
+
+#### P7 — Budget policy primitives (M/L)
+
+**Problem:** Budget is a per-agent integer; there is no history of what consumed the budget, no reset mechanism, and no way to set per-issue budgets.  
+**Fix:** Add `cost_events` table (`agent_id, run_id, amount, recorded_at`); accumulate via trigger or service call; policy engine for soft/hard limits.  
+**Files:** new migration, `internal/heartbeat/runner.go`, `internal/agents/service.go`
+
+#### P8 — Heartbeat watchdog (M)
+
+**Problem:** If the server crashes while a run is `status='running'`, that run blocks the agent forever (ErrAlreadyRunning on next tick).  
+**Fix:** On startup, find all runs where `status='running'` and `started_at < now - timeout`; mark them `failed` and clear the in-flight state.  
+**Files:** `internal/heartbeat/runner.go` (startup hook or separate watchdog goroutine)
+
+#### P9 — Claude adapter productionization (M)
+
+**Problem:** Adapter uses a hardcoded 500-token limit, no system prompt, no retry on transient errors, no timeout per-request (only the runner-level timeout).  
+**Fix:** Make `max_tokens` configurable via agent `configuration` JSON; add a system prompt derived from agent `configuration`; add retry with exponential backoff (2x, max 3 attempts) for 429/5xx; propagate per-call deadline from context.  
+**Files:** `internal/heartbeat/claude_adapter.go`
+
+#### P10 — `/api/auth` + agent JWT (L)
+
+**Problem:** No authentication for human users. API key auth covers service-to-service but not browser sessions.  
+**Fix:** Add `/api/auth/login` endpoint issuing short-lived JWTs; add JWT middleware alongside API key middleware.  
+**Files:** new `internal/api/auth/` package, `internal/api/middleware/jwt.go`
+
+#### P11 — Refactor NewRouter into Server struct (S)
+
+**Problem:** `NewRouter()` takes 14+ parameters and is hard to extend without breaking callers.  
+**Fix:** Introduce a `Server` struct holding all dependencies; `NewServer(store, settings, ...)` constructor; `Server.Routes() http.Handler` method.  
+**Files:** `internal/api/router.go`
+
+#### P12 — Settings hot-reload for deployment_mode (S)
+
+**Problem:** `deployment_mode` is read once at startup (middleware decision). Changing it via PATCH requires a server restart.  
+**Fix:** Read `deployment_mode` from the settings service on every request (cached with 1s TTL) instead of capturing at router construction time.  
+**Files:** `internal/api/router.go`, `internal/api/middleware/apikey.go`
+
+#### P13 — Wire workspace_id into heartbeat (M)
+
+**Problem:** `heartbeat_runs.workspace_id` column exists but is never populated by the runner.  
+**Fix:** Before running an adapter, create (or look up) an `execution_workspace` record for the agent+issue; store its ID in `heartbeat_runs.workspace_id` on INSERT.  
+**Files:** `internal/heartbeat/runner.go`, `internal/workspaces/service.go`
+
+#### P14 — API key prefix + last-4 display (S)
+
+**Problem:** Once created, there is no way to identify which key is which from the list endpoint (all fields are opaque UUIDs).  
+**Fix:** Store a `prefix` column (first 8 chars of the raw key, safe to expose) and `last4` (last 4 chars) alongside `key_hash`; return these in list/detail responses.  
+**Files:** `internal/store/migrations/` (new), `internal/apikeys/service.go`, `internal/domain/apikey.go`
 
 ---
 
@@ -665,10 +833,21 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 | ✅ Scanner interface `...interface{}` → `...any` | LOW | `internal/{approvals,routines}/service.go` | FIXED (2026-05-09, M1) — modernized | — |
 | ✅ Interactions ListByIssue pagination | MEDIUM | `internal/interactions/service.go:99` | FIXED (2026-05-09, M1) — limit param, default 100/max 500 | — |
 | ✅ WebSocket SetWriteDeadline inefficiency | LOW | `internal/api/ws/handler.go:51` | FIXED (2026-05-09, M1) — moved outside select | — |
+| 🔴 Budget check races in-flight lock | CRITICAL | `internal/heartbeat/runner.go` | OPEN — budget checked before `sync.Map` store; a second goroutine can pass budget check then be blocked, wasting one slot | P2 |
+| 🔴 Cost/budget update errors silently swallowed | CRITICAL | `internal/heartbeat/runner.go` | OPEN — `_, _ = s.DB.ExecContext(...)` on finalization writes; errors are lost | P2 |
+| 🔴 APIKey.CompanyID discarded in middleware | CRITICAL | `internal/api/middleware/apikey.go` | OPEN — multi-tenant data leak: any valid key can query any company's data via query param | P3 |
+| 🔴 `/api/apikeys` reachable unauthenticated | CRITICAL | `internal/api/router.go` skip list | OPEN — key creation requires no auth in non-local_trusted mode | P4 |
+| 🔴 Skip list exact-match doesn't cover sub-paths | CRITICAL | `internal/api/middleware/apikey.go` | OPEN — `r.URL.Path == skipPath` only; `/api/health/extra` would require auth unexpectedly; `/api/apikeys/123` is still protected | P4 |
+| 🟠 COUNT check + INSERT not atomic cross-process | MAJOR | `internal/heartbeat/runner.go` | OPEN — two separate processes can both pass the COUNT=0 check and both insert | P1 |
+| 🟠 Issue selection has no ordering (ignores priority) | MAJOR | `internal/heartbeat/runner.go` | OPEN — priority field exists but SELECT has no ORDER BY | P6 |
+| 🟠 Approval-pending idles agent forever | MAJOR | `internal/heartbeat/runner.go` | OPEN — same pending-approval issue will be selected every tick, blocking all other issues | P6 |
+| 🟠 Routine runs stay "dispatched" on error | MAJOR | `internal/routines/run_service.go` | OPEN — no MarkSucceeded/Failed/Skipped; scheduler doesn't update status | P5 |
+| 🟠 Finalization writes use cancelled context | MAJOR | `internal/heartbeat/runner.go` | OPEN — if adapter call times out, the deferred finalization ExecContext uses the already-cancelled ctx | P2 |
+| 🟡 `issues` variable shadows package in runner.go | MINOR | `internal/heartbeat/runner.go` | OPEN — local `issues` var shadows `issues` package import | P6 |
 | 🏗️ Secrets TrimSpace validation consolidation | LOW | `internal/api/secrets/handler.go:60` | Acceptable | 5 min |
-| Cross-tenant isolation at route level | MEDIUM | DELETE/PATCH/state endpoints | Phase F+ | — |
-| State machine RBAC | MEDIUM | pause/resume/terminate handlers | Phase F+ | — |
-| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | Deferred | 20 min |
+| Cross-tenant isolation at route level | MEDIUM | DELETE/PATCH/state endpoints | Phase P3 | — |
+| State machine RBAC | MEDIUM | pause/resume/terminate handlers | Phase P10+ | — |
+| Structured logging | LOW-MED | `internal/api/{activity,issues,agents}/handler.go` | Deferred (O3) | 20 min |
 | Response wrapping inconsistency | LOW | GET returns `{items}`, POST returns raw object | Deferred | 30 min |
 
 ---
@@ -677,10 +856,12 @@ Example: `feat(secrets): add secrets table + CRUD — needed for agent API key s
 
 These are out of scope for a single-developer deployment. Revisit if community interest grows.
 
-- **Auth / RBAC / multi-user** — BetterAuth, board-claim flow, permission checks
+- **Auth / RBAC / multi-user** — BetterAuth, board-claim flow, permission checks (Phase P10)
 - **Embedded Postgres** — SQLite is fine for a single-dev VM
 - **Plugin host / external adapter processes** — useful at scale, not needed solo
 - **Full schema parity** — `goals`, `projects`, `costs`, `budgets` (deferred until needed)
 - **Data sharing with the TS instance** — migration path TBD if ever needed
-- **WebSocket live events (H2)** — only matters with a live UI consumer
-- **Execution workspaces (H1)** — only needed when sandboxing agent execution
+- **Budget policy engine** — cost_events table, per-issue budgets (Phase P7)
+- **Agent JWT / browser session auth** — Phase P10
+
+> **Security note:** For production or shared deployments, P3 and P4 are blockers. The current multi-tenant isolation is defense-by-convention only — all companyId filtering is caller-supplied.

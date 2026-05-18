@@ -149,14 +149,15 @@ func update(s *svc.Service) http.HandlerFunc {
 			DisplayName   *string         `json:"displayName"`
 			Role          *string         `json:"role"`
 			RuntimeState  *string         `json:"runtimeState"`
+			BudgetLimit   *int            `json:"budgetLimit"`
 			Configuration json.RawMessage `json:"configuration"`
 		}
 		if !respond.DecodeJSON(w, r, &body) {
 			return
 		}
 		// At least one field must be provided
-		if body.DisplayName == nil && body.Role == nil && body.RuntimeState == nil && body.Configuration == nil {
-			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of displayName, role, runtimeState, or configuration is required")
+		if body.DisplayName == nil && body.Role == nil && body.RuntimeState == nil && body.BudgetLimit == nil && body.Configuration == nil {
+			respond.Error(w, http.StatusUnprocessableEntity, "validation_error", "at least one of displayName, role, runtimeState, budgetLimit, or configuration is required")
 			return
 		}
 
@@ -175,7 +176,7 @@ func update(s *svc.Service) http.HandlerFunc {
 			}
 		}
 
-		agent, err := s.Update(r.Context(), id, body.DisplayName, body.Role, body.RuntimeState, configuration)
+		agent, err := s.Update(r.Context(), id, body.DisplayName, body.Role, body.RuntimeState, body.BudgetLimit, configuration)
 		if err != nil {
 			if errors.Is(err, svc.ErrNotFound) {
 				respond.Error(w, http.StatusNotFound, "not_found", "agent not found")
